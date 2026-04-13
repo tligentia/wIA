@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wIA — Local AI Chat</title>
+    <link rel="icon" type="image/png" href="favicon.png?v=2">
+    <meta name="description" content="wIA: Premium local AI chat interface powered by Ollama and Gemma 4">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <!-- Marked.js for Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Highlight.js for code -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+
+    <!-- PDF.js for local PDF parsing -->
+    <script src="lib/pdf.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="btn-icon sidebar-collapse-btn" id="sidebarCollapseBtn" title="Expande o contrae la barra lateral principal de la página">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <path d="M9 4v16" />
+                        <path d="m15 15-3-3 3-3" />
+                    </svg>
+                </button>
+                <div class="brand">
+                    <img src="favicon.png" alt="wIA Logo"
+                        style="width: 28px; height: 28px; border-radius: 6px; object-fit: contain;">
+                </div>
+                <button class="btn-icon sidebar-new-chat-btn" id="sidebarNewChatBtn" title="Inicia una nueva conversación independiente en el contexto del proyecto actual">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Workspace / Project Switcher -->
+            <div class="workspace-section">
+                <div class="workspace-switcher">
+                    <select id="projectSelect" class="workspace-select" title="Selecciona tu entorno de trabajo. Cada proyecto almacena independientemente sus chats y su propia Base de Conocimiento (RAG ligero)."></select>
+                    <button class="btn-icon workspace-btn" id="projectSettingsBtn" title="Abre los ajustes del proyecto activo (System Prompt personalizado y documentos persistentes)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round">
+                            <path
+                                d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                    </button>
+                    <button class="btn-icon workspace-btn" id="newProjectBtn" title="Crea rápidamente un nuevo espacio de trabajo enfocado a una temática distinta">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                            <line x1="12" y1="10" x2="12" y2="16" />
+                            <line x1="9" y1="13" x2="15" y2="13" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                </svg>
+                <input type="text" id="searchChats" placeholder="Buscar conversaciones...">
+            </div>
+
+            <div class="sidebar-chats" id="chatList">
+                <!-- Chat history items will be rendered here -->
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="model-status" id="modelStatus" style="gap: 10px;">
+                    <div class="status-dot offline" id="statusDot"></div>
+                    <div class="status-info" style="display:flex; flex-direction:column; justify-content:center; line-height: 1.1;">
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                            <span class="status-provider" style="font-size: 0.55rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">PROVEEDOR</span>
+                            <span class="status-text" id="statusText" style="font-size: 0.55rem; color: var(--text-secondary); font-weight: 500; display: inline-flex; align-items: center; padding: 1px 4px; background: var(--bg-tertiary); border-radius: 4px;">Cargando...</span>
+                        </div>
+                        <span class="status-model" style="font-size: 0.7rem; color: var(--text-primary); font-family: var(--font-mono);">gemma4:e4b</span>
+                    </div>
+                </div>
+                <button class="btn-icon" id="settingsBtn" title="Abre el panel maestro de configuración: Motores de IA, URLs locales, temas visuales y parámetros del modelo global">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="main-content">
+            <!-- Desktop Floating Nav (Top) -->
+            <div class="desktop-floating-nav">
+                <div class="floating-left">
+                    <button class="btn-icon" id="desktopSidebarToggle" title="Expande o contrae la barra lateral principal de la página">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                            <path d="M9 4v16" />
+                            <path d="m13 9 3 3-3 3" />
+                        </svg>
+                    </button>
+                    <div class="floating-brand">
+                        <img src="favicon.png" alt="wIA Logo" class="floating-logo-img">
+                    </div>
+                    <button class="btn-icon floating-new-chat-btn" id="desktopNewChatToggle" title="Inicia una nueva conversación independiente en el contexto del proyecto actual">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile header -->
+            <div class="mobile-header">
+                <button class="btn-icon" id="menuBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M3 12h18M3 6h18M3 18h18" />
+                    </svg>
+                </button>
+                <span class="mobile-title">wIA</span>
+                <button class="btn-icon" id="mobileNewChat" title="Nuevo chat">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Welcome Screen -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="welcome-content">
+                    <img src="favicon.png" alt="wIA Logo"
+                        style="width: 64px; height: 64px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                    <h1 class="welcome-title">wIA</h1>
+                    <p class="welcome-subtitle">Tu hub de IA multimotor — <strong>Local y Cloud</strong></p>
+
+                    <div class="welcome-cards">
+                        <button class="welcome-card"
+                            data-prompt="Explícame qué puedes hacer y cuáles son tus capacidades">
+                            <div class="welcome-card-icon">🚀</div>
+                            <div class="welcome-card-text">
+                                <strong>Explorar capacidades</strong>
+                                <span>Descubre qué pueden hacer tus modelos</span>
+                            </div>
+                        </button>
+                        <button class="welcome-card"
+                            data-prompt="Ayúdame a escribir código Python para un web scraper con asyncio">
+                            <div class="welcome-card-icon">💻</div>
+                            <div class="welcome-card-text">
+                                <strong>Escribir código</strong>
+                                <span>Python, JavaScript, y más</span>
+                            </div>
+                        </button>
+                        <button class="welcome-card"
+                            data-prompt="Analiza las ventajas y desventajas de usar microservicios vs monolito">
+                            <div class="welcome-card-icon">🧠</div>
+                            <div class="welcome-card-text">
+                                <strong>Analizar ideas</strong>
+                                <span>Razonamiento y análisis profundo</span>
+                            </div>
+                        </button>
+                        <button class="welcome-card"
+                            data-prompt="Traduce el siguiente texto al inglés profesional y mejora su redacción:">
+                            <div class="welcome-card-icon">✍️</div>
+                            <div class="welcome-card-text">
+                                <strong>Redacción y traducción</strong>
+                                <span>Textos profesionales multiidioma</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages Container -->
+            <div class="messages-container" id="messagesContainer">
+                <div class="messages-scroll" id="messagesScroll">
+                    <!-- Messages will be rendered here -->
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <!-- Preview para imágenes y archivos subidos -->
+                    <div class="attachment-preview hidden" id="attachmentPreview"></div>
+
+                    <textarea id="messageInput" placeholder="Escribe un mensaje..." rows="1" autofocus></textarea>
+
+                    <div class="input-toolbar">
+                        <div class="toolbar-tools">
+                            <input type="file" id="fileUpload" class="hidden" multiple
+                                accept="image/*,.txt,.csv,.json,.md,.js,.py,.html,.css,.pdf,application/pdf">
+
+                            <button class="btn-icon toolbar-btn" id="attachBtn" title="Sube archivos (PDF, Markdown, Código) o Imágenes. Su contenido se extraerá localmente y se inyectará como contexto para nutrir a la IA en este mensaje específico.">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <path
+                                        d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                </svg>
+                            </button>
+
+                            <button class="btn-icon toolbar-btn feature-toggle hidden" id="toolInternet"
+                                title="Activa el uso de Tool Calling (búsqueda web simulada) en modelos que soporten esta capacidad sintáctica de forma nativa.">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+                                    <path d="M2 12h20" />
+                                </svg>
+                            </button>
+
+                            <button class="btn-icon toolbar-btn feature-toggle active hidden" id="toolThinking"
+                                title="Obliga a la UI a renderizar separadamente el flujo de cadena de razonamiento pre-respuesta emitido por los modelos 'Thinking' analíticos.">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <path
+                                        d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
+                                    <path
+                                        d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="toolbar-actions">
+                            <span class="char-count" id="charCount"></span>
+                            <button class="btn-icon improve-btn hidden" id="improvePromptBtn"
+                                title="Delega a la IA activa la optimización lingüística e intencional de lo que acabas de escribir. Mejorará tu prompt inyectándole claridad antes de que lo envíes.">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round">
+                                    <path d="m13 2-2 10h3L9 22l2-10H8L13 2z" />
+                                </svg>
+                            </button>
+                            <button class="send-btn" id="sendBtn" disabled title="Despacha toda la historia del chat + documentos serializados al Provider activo seleccionado">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" />
+                                </svg>
+                            </button>
+                            <button class="stop-btn hidden" id="stopBtn" title="Desconecta el streaming del decoder de red y aborta inmediatamente la generación en curso">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <p class="input-disclaimer" id="inputDisclaimer">Tus modelos ejecutándose localmente vía Ollama · Privacidad total</p>
+            </div>
+
+            <!-- Site Footer -->
+            <footer class="site-footer">
+                <div class="footer-bottom">
+                    <a href="https://tligent.com/" class="footer-left-link" target="_blank" rel="noopener">
+                        <span class="version-tag">Vers: 2604.V</span>
+                        <span class="copyright">© 2026 TLIGENT IA</span>
+                        <span class="lock-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                            </svg>
+                        </span>
+                    </a>
+                    <div class="footer-center">
+                        <a href="mailto:info@tligent.com?subject=Quiero%20mas%20información"
+                            class="footer-contact-link">SOLICITAR INFORMACIÓN</a>
+                    </div>
+                    <div class="footer-right">
+                        <a href="#" class="footer-link" id="openPrivacy">COOKIES Y PRIVACIDAD</a>
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay hidden" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Configuración</h2>
+                <button class="btn-icon" id="closeSettings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label class="setting-label" title="Selecciona la pasarela o motor IA al cual conectarte. Configura en caliente los adaptadores de red y dialectos correctos (Ollama, OpenAI, Gemini, etc.)">Motor de IA (Backend)</label>
+                    <select class="setting-input" id="providerSelect">
+                        <option value="ollama">🟢 Ollama (Local)</option>
+                        <option value="ollama_remote">🌐 Ollama (Remoto)</option>
+                        <option value="ollama_cloud">☁️ Ollama Cloud</option>
+                        <option value="lmstudio">💻 LM Studio</option>
+                        <option value="groq">⚡ Groq</option>
+                        <option value="openrouter">🔀 OpenRouter</option>
+                        <option value="gemini">✨ Google Gemini</option>
+                        <option value="claude">🟣 Claude (Anthropic)</option>
+                        <option value="openai">🤖 OpenAI</option>
+                    </select>
+                    <div class="provider-auth-badge" id="providerAuthBadge"></div>
+                </div>
+                <div class="setting-group" id="apiKeyGroup" style="display:none;">
+                    <label class="setting-label" title="Token JWT o clave de sesión obligatoria o recomendada por el proveedor. NUNCA abandona tu ordenador.">API Key</label>
+                    <div class="apikey-input-wrapper">
+                        <input type="password" class="setting-input" id="apiKeyInput" placeholder="sk-... / gsk_... / tu-api-key" autocomplete="off">
+                        <button type="button" class="btn-icon apikey-toggle" id="apiKeyToggle" title="Mostrar/Ocultar">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="apikey-security-note">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        Tu API Key se almacena solo en tu navegador (localStorage) y nunca se envía a terceros.
+                    </p>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="End point HTTP/S de destino base. Especialmente útil para entornos self-hosted como LMStudio u Ollama remoto.">URL del Servidor</label>
+                    <input type="text" class="setting-input" id="ollamaUrl" value="http://localhost:11434">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="Renderiza todo el DOM aplicando tokens de paleta de colores diferentes">Tema Visual</label>
+                    <select class="setting-input" id="themeSelect">
+                        <option value="dark" selected>Oscuro (Premium) 🌙</option>
+                        <option value="light">Claro (Premium) ☀️</option>
+                        <option value="vanilla">Vanilla (Minimalista) 🍦</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" style="display: flex; justify-content: space-between;">
+                        Modelo
+                        <span class="setting-value" id="refreshModels" style="cursor:pointer"
+                            title="Recargar modelos de Ollama">🔄 Actualizar</span>
+                    </label>
+                    <div class="smart-model-container">
+                        <div class="model-filter-bar">
+                            <div class="search-box">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <input type="text" id="modelSearchInput" placeholder="Buscar cerebro..." class="search-input">
+                            </div>
+                            <div class="filter-actions" id="filterFreeModelsContainer" style="display:none;">
+                                <button type="button" id="btnFilterFree" class="filter-pill active" title="Muestra solo los modelos gratuitos (0.0 $/token)">Gratis</button>
+                            </div>
+                        </div>
+                        <select class="setting-input-premium" id="modelSelect">
+                            <option value="">Cargando catálogo...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="Parámetro determinista: 0.1 hace al modelo robótico y predecible. 1.0 (o sumamente alto) lo hace extremadamente espontáneo, creativo pero posiblemente caótico.">Temperatura <span class="setting-value"
+                            id="tempValue">0.7</span></label>
+                    <input type="range" class="setting-range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+                </div>
+                <div class="setting-inline-group">
+                    <div class="setting-group">
+                        <label class="setting-label" title="Nucleus Sampling: Poda estricta de base. Si se configura a 0.9, el modelo sólo considerará los tokens conformantes del 90% superior de probabilidad probabilística más alta.">Top-P <span class="setting-value" id="topPValue">0.9</span></label>
+                        <input type="range" class="setting-range" id="topP" min="0" max="1" step="0.05" value="0.9">
+                    </div>
+                    <div class="setting-group">
+                        <label class="setting-label" title="Absolute Top-K: Límite duro matemático. Tras cada token generado, restringe rígidamente las próximas opciones a los K tokens más predecibles en la rama del grafo.">Top-K <span class="setting-value" id="topKValue">40</span></label>
+                        <input type="range" class="setting-range" id="topK" min="1" max="100" step="1" value="40">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="Límite absoluto de longitud del mensaje de salida (respuesta) generado durante la inferencia">Max Tokens <span class="setting-value" id="maxTokensValue">4096</span></label>
+                    <input type="range" class="setting-range" id="maxTokens" min="256" max="32768" step="256" value="4096">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="Mandamientos centrales obligatorios incrustados al inicio absoluto de cualquier comunicación. Afecta fuertemente a la personalidad y respuestas estructurales.">System Prompt</label>
+                    <textarea class="setting-input setting-textarea" id="systemPrompt" rows="4"
+                        placeholder="Instrucciones del sistema...">Eres un asistente IA útil, preciso y conciso. Responde en el mismo idioma en que te hablen. Cuando generes código, incluye comentarios explicativos.</textarea>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" style="display:flex; align-items:center;">
+                        <input type="checkbox" id="thinkingMode" checked style="margin-right: 8px;">
+                        Modo Thinking (razonamiento visible)
+                    </label>
+                </div>
+                <div class="setting-group"
+                    style="padding-top: 20px; border-top: 1px solid var(--border-subtle); margin-top: 10px;">
+                    <label class="setting-label" title="El sistema de Seguridad Zero-Trust. Protege esta herramienta desde la red. Si conectas desde una red externa no Whitelisted, bloqueará tu acceso demandando PIN físico.">🛡️ Control de Acceso (IP Whitelist)</label>
+                    <div class="ip-whitelist-section" id="ipWhitelistSection">
+                        <div class="ip-whitelist-current" id="ipCurrentDisplay">
+                            <span>Tu IP actual: <code id="currentIpLabel">Detectando...</code></span>
+                            <button class="btn-secondary" id="memorizeIpBtn" style="font-size:0.7rem; padding:4px 10px;" title="Agrega la IP pública temporal de tu ubicación a la lista blanca, permitiéndote entrar evadiendo el PIN en futuras sesiones desde la misma cobertura red.">Memorizar IP</button>
+                        </div>
+                        <div class="ip-whitelist-list" id="ipWhitelistList"></div>
+                    </div>
+                </div>
+                <div class="setting-group"
+                    style="padding-top: 20px; border-top: 1px solid var(--border-subtle); margin-top: 10px;">
+                    <label class="setting-label" style="color: var(--danger);">Zona de Peligro</label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 12px; line-height: 1.4;">
+                        Esta acción borrará permanentemente todos tus chats, conocimiento en proyectos, e historial
+                        local.</p>
+                    <button class="btn-primary" id="hardResetBtn"
+                        style="background: var(--danger); width: 100%;" title="Destruye de forma permanente e irrecuperable todas las bases de datos guardadas en el navegador, restaurando wIA de fábrica">Limpiar todo el historial</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="resetSettings">Restablecer</button>
+                <button class="btn-primary" id="saveSettings">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay hidden" id="deleteModal">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h2>Eliminar conversación</h2>
+                <button class="btn-icon close-delete-modal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>¿Seguro que quieres eliminar esta conversación? Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary close-delete-modal">Cancelar</button>
+                <button class="btn-danger" id="confirmDelete">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Settings Modal (NotebookLM Clone) -->
+    <div class="modal-overlay hidden" id="projectModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="projectModalTitle">Configuración de Proyecto</h2>
+                <button class="btn-icon" id="closeProjectModal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label class="setting-label">Nombre del Workspace</label>
+                    <input type="text" class="setting-input" id="projectName" placeholder="Ej. Tesis de Grado">
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Instrucciones Especiales (System Prompt del Proyecto)</label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 8px;">Sobreescribe las
+                        instrucciones generales solo para los chats dentro de este proyecto.</p>
+                    <textarea class="setting-input setting-textarea" id="projectPrompt" rows="3"
+                        placeholder="Actúa como un profesor universitario evaluando literatura..."></textarea>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label" style="display: flex; justify-content: space-between;">
+                        Documentos Persistentes (Knowledge Base)
+                        <button class="btn-secondary" id="attachProjectDocsBtn"
+                            style="font-size: 0.7rem; padding: 4px 8px;">+ Subir Documento</button>
+                        <input type="file" id="projectFileUpload" class="hidden" multiple
+                            accept=".txt,.md,.csv,.json,.js,.py,.html,.css,.pdf,application/pdf">
+                    </label>
+                    <p style="font-size: 0.75rem; color: var(--warning); margin-bottom: 8px; line-height: 1.4;">
+                        Estos archivos acompañarán <b>siempre</b> a todos los chats de este proyecto, consumiendo
+                        ventana de contexto. Úsalo como NotebookLM.
+                    </p>
+
+                    <!-- Permanent Files List -->
+                    <div id="projectDocList"
+                        style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-height: 150px; overflow-y: auto;">
+                        <!-- Docs go here -->
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn-danger" id="deleteProjectBtn"
+                    style="background: transparent; color: var(--danger);">Eliminar Proyecto</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-secondary" id="closeProjectModal2">Cancelar</button>
+                    <button class="btn-primary" id="saveProjectBtn">Guardar Proyecto</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Geek Info / Metrics Modal -->
+    <div class="modal-overlay hidden" id="metricsModal">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h2>Rendimiento (Geek Info)</h2>
+                <button class="btn-icon" onclick="document.getElementById('metricsModal').classList.add('hidden')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="metricsBody">
+                <!-- Vía JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Move Chat Modal -->
+    <div class="modal-overlay hidden" id="moveModal">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h2>Mover Chat a...</h2>
+                <button class="btn-icon close-move-modal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <select id="moveProjectSelect" class="setting-input"></select>
+                <div class="modal-actions"
+                    style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                    <button class="btn-secondary close-move-modal">Cancelar</button>
+                    <button class="btn-primary" id="confirmMove">Mover</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy & Cookies Modal -->
+    <div class="modal-overlay hidden" id="privacyModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Cookies y Privacidad</h2>
+                <button class="btn-icon" id="closePrivacy">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">Transparencia IA
+                    </h3>
+                    <p style="margin-bottom: 16px;">El 100% de los contenidos, textos y código de esta página han sido
+                        creados mediante herramientas de Inteligencia Artificial.</p>
+                </div>
+                <div class="setting-group">
+                    <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">Compromiso de
+                        Privacidad</h3>
+                    <p style="margin-bottom: 12px;">Esta web es una herramienta informativa. No recopila, ni transmite
+                        ningún dato del usuario. Nuestra web es 100% estática y de ejecución local.</p>
+                    <p style="margin-bottom: 12px;">Todos los chats, archivos adjuntos y configuraciones se almacenan
+                        exclusivamente en tu navegador (LocalStorage) y nunca se envían a servidores externos, excepto a
+                        tu propia instancia local de Ollama o LM Studio.</p>
+                </div>
+                <div class="setting-group">
+                    <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">Ubicación</h3>
+                    <p>Tligent, S.L. - Barcelona</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="closePrivacyBtn">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="secure-gate.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
