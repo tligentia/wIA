@@ -2155,8 +2155,10 @@ function bindEvents() {
         }
     });
 
+    // Debounced auto-resize for better performance
+    const debouncedAutoResize = debounce(autoResizeTextarea, 10);
     dom.messageInput.addEventListener('input', () => {
-        autoResizeTextarea();
+        debouncedAutoResize();
         updateSendButton();
     });
 
@@ -2167,8 +2169,9 @@ function bindEvents() {
     if(dom.mobileNewChat) dom.mobileNewChat.addEventListener('click', createChat);
     if(dom.desktopNewChatToggle) dom.desktopNewChatToggle.addEventListener('click', createChat);
 
-    // Search chats
-    dom.searchChats.addEventListener('input', renderChatList);
+    // Search chats (debounced for performance)
+    const debouncedSearchChats = debounce(renderChatList, 200);
+    dom.searchChats.addEventListener('input', debouncedSearchChats);
 
     // Welcome cards
     $$('.welcome-card').forEach(card => {
@@ -2583,12 +2586,7 @@ function updateSendButton() {
     dom.sendBtn.disabled = !dom.messageInput.value.trim() || state.isStreaming;
 }
 
-function scrollToBottom() {
-    requestAnimationFrame(() => {
-        dom.messagesScroll.scrollTop = dom.messagesScroll.scrollHeight;
-    });
-}
-
+// ─── Utils ──────────────────────────────────
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -2608,6 +2606,58 @@ function formatDate(timestamp) {
     if (hours < 24) return `Hace ${hours}h`;
     if (days < 7) return `Hace ${days}d`;
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+// Debounce utility for performance
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Memoization for expensive operations
+function memoize(fn) {
+    const cache = new Map();
+    return function(...args) {
+        const key = JSON.stringify(args);
+        if (cache.has(key)) {
+            return cache.get(key);
+        }
+        const result = fn.apply(this, args);
+        cache.set(key, result);
+        return result;
+    };
+}
+
+// Smooth scroll with RAF
+function scrollToBottom() {
+    requestAnimationFrame(() => {
+        dom.messagesScroll.scrollTop = dom.messagesScroll.scrollHeight;
+    });
+}
+
+// Create element helper
+function createElement(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html.trim();
+    return template.content.firstChild;
+}
+
+// Fragment renderer for lists
+function renderWithFragment(container, items, itemRenderer) {
+    const fragment = document.createDocumentFragment();
+    items.forEach(item => {
+        const el = typeof itemRenderer === 'function' ? itemRenderer(item) : createElement(itemRenderer(item));
+        fragment.appendChild(el);
+    });
+    container.innerHTML = '';
+    container.appendChild(fragment);
 }
 
 // ─── Start ──────────────────────────────────
