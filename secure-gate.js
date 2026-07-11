@@ -1,295 +1,241 @@
 /* ============================================================
-   SecureGate — Hybrid Access Control Layer
-   IP Whitelist Detection + PIN Authentication
+   SecureGate — Local Privacy Lock
+   Browser-side interface lock for shared devices
    ============================================================ */
 
 const SecureGate = (() => {
-    // ─── Configuration ──────────────────────────
-    const MASTER_CODES = ['7887', 'STAR'];
-    const HARDCODED_WHITELIST = [
-        '88.26.226.92',   // Office
-        '83.50.195.12',   // Home
-    ];
-    const STORAGE_KEY = 'wia_whitelisted_ips';
-    const SESSION_KEY = 'secureAccessGateAuthenticated';
-    const IP_SERVICES = [
-        'https://api.ipify.org?format=json',
-        'https://ipapi.co/json/',
-        'https://api.seeip.org/jsonip',
-    ];
+    const CONFIG_KEY = 'wia_privacy_lock_config';
+    const SESSION_KEY = 'wia_privacy_lock_unlocked';
+    const HASH_SALT = 'wia-privacy-lock-v2604-bu';
 
-    let currentPublicIp = null;
-    let onLoginCallback = null;
+    let onUnlockCallback = null;
 
-    // ─── IP Detection ───────────────────────────
-    async function detectPublicIp() {
-        for (const service of IP_SERVICES) {
-            try {
-                const res = await fetch(service, { signal: AbortSignal.timeout(4000) });
-                if (!res.ok) continue;
-                const data = await res.json();
-                const ip = data.ip || data.query || null;
-                if (ip && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
-                    currentPublicIp = ip;
-                    return ip;
-                }
-            } catch (e) {
-                continue;
-            }
-        }
-        return null;
-    }
-
-    function getWhitelistedIps() {
+    function getConfig() {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            return saved ? JSON.parse(saved) : [];
+            const raw = localStorage.getItem(CONFIG_KEY);
+            return raw ? JSON.parse(raw) : { enabled: false, pinHash: '' };
         } catch {
-            return [];
+            return { enabled: false, pinHash: '' };
         }
     }
 
-    function saveWhitelistedIps(ips) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(ips));
+    function saveConfig(config) {
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
     }
 
-    function addCurrentIpToWhitelist() {
-        if (!currentPublicIp) return false;
-        const ips = getWhitelistedIps();
-        if (!ips.includes(currentPublicIp)) {
-            ips.push(currentPublicIp);
-            saveWhitelistedIps(ips);
-        }
-        return true;
+    function clearSession() {
+        sessionStorage.removeItem(SESSION_KEY);
     }
 
-    function removeIpFromWhitelist(ip) {
-        const ips = getWhitelistedIps().filter(i => i !== ip);
-        saveWhitelistedIps(ips);
-    }
-
-    function isIpWhitelisted(ip) {
-        if (!ip) return false;
-        const allWhitelisted = [...HARDCODED_WHITELIST, ...getWhitelistedIps()];
-        return allWhitelisted.includes(ip);
-    }
-
-    // ─── Session Persistence ────────────────────
-    function isSessionAuthenticated() {
-        return sessionStorage.getItem(SESSION_KEY) === 'true';
-    }
-
-    function setSessionAuthenticated() {
+    function setUnlocked() {
         sessionStorage.setItem(SESSION_KEY, 'true');
     }
 
-    // ─── PIN Keypad Generation ──────────────────
-    function generateKeypad() {
-        // Required characters for both codes: 7, 8, S, T, A, R
-        const requiredChars = ['7', '8', 'S', 'T', 'A', 'R'];
-        // Fill remaining 10 slots with random distractor chars
-        const distractorPool = '2346BDFHKMNPQUVWXYZ'.split('');
-        const distractors = [];
-        const usedChars = new Set(requiredChars);
-        
-        while (distractors.length < 10) {
-            const c = distractorPool[Math.floor(Math.random() * distractorPool.length)];
-            if (!usedChars.has(c)) {
-                usedChars.add(c);
-                distractors.push(c);
-            }
-        }
-        
-        const allChars = [...requiredChars, ...distractors];
-        // Shuffle Fisher-Yates
-        for (let i = allChars.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [allChars[i], allChars[j]] = [allChars[j], allChars[i]];
-        }
-        return allChars;
+    function isUnlocked() {
+        return sessionStorage.getItem(SESSION_KEY) === 'true';
     }
 
-    // ─── Render Security Gate ───────────────────
-    function renderGate() {
+    async function sha256(text) {
+        const data = new TextEncoder().encode(`${HASH_SALT}:${text}`);
+        const digest = await crypto.subtle.digest('SHA-256', data);
+        return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function validatePin(pin) {
+        return /^\d{4,12}$/.test(pin);
+    }
+
+    async function configure({ enabled, pin }) {
+        const current = getConfig();
+        const next = {
+            enabled: !!enabled,
+            pinHash: current.pinHash || ''
+        };
+
+        if (pin) {
+            if (!validatePin(pin)) {
+                throw new Error('El PIN del bloqueo local debe tener entre 4 y 12 dígitos.');
+            }
+            next.pinHash = await sha256(pin);
+        }
+
+        if (next.enabled && !next.pinHash) {
+            throw new Error('Para activar el bloqueo local necesitas definir primero un PIN.');
+        }
+
+        saveConfig(next);
+        if (!next.enabled) clearSession();
+        return next;
+    }
+
+    function ensureOverlayStyles() {
+        if (document.getElementById('secureGateInlineStyles')) return;
+        const style = document.createElement('style');
+        style.id = 'secureGateInlineStyles';
+        style.textContent = `
+            #secureGateOverlay {
+                position: fixed;
+                inset: 0;
+                z-index: 99999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+                background: radial-gradient(circle at top, rgba(124, 58, 237, 0.18), rgba(10, 10, 15, 0.96) 48%), rgba(10, 10, 15, 0.96);
+                backdrop-filter: blur(18px);
+            }
+            .sg-panel {
+                width: min(100%, 420px);
+                padding: 28px;
+                border-radius: 20px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(17, 17, 24, 0.96);
+                box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+                color: #f0f0f5;
+            }
+            .sg-title {
+                margin: 0 0 10px;
+                font-size: 1.15rem;
+                font-weight: 800;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+            .sg-copy {
+                margin: 0 0 18px;
+                color: #9898a8;
+                line-height: 1.55;
+                font-size: 0.9rem;
+            }
+            .sg-input {
+                width: 100%;
+                padding: 14px 16px;
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.03);
+                color: #f0f0f5;
+                font-size: 1rem;
+                letter-spacing: 0.2em;
+                outline: none;
+            }
+            .sg-input:focus {
+                border-color: rgba(124, 58, 237, 0.9);
+                box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+            }
+            .sg-actions {
+                display: flex;
+                gap: 10px;
+                margin-top: 14px;
+            }
+            .sg-btn {
+                flex: 1;
+                border: none;
+                border-radius: 12px;
+                padding: 12px 14px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .sg-btn-primary {
+                background: #7c3aed;
+                color: white;
+            }
+            .sg-btn-secondary {
+                background: rgba(255, 255, 255, 0.06);
+                color: #f0f0f5;
+            }
+            .sg-error {
+                min-height: 20px;
+                margin-top: 12px;
+                color: #f87171;
+                font-size: 0.82rem;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function removeOverlay() {
+        document.getElementById('secureGateOverlay')?.remove();
+    }
+
+    function renderGate(config) {
+        ensureOverlayStyles();
+        removeOverlay();
+
         const overlay = document.createElement('div');
         overlay.id = 'secureGateOverlay';
         overlay.innerHTML = `
-            <div class="sg-container">
-                <div class="sg-logo">
-                    <div class="sg-logo-circle">
-                        <span>GO</span>
-                    </div>
+            <div class="sg-panel">
+                <h1 class="sg-title">Bloqueo local de privacidad</h1>
+                <p class="sg-copy">Introduce tu PIN para desbloquear esta interfaz en este navegador. Este bloqueo evita accesos casuales en el dispositivo, pero no sustituye autenticación de servidor.</p>
+                <input class="sg-input" id="sgPinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN de 4-12 dígitos">
+                <div class="sg-actions">
+                    <button class="sg-btn sg-btn-secondary" id="sgClearBtn" type="button">Borrar</button>
+                    <button class="sg-btn sg-btn-primary" id="sgUnlockBtn" type="button">Desbloquear</button>
                 </div>
-                <h1 class="sg-title">SEGURIDAD</h1>
-                <p class="sg-subtitle">ACCESO RESTRINGIDO</p>
-                
-                <div class="sg-input-display">
-                    <div class="sg-slot" data-idx="0">
-                        <span class="sg-dot"></span>
-                        <div class="sg-line"></div>
-                    </div>
-                    <div class="sg-slot" data-idx="1">
-                        <span class="sg-dot"></span>
-                        <div class="sg-line"></div>
-                    </div>
-                    <div class="sg-slot" data-idx="2">
-                        <span class="sg-dot"></span>
-                        <div class="sg-line"></div>
-                    </div>
-                    <div class="sg-slot" data-idx="3">
-                        <span class="sg-dot"></span>
-                        <div class="sg-line"></div>
-                    </div>
-                </div>
-                
-                <div class="sg-keypad" id="sgKeypad"></div>
-                
-                <button class="sg-clear-btn" id="sgClearBtn">BORRAR ENTRADA</button>
-                
-                <p class="sg-ip-info" id="sgIpInfo"></p>
+                <div class="sg-error" id="sgError"></div>
             </div>
         `;
+
         document.body.appendChild(overlay);
 
-        // Build keypad buttons
-        const keypadEl = document.getElementById('sgKeypad');
-        const chars = generateKeypad();
-        chars.forEach(char => {
-            const btn = document.createElement('button');
-            btn.className = 'sg-key';
-            btn.textContent = char;
-            btn.dataset.char = char;
-            btn.addEventListener('click', () => handleKeyPress(char));
-            keypadEl.appendChild(btn);
-        });
+        const input = document.getElementById('sgPinInput');
+        const errorEl = document.getElementById('sgError');
 
-        // Clear button
-        document.getElementById('sgClearBtn').addEventListener('click', clearInput);
-
-        // Show IP info
-        if (currentPublicIp) {
-            document.getElementById('sgIpInfo').textContent = `IP: ${currentPublicIp}`;
-        }
-
-        // Keyboard support
-        document.addEventListener('keydown', handlePhysicalKey);
-    }
-
-    let inputBuffer = '';
-
-    function handleKeyPress(char) {
-        if (inputBuffer.length >= 4) return;
-        inputBuffer += char;
-        updateDots();
-
-        if (inputBuffer.length === 4) {
-            validateCode();
-        }
-    }
-
-    function handlePhysicalKey(e) {
-        if (!document.getElementById('secureGateOverlay')) return;
-        if (e.key === 'Backspace') {
-            clearInput();
-            return;
-        }
-        
-        // Sólo aceptar caracteres alfanuméricos individuales
-        if (e.key.length !== 1 || !/^[A-Za-z0-9]$/.test(e.key)) return;
-        
-        const char = e.key.toUpperCase();
-        
-        // Feedback visual si la tecla existe en el teclado aleatorio
-        const btn = document.querySelector(`.sg-key[data-char="${char}"]`);
-        if (btn) {
-            btn.classList.add('sg-key-pressed');
-            setTimeout(() => btn.classList.remove('sg-key-pressed'), 150);
-        }
-        
-        // Procesar siempre la pulsación, esté o no en el teclado visual
-        handleKeyPress(char);
-    }
-
-    function updateDots() {
-        const slots = document.querySelectorAll('.sg-slot');
-        slots.forEach((slot, i) => {
-            const dot = slot.querySelector('.sg-dot');
-            const line = slot.querySelector('.sg-line');
-            dot.classList.remove('filled', 'error');
-            line.classList.remove('filled', 'error');
-            if (i < inputBuffer.length) {
-                dot.classList.add('filled');
-                line.classList.add('filled');
+        async function unlock() {
+            const pin = input.value.trim();
+            const hash = await sha256(pin);
+            if (hash !== config.pinHash) {
+                errorEl.textContent = 'PIN incorrecto.';
+                input.value = '';
+                input.focus();
+                return;
             }
+
+            setUnlocked();
+            removeOverlay();
+            onUnlockCallback?.();
+        }
+
+        document.getElementById('sgClearBtn').addEventListener('click', () => {
+            input.value = '';
+            errorEl.textContent = '';
+            input.focus();
         });
+        document.getElementById('sgUnlockBtn').addEventListener('click', unlock);
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') unlock();
+        });
+        input.focus();
     }
 
-    function clearInput() {
-        inputBuffer = '';
-        updateDots();
-    }
+    function init(onUnlock) {
+        onUnlockCallback = onUnlock;
+        const config = getConfig();
 
-    function validateCode() {
-        const code = inputBuffer.toUpperCase();
-        if (MASTER_CODES.includes(code) || MASTER_CODES.includes(inputBuffer)) {
-            // Success
-            setSessionAuthenticated();
-            const overlay = document.getElementById('secureGateOverlay');
-            if (overlay) {
-                overlay.classList.add('sg-success');
-                setTimeout(() => {
-                    overlay.remove();
-                    document.removeEventListener('keydown', handlePhysicalKey);
-                    if (onLoginCallback) onLoginCallback();
-                }, 400);
-            }
-        } else {
-            // Error — shake
-            const dots = document.querySelectorAll('.sg-dot');
-            const lines = document.querySelectorAll('.sg-line');
-            const container = document.querySelector('.sg-container');
-            
-            dots.forEach(d => d.classList.add('error'));
-            lines.forEach(l => l.classList.add('error'));
-            container?.classList.add('sg-shake');
-            
-            setTimeout(() => {
-                container?.classList.remove('sg-shake');
-                clearInput();
-            }, 800);
-        }
-    }
-
-    // ─── Main Init ──────────────────────────────
-    async function init(onLogin) {
-        onLoginCallback = onLogin;
-
-        // 1. Already authenticated this session?
-        if (isSessionAuthenticated()) {
-            onLogin();
+        if (!config.enabled || !config.pinHash) {
+            clearSession();
+            onUnlock();
             return;
         }
 
-        // 2. Try IP-based auto-login
-        const ip = await detectPublicIp();
-        if (ip && isIpWhitelisted(ip)) {
-            setSessionAuthenticated();
-            onLogin();
+        if (isUnlocked()) {
+            onUnlock();
             return;
         }
 
-        // 3. Show PIN gate
-        renderGate();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => renderGate(config), { once: true });
+            return;
+        }
+
+        renderGate(config);
     }
 
-    // ─── Public API ─────────────────────────────
     return {
         init,
-        getCurrentIp: () => currentPublicIp,
-        addCurrentIpToWhitelist,
-        removeIpFromWhitelist,
-        getWhitelistedIps,
-        isIpWhitelisted: () => isIpWhitelisted(currentPublicIp),
-        HARDCODED_WHITELIST,
+        configure,
+        getConfig,
+        clearSession
     };
 })();
+
+window.SecureGate = SecureGate;
