@@ -64,3 +64,5 @@ htmlcov/
 .claude/settings.local.json
 # Vercel
 .vercel/
+.vercel
+.env*
