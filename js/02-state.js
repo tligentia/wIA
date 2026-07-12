@@ -124,6 +124,8 @@ const dom = {
     agentsGalleryBtn: $('#agentsGalleryBtn'),
     closeAgentsModal: $('#closeAgentsModal'),
     newAgentBtn: $('#newAgentBtn'),
+    importAgentBtn: $('#importAgentBtn'),
+    importAgentFile: $('#importAgentFile'),
     attachProjectDocsBtn: $('#attachProjectDocsBtn'),
     projectFileUpload: $('#projectFileUpload'),
     projectDocList: $('#projectDocList'),

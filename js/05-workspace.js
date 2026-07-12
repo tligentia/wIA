@@ -281,10 +281,47 @@ function renderAgentsGallery() {
                         ${(p.starters || []).filter(s => s?.prompt).length > 0 ? '<span class="agent-chip">⚡ iniciadores</span>' : ''}
                     </div>
                 </div>
-                <button class="agent-card-edit" data-edit-agent="${p.id}" title="Editar agente">✏️</button>
+                <div class="agent-card-actions">
+                    <button class="agent-card-edit" data-edit-agent="${p.id}" title="Editar agente">✏️</button>
+                    <button class="agent-card-edit" data-export-agent="${p.id}" title="Exportar agente a fichero">📤</button>
+                </div>
             </div>
         `;
     }).join('');
+}
+
+/**
+ * renderAgentCatalog — vitrina curada de agentes de ejemplo (agents.json),
+ * instalables con un clic. Sin backend: es un fichero estático del propio wIA.
+ */
+async function renderAgentCatalog() {
+    const wrap = document.getElementById('agentCatalog');
+    if (!wrap) return;
+    if (state._agentCatalog === undefined) {
+        try {
+            const res = await fetch('agents.json', { cache: 'no-cache' });
+            state._agentCatalog = res.ok ? (await res.json()).agents || [] : [];
+        } catch (e) {
+            state._agentCatalog = [];
+        }
+    }
+    const catalog = state._agentCatalog;
+    const section = document.getElementById('agentCatalogSection');
+    if (!catalog.length) { if (section) section.style.display = 'none'; return; }
+    if (section) section.style.display = 'block';
+    wrap.innerHTML = catalog.map((c, i) => `
+        <div class="agent-card" data-catalog-index="${i}" role="button" tabindex="0">
+            <div class="agent-card-emoji">${escapeHtml(c.emoji || '🤖')}</div>
+            <div class="agent-card-body">
+                <div class="agent-card-name">${escapeHtml(c.name || 'Agente')}</div>
+                <div class="agent-card-desc">${escapeHtml(c.description || '')}</div>
+                <div class="agent-card-meta">
+                    <span class="agent-chip engine">${escapeHtml(getAgentEngineLabel({ agentProvider: c.agentProvider, agentModel: c.agentModel }))}</span>
+                    <span class="agent-chip">＋ instalar</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
 }
 
 function getActiveProject() {
@@ -359,6 +396,121 @@ function createProject(name) {
     saveState();
     switchProject(proj.id);
     return proj;
+}
+
+// ─── Compartir Agentes (export / import / catálogo) ──────────
+const AGENT_FILE_FORMAT = 'wia_agent';
+const AGENT_FILE_VERSION = 1;
+const AGENT_MAX_DOC_BYTES = 2_000_000;   // ~2 MB por documento importado
+const AGENT_MAX_TOTAL_DOC_BYTES = 8_000_000; // ~8 MB de conocimiento total
+
+function _clampStr(value, max) {
+    return typeof value === 'string' ? value.slice(0, max) : '';
+}
+
+/**
+ * serializeAgent — definición portable de un agente. Incluye identidad, motor
+ * (proveedor + modelo + temperatura, SIN API key), system prompt, iniciadores
+ * y base de conocimiento. Nunca incluye chats ni credenciales.
+ */
+function serializeAgent(proj) {
+    return {
+        format: AGENT_FILE_FORMAT,
+        version: AGENT_FILE_VERSION,
+        exportedAt: new Date().toISOString(),
+        exportedBy: 'wIA',
+        agent: {
+            name: proj.name || 'Agente',
+            emoji: proj.emoji || '',
+            description: proj.description || '',
+            systemPrompt: proj.systemPrompt || '',
+            agentProvider: proj.agentProvider || '',
+            agentModel: proj.agentModel || '',
+            agentTemperature: typeof proj.agentTemperature === 'number' ? proj.agentTemperature : null,
+            starters: (proj.starters || []).filter(s => s && s.prompt).slice(0, 4).map(s => ({
+                icon: s.icon || '', title: s.title || '', prompt: s.prompt || ''
+            })),
+            documents: (proj.documents || []).map(d => ({
+                name: d.name || 'documento', type: d.type || 'text/plain', data: d.data || ''
+            })),
+        }
+    };
+}
+
+function exportAgentToFile(projectId) {
+    const proj = state.projects.find(p => p.id === projectId);
+    if (!proj) return;
+    const data = JSON.stringify(serializeAgent(proj), null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const slug = (proj.name || 'agente').replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ]+/g, '_').slice(0, 40);
+    a.download = `wIA_agente_${slug}_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * buildAgentFromDefinition — reconstruye un agente saneado desde una definición
+ * externa (fichero o catálogo). Trunca campos, descarta documentos demasiado
+ * grandes y NUNCA acepta API keys ni un ID heredado (se genera uno nuevo).
+ * Devuelve { project, warnings }.
+ */
+function buildAgentFromDefinition(raw) {
+    const def = raw && raw.format === AGENT_FILE_FORMAT ? raw.agent : raw;
+    if (!def || typeof def !== 'object' || (!def.name && !def.systemPrompt && !def.description)) {
+        throw new Error('El archivo no contiene una definición de agente válida de wIA.');
+    }
+    const warnings = [];
+
+    const provider = typeof def.agentProvider === 'string' && PROVIDERS[def.agentProvider] ? def.agentProvider : '';
+    if (def.agentProvider && !provider) warnings.push(`Proveedor desconocido «${def.agentProvider}», se usará el motor global.`);
+
+    let temp = null;
+    if (typeof def.agentTemperature === 'number' && !Number.isNaN(def.agentTemperature)) {
+        temp = Math.min(2, Math.max(0, def.agentTemperature));
+    }
+
+    const starters = Array.isArray(def.starters) ? def.starters.slice(0, 4).filter(s => s && s.prompt).map(s => ({
+        icon: _clampStr(s.icon, 8), title: _clampStr(s.title, 60), prompt: _clampStr(s.prompt, 2000)
+    })) : [];
+
+    const documents = [];
+    let totalBytes = 0;
+    for (const d of (Array.isArray(def.documents) ? def.documents : [])) {
+        const data = typeof d?.data === 'string' ? d.data : '';
+        const bytes = data.length;
+        if (bytes > AGENT_MAX_DOC_BYTES) { warnings.push(`Documento «${d?.name || '?'}» omitido por tamaño.`); continue; }
+        if (totalBytes + bytes > AGENT_MAX_TOTAL_DOC_BYTES) { warnings.push('Se omitieron documentos por superar el límite total.'); break; }
+        totalBytes += bytes;
+        documents.push({ id: crypto.randomUUID(), name: _clampStr(d.name || 'documento', 120), type: _clampStr(d.type || 'text/plain', 60), data });
+    }
+
+    const project = {
+        id: crypto.randomUUID(),
+        name: _clampStr(def.name || 'Agente importado', 60) || 'Agente importado',
+        emoji: _clampStr(def.emoji, 8),
+        description: _clampStr(def.description, 240),
+        systemPrompt: _clampStr(def.systemPrompt, 20000),
+        agentProvider: provider,
+        agentModel: _clampStr(def.agentModel, 120),
+        agentTemperature: temp,
+        starters,
+        documents,
+        createdAt: Date.now(),
+    };
+    return { project, warnings };
+}
+
+function installAgentDefinition(raw, { activate = false } = {}) {
+    const { project, warnings } = buildAgentFromDefinition(raw);
+    state.projects.push(project);
+    saveState();
+    renderProjectSelect();
+    renderAgentsGallery();
+    if (activate) switchProject(project.id);
+    return { project, warnings };
 }
 
 function deleteProject(id) {

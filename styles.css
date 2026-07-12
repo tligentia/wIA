@@ -3838,10 +3838,15 @@ option {
     border-color: rgba(124, 58, 237, 0.3);
 }
 
-.agent-card-edit {
+.agent-card-actions {
     position: absolute;
     top: 8px;
     right: 8px;
+    display: flex;
+    gap: 2px;
+}
+
+.agent-card-edit {
     width: 26px;
     height: 26px;
     border-radius: var(--radius-sm);

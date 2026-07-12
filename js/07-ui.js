@@ -439,9 +439,41 @@ Cuando generes código:
     // ── Galería de Agentes ──
     dom.agentsGalleryBtn?.addEventListener('click', () => {
         renderAgentsGallery();
+        renderAgentCatalog();
         dom.agentsModal.classList.remove('hidden');
     });
     dom.closeAgentsModal?.addEventListener('click', () => dom.agentsModal.classList.add('hidden'));
+
+    // Importar agente desde fichero
+    dom.importAgentBtn?.addEventListener('click', () => dom.importAgentFile.click());
+    dom.importAgentFile?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const { project, warnings } = installAgentDefinition(JSON.parse(ev.target.result), { activate: true });
+                dom.agentsModal.classList.add('hidden');
+                const extra = warnings.length ? `\n\nAvisos:\n· ${warnings.join('\n· ')}` : '';
+                alert(`Agente «${project.name}» importado y activado.${extra}`);
+            } catch (err) {
+                alert('No se pudo importar el agente: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        dom.importAgentFile.value = '';
+    });
+
+    // Instalar desde el catálogo curado
+    document.getElementById('agentCatalog')?.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-catalog-index]');
+        if (!card) return;
+        const def = state._agentCatalog?.[parseInt(card.dataset.catalogIndex, 10)];
+        if (!def) return;
+        const { project } = installAgentDefinition(def, { activate: true });
+        dom.agentsModal.classList.add('hidden');
+        alert(`Agente «${project.name}» instalado desde el catálogo y activado.`);
+    });
 
     dom.newAgentBtn?.addEventListener('click', () => {
         const name = prompt('Nombre del nuevo agente:', 'Mi agente');
@@ -452,6 +484,12 @@ Cuando generes código:
     });
 
     document.getElementById('agentsGrid')?.addEventListener('click', (e) => {
+        const exportBtn = e.target.closest('[data-export-agent]');
+        if (exportBtn) {
+            e.stopPropagation();
+            exportAgentToFile(exportBtn.dataset.exportAgent);
+            return;
+        }
         const editBtn = e.target.closest('[data-edit-agent]');
         if (editBtn) {
             e.stopPropagation();

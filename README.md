@@ -292,6 +292,8 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🤖 **Agentes (tipo GPTs / Gems)**: cada proyecto puede convertirse en un agente con identidad (emoji, nombre, descripción), **motor propio** (proveedor + modelo + temperatura, que se activa automáticamente al elegir el agente), **iniciadores de conversación** personalizados, system prompt y base de conocimiento. Galería «🤖 Mis Agentes» para crear, editar y activar con un clic; la pantalla de bienvenida se adapta al agente activo.
+- 🔗 **Compartir agentes sin backend**: exportar/importar un agente como fichero `.json` (identidad + motor + prompt + iniciadores + documentos; **nunca** chats ni API keys), con validación y saneado en la importación. Incluye un **catálogo curado** (`agents.json`) de agentes de ejemplo instalables con un clic.
 - 🚀 **Inferencia WebGPU en Web Worker**: la descarga, compilación y generación de modelos locales corre ahora en `webgpu-worker.js`, fuera del hilo principal — la interfaz sigue fluida durante la inferencia. Fallback automático al hilo principal si el worker no está disponible (p. ej. `file://`) o su contexto no alcanza WebGPU.
 - 🔧 **Fix crítico de carga WebGPU**: Hugging Face pasó a responder los metadatos con redirecciones relativas (`/api/resolve-cache/...`) que el proxy CORS rompía; los hosts de HF ya no se proxyan (sirven CORS correcto) y el proxy reescribe cabeceras `Location`.
 - 📡 **Streaming WebGPU real**: migrado a `TextStreamer` + `InterruptableStoppingCriteria` de Transformers.js v3 (la API antigua `callback_function` era ignorada): tokens en vivo, métricas T/s y botón detener que corta la generación en ~200 ms.

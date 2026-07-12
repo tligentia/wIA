@@ -674,8 +674,18 @@
                     Actívalo con un clic; edítalo con el lápiz.
                 </p>
                 <div class="agents-grid" id="agentsGrid"></div>
+
+                <div id="agentCatalogSection" style="display:none; margin-top:20px;">
+                    <label class="setting-label" style="display:block; margin-bottom:8px;">✨ Catálogo de wIA</label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 10px;">
+                        Agentes de ejemplo listos para instalar. Se copian a tus agentes; puedes editarlos después.
+                    </p>
+                    <div class="agents-grid" id="agentCatalog"></div>
+                </div>
             </div>
-            <div class="modal-footer" style="justify-content: flex-end;">
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn-secondary" id="importAgentBtn">📥 Importar agente</button>
+                <input type="file" id="importAgentFile" class="hidden" accept=".json,application/json">
                 <button class="btn-primary" id="newAgentBtn">＋ Nuevo Agente</button>
             </div>
         </div>
