@@ -37,15 +37,14 @@ function bindEvents() {
     // Search chats
     dom.searchChats.addEventListener('input', debounce(renderChatList, 250));
 
-    // Welcome cards
-    $$('.welcome-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const prompt = card.dataset.prompt;
-            dom.messageInput.value = prompt;
-            autoResizeTextarea();
-            updateSendButton();
-            dom.messageInput.focus();
-        });
+    // Welcome cards (delegación: los iniciadores se re-renderizan por agente)
+    document.querySelector('.welcome-cards')?.addEventListener('click', (e) => {
+        const card = e.target.closest('.welcome-card');
+        if (!card) return;
+        dom.messageInput.value = card.dataset.prompt || '';
+        autoResizeTextarea();
+        updateSendButton();
+        dom.messageInput.focus();
     });
 
     // Settings Modal
@@ -395,18 +394,7 @@ Cuando generes código:
     });
 
     dom.projectSettingsBtn.addEventListener('click', () => {
-        const proj = getActiveProject();
-        dom.projectName.value = proj.name;
-        dom.projectPrompt.value = proj.systemPrompt || '';
-        if (proj.id === 'general') {
-            dom.projectName.disabled = true;
-            dom.deleteProjectBtn.style.display = 'none';
-        } else {
-            dom.projectName.disabled = false;
-            dom.deleteProjectBtn.style.display = 'block';
-        }
-        renderProjectDocList();
-        dom.projectModal.classList.remove('hidden');
+        openProjectEditor(state.activeProjectId);
     });
 
     [dom.closeProjectModal, dom.closeProjectModal2].forEach(btn => {
@@ -414,18 +402,67 @@ Cuando generes código:
     });
 
     dom.saveProjectBtn.addEventListener('click', () => {
-        const proj = getActiveProject();
+        const proj = getEditingProject();
         if (proj.id !== 'general') proj.name = dom.projectName.value.trim() || proj.name;
         proj.systemPrompt = dom.projectPrompt.value.trim();
+        proj.emoji = dom.projectEmoji.value.trim();
+        proj.description = dom.projectDescription.value.trim();
+        proj.agentProvider = dom.projectProvider.value || '';
+        proj.agentModel = dom.projectModel.value.trim();
+        const temp = parseFloat(dom.projectTemperature.value);
+        proj.agentTemperature = Number.isNaN(temp) ? null : temp;
+        proj.starters = [0, 1, 2, 3].map(i => ({
+            icon: dom.projectStartersEditor.querySelector(`[data-starter-icon="${i}"]`)?.value.trim() || '',
+            title: dom.projectStartersEditor.querySelector(`[data-starter-title="${i}"]`)?.value.trim() || '',
+            prompt: dom.projectStartersEditor.querySelector(`[data-starter-prompt="${i}"]`)?.value.trim() || '',
+        })).filter(s => s.prompt);
+
         saveState();
         renderProjectSelect();
+        renderAgentsGallery();
+        if (proj.id === state.activeProjectId) {
+            applyAgentEngine(proj);
+            renderWelcomeStarters();
+        }
         dom.projectModal.classList.add('hidden');
     });
 
     dom.deleteProjectBtn.addEventListener('click', () => {
-        if (confirm(`¿Estás seguro de que quieres eliminar el proyecto ${getActiveProject().name} y TODOS sus chats contenidos?`)) {
-            deleteProject(state.activeProjectId);
+        const proj = getEditingProject();
+        if (confirm(`¿Estás seguro de que quieres eliminar el agente/proyecto ${proj.name} y TODOS sus chats contenidos?`)) {
+            deleteProject(proj.id);
+            renderAgentsGallery();
             dom.projectModal.classList.add('hidden');
+        }
+    });
+
+    // ── Galería de Agentes ──
+    dom.agentsGalleryBtn?.addEventListener('click', () => {
+        renderAgentsGallery();
+        dom.agentsModal.classList.remove('hidden');
+    });
+    dom.closeAgentsModal?.addEventListener('click', () => dom.agentsModal.classList.add('hidden'));
+
+    dom.newAgentBtn?.addEventListener('click', () => {
+        const name = prompt('Nombre del nuevo agente:', 'Mi agente');
+        if (!name || !name.trim()) return;
+        const proj = createProject(name.trim());
+        renderAgentsGallery();
+        openProjectEditor(proj.id);
+    });
+
+    document.getElementById('agentsGrid')?.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('[data-edit-agent]');
+        if (editBtn) {
+            e.stopPropagation();
+            openProjectEditor(editBtn.dataset.editAgent);
+            return;
+        }
+        const card = e.target.closest('.agent-card');
+        if (card) {
+            switchProject(card.dataset.agentId);
+            renderAgentsGallery();
+            dom.agentsModal.classList.add('hidden');
         }
     });
 

@@ -73,6 +73,7 @@
             <div class="workspace-section">
                 <div class="workspace-switcher">
                     <select id="projectSelect" class="workspace-select" title="Selecciona tu entorno de trabajo. Cada proyecto almacena independientemente sus chats y su propia Base de Conocimiento (RAG ligero)."></select>
+                    <button class="btn-icon workspace-btn" id="agentsGalleryBtn" title="Galería de agentes: crea y elige asistentes con instrucciones, conocimiento y motor propios">🤖</button>
                     <button class="btn-icon workspace-btn" id="projectSettingsBtn" title="Edita el proyecto activo (System Prompt personalizado y documentos persistentes)">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -581,8 +582,38 @@
             </div>
             <div class="modal-body">
                 <div class="setting-group">
-                    <label class="setting-label">Nombre del Workspace</label>
-                    <input type="text" class="setting-input" id="projectName" placeholder="Ej. Tesis de Grado">
+                    <label class="setting-label">Identidad del Agente</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" class="setting-input" id="projectEmoji" placeholder="🤖" maxlength="4"
+                            title="Emoji que identifica al agente" style="width:64px; text-align:center; font-size:1.2rem;">
+                        <input type="text" class="setting-input" id="projectName" placeholder="Ej. Traductor jurídico" style="flex:1;">
+                    </div>
+                    <input type="text" class="setting-input" id="projectDescription"
+                        placeholder="Descripción corta (se muestra en la galería y en la bienvenida)" style="margin-top:8px;">
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Motor del Agente</label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 8px;">
+                        Si lo defines, al activar este agente wIA cambiará automáticamente a este proveedor/modelo.
+                        Déjalo en «Global» para usar la configuración general.
+                    </p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <select class="setting-input" id="projectProvider" style="flex:1; min-width:140px;"></select>
+                        <input type="text" class="setting-input" id="projectModel"
+                            placeholder="ID de modelo (opcional)" style="flex:1.4; min-width:160px;">
+                        <input type="number" class="setting-input" id="projectTemperature" min="0" max="2" step="0.1"
+                            placeholder="Temp." title="Temperatura (opcional)" style="width:80px;">
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Iniciadores de Conversación del Agente</label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 8px;">
+                        Hasta 4 accesos rápidos propios para la pantalla de bienvenida (emoji · título · prompt).
+                        Vacíos = se usan los genéricos.
+                    </p>
+                    <div id="projectStartersEditor" style="display:flex; flex-direction:column; gap:6px;"></div>
                 </div>
 
                 <div class="setting-group">
@@ -621,6 +652,31 @@
                     <button class="btn-secondary" id="closeProjectModal2">Cancelar</button>
                     <button class="btn-primary" id="saveProjectBtn">Guardar Proyecto</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agents Gallery Modal -->
+    <div class="modal-overlay hidden" id="agentsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>🤖 Mis Agentes</h2>
+                <button class="btn-icon" id="closeAgentsModal">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 12px;">
+                    Cada agente combina instrucciones, conocimiento (documentos), motor de IA e iniciadores propios.
+                    Actívalo con un clic; edítalo con el lápiz.
+                </p>
+                <div class="agents-grid" id="agentsGrid"></div>
+            </div>
+            <div class="modal-footer" style="justify-content: flex-end;">
+                <button class="btn-primary" id="newAgentBtn">＋ Nuevo Agente</button>
             </div>
         </div>
     </div>

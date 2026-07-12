@@ -114,6 +114,16 @@ const dom = {
     projectModal: $('#projectModal'),
     projectName: $('#projectName'),
     projectPrompt: $('#projectPrompt'),
+    projectEmoji: $('#projectEmoji'),
+    projectDescription: $('#projectDescription'),
+    projectProvider: $('#projectProvider'),
+    projectModel: $('#projectModel'),
+    projectTemperature: $('#projectTemperature'),
+    projectStartersEditor: $('#projectStartersEditor'),
+    agentsModal: $('#agentsModal'),
+    agentsGalleryBtn: $('#agentsGalleryBtn'),
+    closeAgentsModal: $('#closeAgentsModal'),
+    newAgentBtn: $('#newAgentBtn'),
     attachProjectDocsBtn: $('#attachProjectDocsBtn'),
     projectFileUpload: $('#projectFileUpload'),
     projectDocList: $('#projectDocList'),
@@ -251,6 +261,7 @@ async function init() {
     await loadState();
     loadPromptLibrary();
     renderProjectSelect();
+    renderWelcomeStarters();
     renderChatList();
     bindEvents();
     bindSlashCommandEvents();

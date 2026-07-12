@@ -3750,3 +3750,118 @@ option {
         grid-template-columns: 1fr;
     }
 }
+
+/* ─── Galería de Agentes ─────────────────────── */
+.agents-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+@media (max-width: 480px) {
+    .agents-grid { grid-template-columns: 1fr; }
+}
+
+.agent-card {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: left;
+    position: relative;
+}
+
+.agent-card:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+}
+
+.agent-card.active {
+    border-color: var(--accent-primary);
+    background: rgba(124, 58, 237, 0.08);
+}
+
+.agent-card-emoji {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.agent-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+}
+
+.agent-card-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.agent-card-desc {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.agent-card-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.agent-chip {
+    font-size: 0.62rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.agent-chip.engine {
+    color: var(--accent-secondary);
+    border-color: rgba(124, 58, 237, 0.3);
+}
+
+.agent-card-edit {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.agent-card-edit:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.starter-row {
+    display: flex;
+    gap: 6px;
+}
+
+.starter-row .starter-icon { width: 52px; text-align: center; }
+.starter-row .starter-title { flex: 1; min-width: 90px; }
+.starter-row .starter-prompt { flex: 2; }

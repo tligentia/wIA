@@ -43,7 +43,7 @@ async function persistProjectDocument(proj, documentEntry) {
 }
 
 async function handleProjectFiles(files) {
-    const proj = getActiveProject();
+    const proj = getEditingProject();
     if (!files.length) return;
     
     for (const file of files) {
@@ -72,7 +72,7 @@ async function handleProjectFiles(files) {
 }
 
 function renderProjectDocList() {
-    const proj = getActiveProject();
+    const proj = getEditingProject();
     if (!dom.projectDocList) return;
     dom.projectDocList.innerHTML = proj.documents.map(d => `
         <div class="attachment-item" style="max-width: 100%; justify-content: space-between;">
@@ -83,7 +83,7 @@ function renderProjectDocList() {
 }
 
 window.removeProjectDoc = (id) => {
-    const proj = getActiveProject();
+    const proj = getEditingProject();
     proj.documents = proj.documents.filter(d => d.id !== id);
     saveState();
     renderProjectDocList();
@@ -167,11 +167,47 @@ function renderAttachmentPreview() {
     }).join('');
 }
 
-// ─── Project Management ──────────────────────
+// ─── Project / Agent Management ──────────────
+// Un "Agente" es un Proyecto enriquecido: además de systemPrompt y documentos,
+// puede fijar identidad (emoji, descripción), motor propio (proveedor, modelo,
+// temperatura) e iniciadores de conversación para la pantalla de bienvenida.
+
+const DEFAULT_WELCOME_STARTERS = [
+    { icon: '🚀', title: 'Explorar capacidades', prompt: 'Explícame qué puedes hacer y cuáles son tus capacidades' },
+    { icon: '💻', title: 'Escribir código', prompt: 'Ayúdame a escribir código Python para un web scraper con asyncio' },
+    { icon: '🧠', title: 'Analizar ideas', prompt: 'Ayúdame a analizar los pros y contras de una decisión importante' },
+    { icon: '✍️', title: 'Redacción y traducción', prompt: 'Ayúdame a redactar un texto profesional multiidioma' },
+];
+
 function renderProjectSelect() {
-    dom.projectSelect.innerHTML = state.projects.map(p => 
-        `<option value="${p.id}" ${p.id === state.activeProjectId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
+    dom.projectSelect.innerHTML = state.projects.map(p =>
+        `<option value="${p.id}" ${p.id === state.activeProjectId ? 'selected' : ''}>${escapeHtml(`${p.emoji || ''} ${p.name}`.trim())}</option>`
     ).join('');
+}
+
+/**
+ * applyAgentEngine — si el proyecto/agente define motor propio, cambia la
+ * configuración activa (proveedor, modelo, temperatura) igual que haría el
+ * usuario desde ajustes. Sin motor definido, no toca nada (modo Global).
+ */
+function applyAgentEngine(proj) {
+    if (!proj) return;
+    const wantsProvider = proj.agentProvider && PROVIDERS[proj.agentProvider];
+    if (!wantsProvider && !proj.agentModel && typeof proj.agentTemperature !== 'number') return;
+
+    saveCurrentProviderConfig();
+    if (wantsProvider) {
+        state.settings.provider = proj.agentProvider;
+        syncProviderToState();
+    }
+    if (proj.agentModel) state.settings.model = proj.agentModel;
+    if (typeof proj.agentTemperature === 'number' && !Number.isNaN(proj.agentTemperature)) {
+        state.settings.temperature = proj.agentTemperature;
+    }
+    saveState();
+    applySettingsToUI();
+    updateStatusMeta();
+    checkProviderStatus();
 }
 
 function switchProject(projectId) {
@@ -181,11 +217,134 @@ function switchProject(projectId) {
     saveState();
     renderProjectSelect();
     renderChatList();
+    applyAgentEngine(getActiveProject());
+    renderWelcomeStarters();
     showWelcome();
+}
+
+/**
+ * renderWelcomeStarters — adapta la pantalla de bienvenida al agente activo:
+ * identidad (emoji, nombre, descripción) e iniciadores propios; con un
+ * proyecto "plano" restaura los genéricos de wIA.
+ */
+function renderWelcomeStarters() {
+    const proj = getActiveProject();
+    const container = document.querySelector('.welcome-cards');
+    const titleEl = document.querySelector('.welcome-title');
+    const subtitleEl = document.querySelector('.welcome-subtitle');
+    if (!container) return;
+
+    const agentStarters = (proj?.starters || []).filter(s => s && s.prompt);
+    const isAgent = proj && proj.id !== 'general' && (agentStarters.length > 0 || proj.emoji || proj.description);
+    const starters = agentStarters.length > 0 ? agentStarters.slice(0, 4) : DEFAULT_WELCOME_STARTERS;
+
+    if (titleEl) titleEl.textContent = isAgent ? `${proj.emoji || '🤖'} ${proj.name}` : 'wIA';
+    if (subtitleEl) {
+        subtitleEl.innerHTML = isAgent
+            ? escapeHtml(proj.description || 'Agente personalizado')
+            : 'Tu hub de IA multimotor — <strong>Local y Cloud</strong>';
+    }
+
+    container.innerHTML = starters.map(s => `
+        <button class="welcome-card" data-prompt="${escapeHtml(s.prompt)}">
+            <div class="welcome-card-icon">${escapeHtml(s.icon || '💬')}</div>
+            <div class="welcome-card-text">
+                <strong>${escapeHtml(s.title || s.prompt.slice(0, 40))}</strong>
+                <span>${escapeHtml(s.title ? s.prompt.slice(0, 60) : '')}</span>
+            </div>
+        </button>
+    `).join('');
+}
+
+function getAgentEngineLabel(proj) {
+    if (!proj?.agentProvider && !proj?.agentModel) return 'Motor global';
+    const provName = proj.agentProvider ? (PROVIDERS[proj.agentProvider]?.name || proj.agentProvider) : '';
+    const modelLabel = proj.agentModel ? getCompactModelLabel(proj.agentModel, proj.agentProvider || state.settings.provider) : '';
+    return [provName, modelLabel].filter(Boolean).join(' · ');
+}
+
+function renderAgentsGallery() {
+    const grid = document.getElementById('agentsGrid');
+    if (!grid) return;
+    grid.innerHTML = state.projects.map(p => {
+        const active = p.id === state.activeProjectId;
+        const docsCount = (p.documents || []).length;
+        return `
+            <div class="agent-card ${active ? 'active' : ''}" data-agent-id="${p.id}" role="button" tabindex="0">
+                <div class="agent-card-emoji">${escapeHtml(p.emoji || (p.id === 'general' ? '🏠' : '🤖'))}</div>
+                <div class="agent-card-body">
+                    <div class="agent-card-name">${escapeHtml(p.name)}${active ? ' · <span style="color:var(--accent-secondary)">activo</span>' : ''}</div>
+                    <div class="agent-card-desc">${escapeHtml(p.description || p.systemPrompt || 'Sin descripción')}</div>
+                    <div class="agent-card-meta">
+                        <span class="agent-chip engine">${escapeHtml(getAgentEngineLabel(p))}</span>
+                        ${docsCount > 0 ? `<span class="agent-chip">📄 ${docsCount} doc${docsCount === 1 ? '' : 's'}</span>` : ''}
+                        ${(p.starters || []).filter(s => s?.prompt).length > 0 ? '<span class="agent-chip">⚡ iniciadores</span>' : ''}
+                    </div>
+                </div>
+                <button class="agent-card-edit" data-edit-agent="${p.id}" title="Editar agente">✏️</button>
+            </div>
+        `;
+    }).join('');
 }
 
 function getActiveProject() {
     return state.projects.find(p => p.id === state.activeProjectId) || state.projects[0];
+}
+
+/**
+ * getEditingProject — proyecto abierto en el modal de edición. Puede ser
+ * distinto del activo (la galería permite editar cualquier agente).
+ */
+function getEditingProject() {
+    return state.projects.find(p => p.id === state.editingProjectId) || getActiveProject();
+}
+
+function renderStartersEditor(proj) {
+    if (!dom.projectStartersEditor) return;
+    const starters = proj.starters || [];
+    dom.projectStartersEditor.innerHTML = [0, 1, 2, 3].map(i => {
+        const s = starters[i] || {};
+        return `
+            <div class="starter-row">
+                <input type="text" class="setting-input starter-icon" data-starter-icon="${i}" maxlength="4"
+                    placeholder="💬" value="${escapeHtml(s.icon || '')}">
+                <input type="text" class="setting-input starter-title" data-starter-title="${i}"
+                    placeholder="Título" value="${escapeHtml(s.title || '')}">
+                <input type="text" class="setting-input starter-prompt" data-starter-prompt="${i}"
+                    placeholder="Prompt que se enviará al pulsar" value="${escapeHtml(s.prompt || '')}">
+            </div>
+        `;
+    }).join('');
+}
+
+function openProjectEditor(projectId) {
+    const proj = state.projects.find(p => p.id === projectId);
+    if (!proj) return;
+    state.editingProjectId = projectId;
+
+    dom.projectName.value = proj.name;
+    dom.projectPrompt.value = proj.systemPrompt || '';
+    dom.projectEmoji.value = proj.emoji || '';
+    dom.projectDescription.value = proj.description || '';
+    dom.projectModel.value = proj.agentModel || '';
+    dom.projectTemperature.value = typeof proj.agentTemperature === 'number' ? proj.agentTemperature : '';
+
+    dom.projectProvider.innerHTML = '<option value="">— Global (ajustes generales) —</option>' +
+        Object.entries(PROVIDERS).map(([id, def]) =>
+            `<option value="${id}" ${proj.agentProvider === id ? 'selected' : ''}>${def.icon} ${def.name}</option>`
+        ).join('');
+
+    renderStartersEditor(proj);
+
+    if (proj.id === 'general') {
+        dom.projectName.disabled = true;
+        dom.deleteProjectBtn.style.display = 'none';
+    } else {
+        dom.projectName.disabled = false;
+        dom.deleteProjectBtn.style.display = 'block';
+    }
+    renderProjectDocList();
+    dom.projectModal.classList.remove('hidden');
 }
 
 function createProject(name) {
