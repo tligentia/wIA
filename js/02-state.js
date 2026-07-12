@@ -73,7 +73,10 @@ Cuando generes código:
             claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-20250514', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 16384 },
             openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
             nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            webgpu:        { url: '', model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 4096 },
+            // maxTokens contenido por defecto: los modelos pequeños de navegador
+            // tienden a divagar sin emitir fin-de-secuencia, y 4096 tokens de
+            // bucle parecen un cuelgue de minutos.
+            webgpu:        { url: '', model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 1024 },
         },
     },
 };
@@ -566,6 +569,12 @@ async function loadState() {
         const webgpuCfg = state.settings.providerConfigs?.webgpu;
         if (webgpuCfg && webgpuModelMigrations[webgpuCfg.model]) {
             webgpuCfg.model = webgpuModelMigrations[webgpuCfg.model];
+        }
+        // Migración: el antiguo default de 4096 tokens dejaba a los modelos
+        // pequeños divagando minutos; se rebaja al nuevo default salvo que
+        // el usuario lo haya personalizado a otro valor.
+        if (webgpuCfg && webgpuCfg.maxTokens === 4096) {
+            webgpuCfg.maxTokens = 1024;
         }
         
         // Sync active provider config to top-level state

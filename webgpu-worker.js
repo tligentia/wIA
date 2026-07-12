@@ -185,7 +185,8 @@ async function handleGenerate(msg) {
             skip_prompt: true,
             skip_special_tokens: true,
             callback_function: (text) => {
-                if (text) postMessage({ id, type: 'token', text });
+                // `n` permite a la UI mostrar el número de tokens en vivo
+                if (text) postMessage({ id, type: 'token', text, n: tokenCount });
             },
             token_callback_function: () => { tokenCount++; }
         });
@@ -260,6 +261,7 @@ self.onmessage = async (event) => {
             await handleCaption(msg);
         } else if (msg.type === 'interrupt') {
             workerState.cancelRequested = true;
+            console.warn('[webgpu-worker] interrupt recibido · stopper presente:', !!workerState.stopper);
             workerState.stopper?.interrupt?.();
         } else if (msg.type === 'dispose') {
             if (workerState.pipe && typeof workerState.pipe.dispose === 'function') {

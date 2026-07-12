@@ -17,6 +17,7 @@ const webgpuState = {
     supported: null,          // null = unknown, 'webgpu' | 'wasm' = detected
     fp16Supported: null,      // shader-f16 disponible en el adaptador
     executionMode: null,      // null = sin decidir, 'worker' | 'inline'
+    activeStopper: null,      // StoppingCriteria de la generación inline en curso
     cancelRequested: false,   // Cooperative cancellation during model boot
     cachedModelIds: new Set(),// Set of model IDs currently cached in browser
 };
@@ -384,7 +385,7 @@ const webgpuWorker = {
         if (data.type === 'progress') {
             entry.onProgress?.(data);
         } else if (data.type === 'token') {
-            entry.onToken?.(data.text);
+            entry.onToken?.(data.text, data.n);
         } else if (data.type === 'done') {
             this.pending.delete(data.id);
             entry.resolve(data);
@@ -434,6 +435,9 @@ const webgpuWorker = {
     },
 
     shutdown(markBroken = false) {
+        // Rechazar lo pendiente ANTES de terminar: si no, cualquier await
+        // sobre el worker quedaría colgado para siempre y la UI bloqueada.
+        this._failAll(new DOMException('El worker de inferencia se ha reiniciado.', 'AbortError'));
         try { this.instance?.terminate(); } catch (e) {}
         this.instance = null;
         this.loadedModelId = null;
@@ -601,6 +605,56 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
 }
 
 /**
+ * updateGenerationStatus — pulso de vida en la barra de estado durante la
+ * generación local. Sin esto, una respuesta larga muestra un estado estático
+ * y parece que la app se ha quedado colgada.
+ */
+const _genStatusThrottle = { ts: 0 };
+function updateGenerationStatus(tokenCount, startTime) {
+    const now = performance.now();
+    if (now - _genStatusThrottle.ts < 500) return;
+    _genStatusThrottle.ts = now;
+    const secs = (Date.now() - startTime) / 1000;
+    const tps = secs > 0.5 && tokenCount > 0 ? ` · ${(tokenCount / secs).toFixed(1)} t/s` : '';
+    dom.statusText.textContent = `✍️ Generando… ${tokenCount} tkn${tps}`;
+}
+
+/**
+ * detectRepetitionLoop — detecta si la cola del texto generado es un ciclo
+ * que se repite literalmente (comportamiento degenerado de modelos pequeños
+ * que no emiten fin-de-secuencia). Busca un periodo p tal que los últimos
+ * 3 bloques de longitud p sean idénticos.
+ */
+function detectRepetitionLoop(text) {
+    if (!text || text.length < 400) return false;
+    const tail = text.slice(-390);
+    for (let p = 10; p <= 130; p++) {
+        if (tail.length < p * 3) break;
+        const a = tail.slice(-p);
+        const b = tail.slice(-2 * p, -p);
+        if (a !== b) continue;
+        const c = tail.slice(-3 * p, -2 * p);
+        if (b === c) return true;
+    }
+    return false;
+}
+
+const WEBGPU_LOOP_STOP_NOTE = '\n\n*(Generación detenida automáticamente: el modelo entró en un bucle de repetición.)*';
+
+/**
+ * maybeStopRepetitionLoop — si el stream entra en bucle, interrumpe la
+ * generación en curso (worker o inline) una sola vez y marca el mensaje.
+ */
+function maybeStopRepetitionLoop(assistantMsg, fullText) {
+    if (assistantMsg._loopStopped) return;
+    if (!detectRepetitionLoop(fullText)) return;
+    assistantMsg._loopStopped = true;
+    console.warn('[WebGPU] bucle de repetición detectado; deteniendo la generación');
+    webgpuWorker.interrupt();
+    webgpuState.activeStopper?.interrupt?.();
+}
+
+/**
  * splitWebGPUThinking — separa la cadena de razonamiento de la respuesta en
  * la salida cruda de modelos locales tipo R1/QwQ, que emiten
  * `<think>…</think>` (o `<|think|>…<|/think|>`) antes de responder. Algunas
@@ -659,12 +713,14 @@ async function runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msg
                 top_p: parseFloat(state.settings.topP || 0.9),
             }
         }, {
-            onToken: (text) => {
+            onToken: (text, tokenCount) => {
                 if (!text || state.abortController?.signal?.aborted) return;
                 fullResponse += text;
                 clearMessageLoadingState(assistantMsg);
                 applyWebGPUStreamedText(assistantMsg, fullResponse);
                 updateStreamingMessage(msgIdx, assistantMsg);
+                if (typeof tokenCount === 'number') updateGenerationStatus(tokenCount, startTime);
+                maybeStopRepetitionLoop(assistantMsg, fullResponse);
             }
         });
 
@@ -674,8 +730,10 @@ async function runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msg
         const elapsed = Date.now() - startTime;
 
         const parts = splitWebGPUThinking(fullResponse);
+        let text = parts.content || (parts.thinking ? '*(El modelo solo generó razonamiento)*' : '*(Sin respuesta generada)*');
+        if (assistantMsg._loopStopped) text += WEBGPU_LOOP_STOP_NOTE;
         return {
-            text: parts.content || (parts.thinking ? '*(El modelo solo generó razonamiento)*' : '*(Sin respuesta generada)*'),
+            text,
             thinking: parts.thinking,
             metrics: tokenCount > 0 && elapsed > 0
                 ? {

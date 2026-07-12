@@ -606,6 +606,8 @@ async function runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx
                 clearMessageLoadingState(assistantMsg);
                 applyWebGPUStreamedText(assistantMsg, fullResponse);
                 updateStreamingMessage(msgIdx, assistantMsg);
+                updateGenerationStatus(tokenCount, startTime);
+                maybeStopRepetitionLoop(assistantMsg, fullResponse);
             },
             token_callback_function: () => { tokenCount++; }
         });
@@ -621,16 +623,25 @@ async function runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx
             else signal.addEventListener('abort', () => stopper.interrupt(), { once: true });
         }
         generationOptions.stopping_criteria = stopper;
+        // Referencia para el detector de bucles de repetición
+        webgpuState.activeStopper = stopper;
     }
 
-    const result = await pipe(promptInput, generationOptions);
+    let result;
+    try {
+        result = await pipe(promptInput, generationOptions);
+    } finally {
+        webgpuState.activeStopper = null;
+    }
     const finalText = extractGeneratedText(result);
     if (finalText) fullResponse = finalText;
 
     const elapsed = Date.now() - startTime;
     const parts = splitWebGPUThinking(fullResponse);
+    let text = parts.content || (parts.thinking ? '*(El modelo solo generó razonamiento)*' : '*(Sin respuesta generada)*');
+    if (assistantMsg._loopStopped) text += WEBGPU_LOOP_STOP_NOTE;
     return {
-        text: parts.content || (parts.thinking ? '*(El modelo solo generó razonamiento)*' : '*(Sin respuesta generada)*'),
+        text,
         thinking: parts.thinking,
         metrics: tokenCount > 0 && elapsed > 0
             ? {
@@ -2043,6 +2054,15 @@ function stopStreaming() {
             dom.statusDot.className = 'status-dot loading';
             dom.statusText.textContent = 'Cancelando carga...';
         }
+        // Rescate: si el worker no atiende la interrupción (GPU bloqueada,
+        // proceso muerto), se fuerza su reinicio para liberar la UI. El
+        // siguiente uso lo recrea automáticamente.
+        setTimeout(() => {
+            if (webgpuWorker.pending.size > 0 && state.abortController?.signal?.aborted) {
+                console.warn('[WebGPU] el worker no respondió a la cancelación; reiniciándolo');
+                webgpuWorker.shutdown();
+            }
+        }, 4000);
     }
 }
 
