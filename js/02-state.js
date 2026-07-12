@@ -705,6 +705,46 @@ function getCompactModelLabel(modelId = state.settings.model, providerId = state
     return modelId;
 }
 
+// ─── Indicador IA Local / Cloud ──────────────
+function isPrivateHostname(hostname) {
+    if (!hostname) return false;
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') return true;
+    if (hostname.endsWith('.local') || hostname.endsWith('.lan')) return true;
+    // Rangos RFC1918: motores en el equipo o la red privada del usuario
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname);
+}
+
+/**
+ * getAILocality — clasifica el motor activo como local o cloud según dónde
+ * se ejecuta realmente la inferencia: WebGPU siempre es local (navegador);
+ * el resto se decide por el host de la URL configurada, no por el nombre
+ * del proveedor (un "Ollama Remoto" en 192.168.x.x sigue siendo local).
+ */
+function getAILocality() {
+    const def = getProviderDef(state.settings.provider);
+    if (def.type === 'webgpu') {
+        return { mode: 'local', label: 'IA Local', detail: 'La inferencia se ejecuta en tu navegador (WebGPU). Nada sale de tu equipo.' };
+    }
+    const url = state.settings.ollamaUrl || def.defaultUrl || '';
+    try {
+        const host = new URL(url).hostname;
+        if (isPrivateHostname(host)) {
+            return { mode: 'local', label: 'IA Local', detail: `Motor en tu equipo o red privada (${host}). Tus consultas no salen a internet.` };
+        }
+    } catch (e) { /* URL vacía o inválida → se asume cloud */ }
+    return { mode: 'cloud', label: 'IA Cloud', detail: `Las consultas se envían a un proveedor externo: ${def.name}.` };
+}
+
+function updateAILocalityBadge() {
+    const locality = getAILocality();
+    document.querySelectorAll('.ai-locality-badge').forEach(badge => {
+        badge.textContent = `${locality.mode === 'local' ? '🖥️' : '☁️'} ${locality.label}`;
+        badge.classList.toggle('local', locality.mode === 'local');
+        badge.classList.toggle('cloud', locality.mode === 'cloud');
+        badge.title = locality.detail;
+    });
+}
+
 function updateStatusMeta() {
     const modelStatus = dom.modelStatus || $('#modelStatus');
     const providerLabel = getCompactProviderLabel();
@@ -721,6 +761,8 @@ function updateStatusMeta() {
     }
     if (dom.statusText) dom.statusText.title = statusText;
     if (modelSpan) modelSpan.title = state.settings.model || modelLabel;
+
+    updateAILocalityBadge();
 }
 
 function updateModelContextIndicator() {
@@ -755,11 +797,32 @@ function updateModelContextIndicator() {
     }
 }
 
+// ─── Tema visual (incluye "Sistema") ─────────
+const _systemThemeMedia = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+/**
+ * applyTheme — aplica un tema al documento. El valor 'system' se resuelve
+ * según la preferencia clara/oscura del sistema operativo y se actualiza en
+ * vivo si el usuario cambia el modo del SO con la app abierta.
+ */
+function resolveThemeValue(themeSetting) {
+    if (themeSetting !== 'system') return themeSetting || 'dark';
+    return _systemThemeMedia?.matches ? 'light' : 'dark';
+}
+
+function applyTheme(themeSetting) {
+    document.documentElement.setAttribute('data-theme', resolveThemeValue(themeSetting));
+}
+
+_systemThemeMedia?.addEventListener?.('change', () => {
+    if ((state.settings.theme || 'dark') === 'system') applyTheme('system');
+});
+
 function applySettingsToUI() {
     if (dom.providerSelect) dom.providerSelect.value = state.settings.provider || 'ollama';
     dom.ollamaUrl.value = state.settings.ollamaUrl;
     if (dom.themeSelect) dom.themeSelect.value = state.settings.theme || 'dark';
-    document.documentElement.setAttribute('data-theme', state.settings.theme || 'dark');
+    applyTheme(state.settings.theme || 'dark');
     dom.modelSelect.value = state.settings.model;
     dom.temperature.value = state.settings.temperature;
     dom.tempValue.textContent = state.settings.temperature;

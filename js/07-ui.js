@@ -146,7 +146,7 @@ function bindEvents() {
 
     if (dom.themeSelect) {
         dom.themeSelect.addEventListener('change', () => {
-            document.documentElement.setAttribute('data-theme', dom.themeSelect.value);
+            applyTheme(dom.themeSelect.value);
         });
     }
 
