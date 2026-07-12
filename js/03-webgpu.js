@@ -600,6 +600,39 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
     }
 }
 
+/**
+ * splitWebGPUThinking — separa la cadena de razonamiento de la respuesta en
+ * la salida cruda de modelos locales tipo R1/QwQ, que emiten
+ * `<think>…</think>` (o `<|think|>…<|/think|>`) antes de responder. Algunas
+ * variantes arrancan ya "pensando" y solo emiten la etiqueta de cierre.
+ */
+function splitWebGPUThinking(rawText) {
+    if (!rawText) return { thinking: '', content: '' };
+    const closeMatch = rawText.match(/<\/\|?think\|?>/i);
+    if (closeMatch) {
+        const thinking = rawText.slice(0, closeMatch.index).replace(/^\s*<\|?think\|?>/i, '');
+        const content = rawText.slice(closeMatch.index + closeMatch[0].length);
+        return { thinking: thinking.trim(), content: content.replace(/^\s+/, '') };
+    }
+    const openMatch = rawText.match(/^\s*<\|?think\|?>/i);
+    if (openMatch) {
+        // Aún dentro del razonamiento (no ha llegado el cierre)
+        return { thinking: rawText.slice(openMatch[0].length).trim(), content: '' };
+    }
+    return { thinking: '', content: rawText };
+}
+
+/**
+ * applyWebGPUStreamedText — vuelca el texto acumulado del stream en el
+ * mensaje, separando razonamiento y respuesta.
+ */
+function applyWebGPUStreamedText(assistantMsg, rawText) {
+    const parts = splitWebGPUThinking(rawText);
+    assistantMsg.thinking = parts.thinking;
+    assistantMsg.content = parts.content;
+    return parts;
+}
+
 async function runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msgIdx) {
     const startTime = Date.now();
     let fullResponse = '';
@@ -630,7 +663,7 @@ async function runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msg
                 if (!text || state.abortController?.signal?.aborted) return;
                 fullResponse += text;
                 clearMessageLoadingState(assistantMsg);
-                assistantMsg.content = fullResponse;
+                applyWebGPUStreamedText(assistantMsg, fullResponse);
                 updateStreamingMessage(msgIdx, assistantMsg);
             }
         });
@@ -640,8 +673,10 @@ async function runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msg
         const tokenCount = done.tokenCount || 0;
         const elapsed = Date.now() - startTime;
 
+        const parts = splitWebGPUThinking(fullResponse);
         return {
-            text: fullResponse || '*(Sin respuesta generada)*',
+            text: parts.content || (parts.thinking ? '*(El modelo solo generó razonamiento)*' : '*(Sin respuesta generada)*'),
+            thinking: parts.thinking,
             metrics: tokenCount > 0 && elapsed > 0
                 ? {
                     eval_count: tokenCount,

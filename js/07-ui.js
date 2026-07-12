@@ -495,9 +495,18 @@ Cuando generes código:
     dom.messagesScroll.addEventListener('click', (e) => {
         const header = e.target.closest('.thinking-header');
         if (header) {
-            header.classList.toggle('open');
+            const nowOpen = !header.classList.contains('open');
+            header.classList.toggle('open', nowOpen);
             const content = header.nextElementSibling;
-            if (content) content.classList.toggle('open');
+            if (content) content.classList.toggle('open', nowOpen);
+            // Registrar la preferencia en el mensaje: los repintados del
+            // streaming la respetan y se persiste con el chat.
+            const idx = parseInt(header.dataset.idx, 10);
+            const chat = getActiveChat();
+            if (chat && Number.isInteger(idx) && chat.messages[idx]) {
+                chat.messages[idx].thinkingOpen = nowOpen;
+                saveState();
+            }
         }
     });
 

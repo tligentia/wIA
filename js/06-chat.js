@@ -6,6 +6,42 @@
    ============================================ */
 
 // ─── Render Messages ────────────────────────
+
+/**
+ * isThinkingBlockOpen — estado del desplegable de razonamiento de un mensaje.
+ * El clic del usuario (msg.thinkingOpen) manda siempre; sin preferencia,
+ * se muestra abierto solo mientras el modelo razona en vivo (aún sin
+ * respuesta) y se colapsa automáticamente en cuanto empieza la respuesta.
+ */
+function isThinkingBlockOpen(msg) {
+    if (typeof msg.thinkingOpen === 'boolean') return msg.thinkingOpen;
+    return state.isStreaming && !msg.content;
+}
+
+/**
+ * renderThinkingBlockHtml — bloque colapsable de razonamiento, compartido por
+ * el render estático y el de streaming para que el estado no se pierda entre
+ * repintados.
+ */
+function renderThinkingBlockHtml(msg, idx) {
+    if (!msg.thinking || !state.settings.thinkingMode) return '';
+    const open = isThinkingBlockOpen(msg) ? ' open' : '';
+    const live = state.isStreaming && !msg.content;
+    const icon = live
+        ? '<div class="thinking-spinner"></div>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>';
+    const label = live ? 'Razonando…' : 'Razonamiento';
+    return `
+        <div class="thinking-block">
+            <div class="thinking-header${open}" data-idx="${idx}">
+                ${icon}
+                ${label}
+            </div>
+            <div class="thinking-content${open}" data-idx="${idx}">${renderMarkdown(msg.thinking)}</div>
+        </div>
+    `;
+}
+
 function renderMessages() {
     const chat = getActiveChat();
     if (!chat) return;
@@ -28,20 +64,7 @@ function renderMessage(msg, idx) {
 
     let contentHtml = '';
 
-    if (msg.thinking && state.settings.thinkingMode) {
-        const thinkingRendered = renderMarkdown(msg.thinking);
-        contentHtml += `
-            <div class="thinking-block">
-                <div class="thinking-header" data-idx="${idx}">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                        <path d="m9 18 6-6-6-6"/>
-                    </svg>
-                    Razonamiento
-                </div>
-                <div class="thinking-content" data-idx="${idx}">${thinkingRendered}</div>
-            </div>
-        `;
-    }
+    contentHtml += renderThinkingBlockHtml(msg, idx);
 
     if (msg.loading?.active) {
         contentHtml += renderLoadingState(msg.loading);
@@ -581,7 +604,7 @@ async function runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx
                 if (!textChunk) return;
                 fullResponse += textChunk;
                 clearMessageLoadingState(assistantMsg);
-                assistantMsg.content = fullResponse;
+                applyWebGPUStreamedText(assistantMsg, fullResponse);
                 updateStreamingMessage(msgIdx, assistantMsg);
             },
             token_callback_function: () => { tokenCount++; }
@@ -605,8 +628,10 @@ async function runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx
     if (finalText) fullResponse = finalText;
 
     const elapsed = Date.now() - startTime;
+    const parts = splitWebGPUThinking(fullResponse);
     return {
-        text: fullResponse || '*(Sin respuesta generada)*',
+        text: parts.content || (parts.thinking ? '*(El modelo solo generó razonamiento)*' : '*(Sin respuesta generada)*'),
+        thinking: parts.thinking,
         metrics: tokenCount > 0 && elapsed > 0
             ? {
                 eval_count: tokenCount,
@@ -1293,6 +1318,9 @@ async function sendMessage(content, autoSendBody = null) {
             }
 
             assistantMsg.content = generationOutcome?.text || '*(Sin respuesta generada)*';
+            if (generationOutcome?.thinking) {
+                assistantMsg.thinking = generationOutcome.thinking;
+            }
             clearMessageLoadingState(assistantMsg);
             if (generationOutcome?.metrics) {
                 assistantMsg.metrics = generationOutcome.metrics;
@@ -1978,17 +2006,7 @@ function updateStreamingMessage(idx, msg) {
         }
         let html = '';
 
-        if (msg.thinking && state.settings.thinkingMode) {
-            html += `
-                <div class="thinking-block">
-                    <div class="thinking-header open">
-                        ${state.isStreaming && !msg.content ? '<div class="thinking-spinner"></div>' : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>`}
-                        Razonamiento
-                    </div>
-                    <div class="thinking-content open">${renderMarkdown(msg.thinking)}</div>
-                </div>
-            `;
-        }
+        html += renderThinkingBlockHtml(msg, idx);
 
         if (msg.loading?.active) {
             html += renderLoadingState(msg.loading);
