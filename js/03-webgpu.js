@@ -20,7 +20,140 @@ const webgpuState = {
     activeStopper: null,      // StoppingCriteria de la generación inline en curso
     cancelRequested: false,   // Cooperative cancellation during model boot
     cachedModelIds: new Set(),// Set of model IDs currently cached in browser
+    adapterInfo: null,        // { vendor, architecture, description } del adaptador
+    adapterLimits: null,      // límites relevantes del adaptador (bytes)
 };
+
+// ─── Monitor de estado / memoria WebGPU ──────
+async function getWebGPUAdapterDetails() {
+    if (webgpuState.adapterInfo !== null) {
+        return { info: webgpuState.adapterInfo, limits: webgpuState.adapterLimits };
+    }
+    let info = {}, limits = {};
+    try {
+        if (navigator.gpu) {
+            const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
+                || await navigator.gpu.requestAdapter();
+            if (adapter) {
+                info = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : {}) || {};
+                limits = {
+                    maxBufferSize: adapter.limits?.maxBufferSize || 0,
+                    maxStorageBufferBindingSize: adapter.limits?.maxStorageBufferBindingSize || 0,
+                };
+            }
+        }
+    } catch (e) { /* sin detalles del adaptador */ }
+    webgpuState.adapterInfo = info;
+    webgpuState.adapterLimits = limits;
+    return { info, limits };
+}
+
+/**
+ * releaseWebGPUMemory — descarga de memoria el pipeline y el worker de
+ * inferencia (dispose + terminate) SIN borrar la caché de disco del navegador.
+ * Libera VRAM/RAM sin obligar a redescargar el modelo la próxima vez.
+ */
+async function releaseWebGPUMemory() {
+    if (state.isStreaming) { stopStreaming(); await new Promise(r => setTimeout(r, 300)); }
+    try {
+        if (webgpuState.pipeline && typeof webgpuState.pipeline.dispose === 'function') {
+            await webgpuState.pipeline.dispose();
+        }
+    } catch (e) { console.warn('[WebGPU] error liberando pipeline inline:', e); }
+    try { webgpuWorker.dispose(); webgpuWorker.shutdown(); } catch (e) {}
+    webgpuState.pipeline = null;
+    webgpuState.loadedModelId = null;
+    webgpuState.loadedTask = null;
+    webgpuState.imageAssistPipeline = null;
+    webgpuState.imageAssistModelId = null;
+    webgpuState.isLoading = false;
+    webgpuState.executionMode = null;
+    dom.statusText.textContent = '🧹 Memoria liberada';
+    if (state.rawModels) populateModels(state.rawModels);
+    updateStatusMeta();
+    renderWebGPUMonitor();
+}
+window.releaseWebGPUMemory = releaseWebGPUMemory;
+
+function _fmtBytes(mb) {
+    if (!mb || mb <= 0) return '—';
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+}
+
+let _webgpuMonitorTimer = null;
+
+async function renderWebGPUMonitor() {
+    const grid = document.getElementById('webgpuMonitorGrid');
+    if (!grid) return;
+    const panel = document.getElementById('webgpuInfoPanel');
+    // Si el panel no está visible, detener el refresco en vivo
+    if (!panel || panel.style.display === 'none') {
+        clearInterval(_webgpuMonitorTimer); _webgpuMonitorTimer = null;
+        return;
+    }
+
+    const support = await checkWebGPUSupport();
+    const { info, limits } = await getWebGPUAdapterDetails();
+
+    const loadedId = webgpuState.loadedModelId || webgpuWorker.loadedModelId;
+    const loadedDef = loadedId ? WEBGPU_MODELS.find(m => m.id === loadedId) : null;
+    const modelMB = loadedDef?.sizeBytes || 0;
+
+    // Estado (stress) según la actividad real del runtime
+    let stress = 'Inactivo', stressCls = 'idle';
+    if (webgpuState.isLoading) { stress = 'Cargando modelo'; stressCls = 'busy'; }
+    else if (state.isStreaming) { stress = 'Generando'; stressCls = 'busy'; }
+    else if (webgpuWorker.pending && webgpuWorker.pending.size > 0) { stress = 'En cola'; stressCls = 'busy'; }
+    else if (loadedId) { stress = 'Listo (modelo en memoria)'; stressCls = 'ready'; }
+
+    // Heap JS (real, solo Chromium)
+    const heap = performance?.memory
+        ? `${(performance.memory.usedJSHeapSize / 1073741824).toFixed(2)} / ${(performance.memory.jsHeapSizeLimit / 1073741824).toFixed(1)} GB`
+        : 'No disponible';
+
+    const deviceLabel = support === 'webgpu'
+        ? `🟢 WebGPU activo${webgpuState.fp16Supported ? ' · f16' : ''}`
+        : '🟠 WASM (CPU, sin GPU)';
+    const adapterLabel = [info.vendor, info.architecture].filter(Boolean).join(' · ') || info.description || (support === 'webgpu' ? 'GPU detectada' : '—');
+    const modeLabel = webgpuState.executionMode === 'worker' ? 'Web Worker' : webgpuState.executionMode === 'inline' ? 'Hilo principal' : '—';
+
+    grid.innerHTML = [
+        ['Aceleración', deviceLabel],
+        ['Adaptador', adapterLabel],
+        ['Estado', `<span class="webgpu-stress ${stressCls}">${stress}</span>`],
+        ['Ejecución', modeLabel],
+        ['Modelo en memoria', loadedId ? `${loadedDef?.label || loadedId} (${loadedDef?.size || _fmtBytes(modelMB)})` : 'Ninguno'],
+        ['Modelos en caché', `${webgpuState.cachedModelIds?.size || 0}`],
+        ['Buffer máx. GPU', _fmtBytes((limits.maxBufferSize || 0) / 1048576)],
+        ['Heap JS del navegador', heap],
+    ].map(([k, v]) => `<div class="webgpu-monitor-cell"><span class="wm-k">${k}</span><span class="wm-v">${v}</span></div>`).join('');
+
+    // Barra de ocupación estimada: tamaño del modelo cargado respecto a un
+    // presupuesto (RAM del dispositivo si se conoce; si no, 8 GB de referencia).
+    const budgetMB = (navigator.deviceMemory ? navigator.deviceMemory * 1024 : 8192);
+    const pct = modelMB > 0 ? Math.min(100, Math.round((modelMB / budgetMB) * 100)) : 0;
+    const fill = document.getElementById('webgpuGaugeFill');
+    const pctEl = document.getElementById('webgpuGaugePct');
+    const noteEl = document.getElementById('webgpuGaugeNote');
+    if (fill) {
+        fill.style.width = `${pct}%`;
+        fill.className = 'webgpu-gauge-fill ' + (pct >= 80 ? 'high' : pct >= 45 ? 'mid' : 'low');
+    }
+    if (pctEl) pctEl.textContent = `${pct}%`;
+    if (noteEl) noteEl.textContent = loadedId
+        ? `≈ ${_fmtBytes(modelMB)} del presupuesto de ${_fmtBytes(budgetMB)}. Estimación por tamaño del modelo; el navegador no expone el uso real de VRAM.`
+        : 'Sin modelo cargado. La ocupación se calcula al cargar uno.';
+}
+
+/**
+ * startWebGPUMonitor — pinta el monitor y lo refresca en vivo cada 2 s
+ * mientras el panel de ajustes WebGPU está a la vista.
+ */
+function startWebGPUMonitor() {
+    renderWebGPUMonitor();
+    clearInterval(_webgpuMonitorTimer);
+    _webgpuMonitorTimer = setInterval(renderWebGPUMonitor, 2000);
+}
 
 async function getCachedWebGPUModels() {
     const cachedModels = new Set();

@@ -324,7 +324,6 @@
                         </div>
                     </div>
                 </div>
-                <p class="input-disclaimer" id="inputDisclaimer">Tus modelos ejecutándose localmente vía Ollama · Privacidad total</p>
             </div>
 
             <!-- Site Footer -->
@@ -411,8 +410,8 @@
                     <label class="setting-label" title="Renderiza todo el DOM aplicando tokens de paleta de colores diferentes">Tema Visual</label>
                     <select class="setting-input" id="themeSelect">
                         <option value="system">Sistema (Automático) 🖥️</option>
-                        <option value="dark" selected>Oscuro (Premium) 🌙</option>
-                        <option value="light">Claro (Premium) ☀️</option>
+                        <option value="dark">Oscuro (Premium) 🌙</option>
+                        <option value="light" selected>Claro (Premium) ☀️</option>
                         <option value="vanilla">Vanilla (Minimalista) 🍦</option>
                     </select>
                 </div>
@@ -437,6 +436,23 @@
                                 <a href="https://huggingface.co/models?library=transformers.js&sort=downloads" target="_blank" class="webgpu-link">🔍 Ver modelos Transformers.js</a>
                                 <a href="https://huggingface.co/models?library=transformers.js&search=vision" target="_blank" class="webgpu-link">👁 Explorar modelos con visión</a>
                                 <a href="https://webgpureport.org/" target="_blank" class="webgpu-link">📊 Comprobar soporte WebGPU</a>
+                            </div>
+                        </div>
+
+                        <!-- Monitor de estado y memoria WebGPU -->
+                        <div class="webgpu-monitor" id="webgpuMonitor">
+                            <div class="webgpu-monitor-head">
+                                <span class="webgpu-monitor-title">📊 Estado de WebGPU</span>
+                                <button type="button" class="btn-secondary webgpu-release-btn" id="webgpuReleaseBtn" title="Descarga de la memoria el modelo cargado (no borra la caché del navegador)">🧹 Liberar memoria</button>
+                            </div>
+                            <div class="webgpu-monitor-grid" id="webgpuMonitorGrid"></div>
+                            <div class="webgpu-gauge-wrap">
+                                <div class="webgpu-gauge-label">
+                                    <span id="webgpuGaugeText">Ocupación estimada</span>
+                                    <span id="webgpuGaugePct">0%</span>
+                                </div>
+                                <div class="webgpu-gauge-track"><div class="webgpu-gauge-fill" id="webgpuGaugeFill"></div></div>
+                                <div class="webgpu-gauge-note" id="webgpuGaugeNote"></div>
                             </div>
                         </div>
                     </div>

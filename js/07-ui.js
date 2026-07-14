@@ -200,6 +200,12 @@ function bindEvents() {
         dom.webgpuAddModelBtn?.click();
     });
 
+    document.getElementById('webgpuReleaseBtn')?.addEventListener('click', () => {
+        const loaded = webgpuState.loadedModelId || webgpuWorker.loadedModelId;
+        if (!loaded && !webgpuState.isLoading) { alert('No hay ningún modelo cargado en memoria ahora mismo.'); return; }
+        releaseWebGPUMemory();
+    });
+
     $('#saveSettings').addEventListener('click', async () => {
         state.settings.ollamaUrl = dom.ollamaUrl.value.replace(/\/+$/, '');
         if (dom.themeSelect) state.settings.theme = dom.themeSelect.value;
@@ -242,7 +248,7 @@ function bindEvents() {
         state.settings.ollamaUrl = PROVIDERS[defaultProvider].defaultUrl;
         state.settings.model = PROVIDERS[defaultProvider].defaultModel;
         state.settings.apiKey = '';
-        state.settings.theme = 'dark';
+        state.settings.theme = 'light';
         state.settings.temperature = 0.7;
         state.settings.systemPrompt = `# System Prompt: Asistente IA Experto
 

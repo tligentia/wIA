@@ -24,7 +24,7 @@ const state = {
         ollamaUrl: 'http://localhost:11434',
         model: 'gemma4:e4b',
         apiKey: '',
-        theme: 'dark',
+        theme: 'light',
         temperature: 0.7,
         topP: 0.9,
         topK: 40,
@@ -405,6 +405,8 @@ function updateProviderUI() {
     const webgpuInfo = document.getElementById('webgpuInfoPanel');
     if (webgpuInfo) webgpuInfo.style.display = isWebGPU ? 'block' : 'none';
     if (dom.webgpuManualAdd) dom.webgpuManualAdd.style.display = isWebGPU ? 'flex' : 'none';
+    if (isWebGPU && typeof startWebGPUMonitor === 'function') startWebGPUMonitor();
+    else if (typeof _webgpuMonitorTimer !== 'undefined' && _webgpuMonitorTimer) { clearInterval(_webgpuMonitorTimer); _webgpuMonitorTimer = null; }
 
     // URL Placeholder and behavior
     if (dom.ollamaUrl) {

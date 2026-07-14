@@ -292,6 +292,10 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 📊 **Monitor de WebGPU en vivo**: nuevo panel en Configuración que muestra aceleración (WebGPU/WASM + f16), adaptador real (vendor/arquitectura), estado de carga (Inactivo / Cargando / Generando / Listo), modo de ejecución (Worker o hilo principal), modelo en memoria, modelos en caché, buffer máximo de GPU y heap JS, con una barra de **ocupación estimada**. Se refresca cada 2 s.
+- 🧹 **Botón «Liberar memoria»**: descarga de RAM/VRAM el modelo y el worker de inferencia sin borrar la caché del navegador — el modelo se recarga al instante en el siguiente uso, sin redescargar.
+- ☀️ **Tema Claro por defecto** en instalaciones nuevas (Oscuro, Vanilla y Sistema siguen disponibles).
+- 🧼 **Interfaz más limpia**: se retiró el mensaje bajo la caja de prompt (`Modelo … · Privacidad total`); el estado del motor sigue visible en la insignia IA Local/Cloud y en la barra lateral.
 - 🧪 **Catálogo WebGPU verificado uno a uno**: se probó la carga e inferencia real de cada modelo en el navegador (Transformers.js 3.8.1). Los que funcionan llevan sello **✅ Probado**; se retiraron los que fallaban (Qwen2-VL y Phi-3.5-Vision por pipeline no soportado, Apertus-8B por arquitectura desconocida, Qwen2.5-1.5B/Math por "Aborted"). Nuevos verificados añadidos: **SmolLM2 135M, Qwen 3 0.6B, Granite 4.0 350M**.
 - ⭐ **Favoritos de modelos**: marca cualquier modelo con la estrella; aparece en una sección propia arriba del selector y se puede filtrar por «⭐ Favoritos». Persistente por proveedor.
 - 🎛️ **Panel de modelos rediseñado**: tarjetas más claras con estado (Probado / Cargado / En caché / Sin verificar), chips de tamaño, y filtros rápidos «⭐ Favoritos» y «✅ Probados» junto a los de capacidad.

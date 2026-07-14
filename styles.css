@@ -3946,3 +3946,62 @@ option {
 .filter-pill-star.active { background: rgba(245,179,1,0.18); color: #f5b301; border-color: rgba(245,179,1,0.4); }
 .filter-pill-verified.active { background: rgba(34,197,94,0.15); color: var(--success); border-color: rgba(34,197,94,0.35); }
 .filter-pill-clear { color: var(--danger); }
+
+/* ─── Monitor de estado / memoria WebGPU ────────── */
+.webgpu-monitor {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+}
+.webgpu-monitor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.webgpu-monitor-title { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+.webgpu-release-btn { font-size: 0.72rem; padding: 5px 10px; white-space: nowrap; }
+
+.webgpu-monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 14px;
+    margin-bottom: 12px;
+}
+@media (max-width: 480px) { .webgpu-monitor-grid { grid-template-columns: 1fr; } }
+.webgpu-monitor-cell {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.72rem;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.webgpu-monitor-cell .wm-k { color: var(--text-tertiary); }
+.webgpu-monitor-cell .wm-v { color: var(--text-primary); font-weight: 500; text-align: right; }
+
+.webgpu-stress { font-weight: 600; padding: 1px 8px; border-radius: 999px; font-size: 0.68rem; }
+.webgpu-stress.idle  { color: var(--text-tertiary); background: var(--bg-tertiary); }
+.webgpu-stress.ready { color: var(--success); background: rgba(34,197,94,0.12); }
+.webgpu-stress.busy  { color: var(--warning); background: rgba(245,158,11,0.14); }
+
+.webgpu-gauge-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 4px;
+}
+.webgpu-gauge-track {
+    height: 8px; border-radius: 999px; overflow: hidden;
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+}
+.webgpu-gauge-fill {
+    height: 100%; width: 0%;
+    border-radius: 999px;
+    transition: width 0.4s ease, background 0.3s ease;
+}
+.webgpu-gauge-fill.low  { background: var(--success); }
+.webgpu-gauge-fill.mid  { background: var(--warning); }
+.webgpu-gauge-fill.high { background: var(--danger); }
+.webgpu-gauge-note { font-size: 0.66rem; color: var(--text-tertiary); margin-top: 5px; line-height: 1.4; }
