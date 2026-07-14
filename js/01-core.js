@@ -277,6 +277,34 @@ const WEBGPU_MODELS = [
         desc: 'Última generación Qwen 3 en formato mínimo. Buen razonamiento para su tamaño.',
         repoUrl: 'https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX'
     },
+    // Sin censura (abliterated): requieren dtype q4 — con q4f16 el runtime
+    // falla al crear la sesión ("Type (tensor(float16))").
+    {
+        id: 'onnx-community/Qwen2.5-0.5B-Instruct-abliterated-v3-ONNX',
+        label: 'Qwen 2.5 0.5B Abliterated v3',
+        size: '~500 MB',
+        sizeBytes: 500,
+        tier: 'quick',
+        dtype: 'q4',
+        context: 32768,
+        capabilities: ['fast', 'multilingual', 'uncensored'],
+        verified: true,
+        desc: 'Qwen 2.5 sin alineamiento (abliterated v3): responde sin los rechazos habituales. Úsalo con criterio.',
+        repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct-abliterated-v3-ONNX'
+    },
+    {
+        id: 'onnx-community/Qwen2.5-0.5B-Instruct-abliterated-ONNX',
+        label: 'Qwen 2.5 0.5B Abliterated',
+        size: '~500 MB',
+        sizeBytes: 500,
+        tier: 'quick',
+        dtype: 'q4',
+        context: 32768,
+        capabilities: ['fast', 'multilingual', 'uncensored'],
+        desc: 'Primera versión abliterated de Qwen 2.5 0.5B, sin filtros de rechazo. Úsalo con criterio.',
+        verified: true,
+        repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct-abliterated-ONNX'
+    },
     {
         id: 'onnx-community/Llama-3.2-1B-Instruct-ONNX',
         label: 'Llama 3.2 1B',
@@ -435,6 +463,17 @@ const WEBGPU_MODELS = [
         desc: 'OCR especializado en texto escrito a mano (notas, formularios rellenados).',
         repoUrl: 'https://huggingface.co/Xenova/trocr-small-handwritten'
     }
+    // Búsqueda ampliada de 2026-07-15 (Transformers.js 3.8.1). Probados y NO añadidos:
+    // · Qwen3-0.6B-heretic-abliterated-uncensored-ONNX, gemma-3-270m-ONNX,
+    //   distil-qwen3-0.6b-text2sql-ONNX y Carbon-500M-ONNX → cargan con q4
+    //   pero su tokenizer no trae chat template (son modelos base, no chat).
+    // · Qwen2.5-1.5B-abliterated-ONNX y Qwen3-0.6b-heretic-ONNX → faltan
+    //   ficheros en el repo ("Could not locate file").
+    // · Apertus v1.1 (0.5B / 1.5B) → "Unsupported model type: apertus", igual
+    //   que el 8B: la arquitectura no existe en Transformers.js.
+    // · Dolphin3.0-Qwen2.5-1.5B-ONNX y Huihui-Qwen3.5-abliterated → sin ONNX
+    //   q4/q4f16 publicado.
+    //
     // Probados el 2026-07-14 (Transformers.js 3.8.1) y NO añadidos:
     // · Chat VLM (image-text-to-text): no existe el pipeline ni en 3.8.1 ni en
     //   4.2.0 → Qwen2-VL-2B y Phi-3.5-vision siguen fuera.

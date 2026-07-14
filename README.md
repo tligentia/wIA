@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2606.AF)
+# wIA — Multi-Engine AI Chat Interface (v2607.AA)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,8 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🔓 **Modelos sin censura verificados (v2607.AA)**: tras rastrear los repositorios ONNX (búsquedas de `abliterated`, `uncensored`, `dolphin`, `unfiltered`) y probar 15 candidatos uno a uno, se añaden los **2 que realmente funcionan**: **Qwen 2.5 0.5B Abliterated v3** y **Qwen 2.5 0.5B Abliterated**. Requieren cuantización `q4` (con `q4f16` el runtime falla al crear la sesión), ya configurada en el catálogo.
+  > La mayoría de candidatos se descartaron con motivo: sin *chat template* (Qwen3-heretic, gemma-3-270m, text2sql, Carbon-500M), con ficheros ausentes en el repo, o con arquitectura no soportada (Apertus v1.1, igual que el 8B).
 - 🗑️ **Borrar modelos añadidos manualmente**: los modelos que pegas por URL/repo de Hugging Face ahora tienen un botón para quitarlos del catálogo. Además de retirarlos, borra sus archivos de la caché del navegador, los saca de favoritos y devuelve la selección a un modelo verificado si estaba activo.
 - 🔓 **Etiqueta «Sin censura»**: nueva etiqueta y filtro para modelos sin alineamiento, detectada automáticamente por las marcas habituales del repositorio (`uncensored`, `abliterated`, `dolphin`, `unfiltered`, `nsfw`…), en WebGPU y en el resto de proveedores.
 - 👁 **Categoría Visión en WebGPU (verificada)**: nueva categoría **👁 Visión** en el catálogo y filtro propio, con 4 asistentes de imagen probados uno a uno: **ViT-GPT2 Captioning**, **DistilViT Captioning** (descripción de imágenes) y **TrOCR Texto impreso / Manuscrito** (OCR). Al elegir uno se fija como asistente visual —describe las imágenes que adjuntes y pasa el texto como contexto del chat— sin tocar tu modelo de conversación.
