@@ -14,6 +14,8 @@ const state = {
     attachments: [],
     capabilities: [],
     modelFeatureFilters: [],
+    modelShowFavoritesOnly: false,
+    modelShowVerifiedOnly: false,
     projects: [],
     incognitoSessionActive: false,
     activeProjectId: 'general',
@@ -27,6 +29,7 @@ const state = {
         topP: 0.9,
         topK: 40,
         maxTokens: 8192,
+        favoriteModels: [],   // IDs de modelos marcados como favoritos por el usuario
         systemPrompt: `# System Prompt: Asistente IA Experto
 
 ## Rol y Personalidad
@@ -575,6 +578,13 @@ async function loadState() {
             // Repos que pasaron a gated (401 sin login): se degradan al R1 1.5B público
             'onnx-community/DeepSeek-R1-Distill-Qwen-7B-ONNX': 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX',
             'onnx-community/DeepSeek-R1-Distill-Llama-8B-ONNX': 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX',
+            // Retirados tras probarlos (fallan en Transformers.js 3.8.1): se
+            // reubican a un modelo verificado equivalente en tamaño/uso.
+            'onnx-community/Qwen2.5-1.5B-Instruct': 'onnx-community/Qwen2.5-Coder-1.5B-Instruct',
+            'onnx-community/Qwen2.5-Math-1.5B-Instruct': 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX',
+            'onnx-community/Apertus-8B-Instruct-2509-ONNX': 'onnx-community/Llama-3.2-3B-Instruct-ONNX',
+            'onnx-community/Qwen2-VL-2B-Instruct': 'onnx-community/Llama-3.2-3B-Instruct-ONNX',
+            'onnx-community/Phi-3.5-vision-instruct': 'onnx-community/Llama-3.2-3B-Instruct-ONNX',
         };
         if (webgpuModelMigrations[state.settings.model]) {
             state.settings.model = webgpuModelMigrations[state.settings.model];

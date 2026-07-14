@@ -186,9 +186,24 @@ const MODEL_FUNCTION_DEFS = {
 const MODEL_FILTER_ORDER = ['vision', 'thinking', 'coding', 'tools', 'multilingual', 'fast', 'large', 'free', 'experimental'];
 
 // ─── WebGPU Curated Model Catalog ───────────
-// Curated list of browser-friendly models. Vision-capable entries are
-// surfaced for discovery/filtering but disabled until multimodal runtime support lands.
+// Catálogo curado de modelos que corren en el navegador. El campo `verified`
+// indica que se cargó e infirió realmente en WebGPU (probado el 2026-07-14,
+// Transformers.js 3.8.1). Los que fallaban se retiraron — ver nota al final.
 const WEBGPU_MODELS = [
+    // ── Ligeros y rápidos (verificados) ──────────────────────
+    {
+        id: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',
+        label: 'SmolLM2 135M',
+        size: '~140 MB',
+        sizeBytes: 140,
+        tier: 'quick',
+        dtype: 'q4f16',
+        context: 8192,
+        capabilities: ['fast'],
+        verified: true,
+        desc: 'El modelo más liviano del catálogo. Ideal para arrancar y probar WebGPU en segundos.',
+        repoUrl: 'https://huggingface.co/onnx-community/SmolLM2-135M-Instruct-ONNX-MHA'
+    },
     {
         id: 'HuggingFaceTB/SmolLM2-360M-Instruct',
         label: 'SmolLM2 360M',
@@ -198,20 +213,9 @@ const WEBGPU_MODELS = [
         dtype: 'q4f16',
         context: 8192,
         capabilities: ['fast'],
-        desc: 'La opción más ligera para validar el flujo WebGPU y respuestas rápidas.',
+        verified: true,
+        desc: 'Muy ligero y rápido para respuestas cortas y validación del flujo local.',
         repoUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct'
-    },
-    {
-        id: 'HuggingFaceTB/SmolLM2-1.7B-Instruct',
-        label: 'SmolLM2 1.7B',
-        size: '~1.0 GB',
-        sizeBytes: 1000,
-        tier: 'quick',
-        dtype: 'q4f16',
-        context: 8192,
-        capabilities: ['fast'],
-        desc: 'Muy equilibrado para chat general en equipos modestos.',
-        repoUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct'
     },
     {
         id: 'onnx-community/Qwen2.5-0.5B-Instruct',
@@ -222,8 +226,22 @@ const WEBGPU_MODELS = [
         dtype: 'q4f16',
         context: 32768,
         capabilities: ['fast', 'multilingual'],
+        verified: true,
         desc: 'Compacto y multilingüe. Muy útil para tareas simples y prompts cortos.',
         repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct'
+    },
+    {
+        id: 'onnx-community/granite-4.0-350m-ONNX-web',
+        label: 'Granite 4.0 350M',
+        size: '~450 MB',
+        sizeBytes: 450,
+        tier: 'quick',
+        dtype: 'q4f16',
+        context: 32768,
+        capabilities: ['fast', 'multilingual'],
+        verified: true,
+        desc: 'Modelo compacto de IBM Granite, variante optimizada para navegador (-web).',
+        repoUrl: 'https://huggingface.co/onnx-community/granite-4.0-350m-ONNX-web'
     },
     {
         id: 'onnx-community/Qwen2.5-Coder-0.5B-ONNX',
@@ -234,8 +252,22 @@ const WEBGPU_MODELS = [
         dtype: 'q4f16',
         context: 32768,
         capabilities: ['fast', 'coding', 'multilingual'],
+        verified: true,
         desc: 'Versión muy ligera enfocada a código y autocompletado local.',
         repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-Coder-0.5B-ONNX'
+    },
+    {
+        id: 'onnx-community/Qwen3-0.6B-ONNX',
+        label: 'Qwen 3 0.6B',
+        size: '~600 MB',
+        sizeBytes: 600,
+        tier: 'quick',
+        dtype: 'q4f16',
+        context: 32768,
+        capabilities: ['fast', 'thinking', 'multilingual'],
+        verified: true,
+        desc: 'Última generación Qwen 3 en formato mínimo. Buen razonamiento para su tamaño.',
+        repoUrl: 'https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX'
     },
     {
         id: 'onnx-community/Llama-3.2-1B-Instruct-ONNX',
@@ -246,21 +278,24 @@ const WEBGPU_MODELS = [
         dtype: 'q4f16',
         context: 131072,
         capabilities: ['fast'],
+        verified: true,
         desc: 'Contexto amplio y muy buen comportamiento para instrucciones sencillas.',
         repoUrl: 'https://huggingface.co/onnx-community/Llama-3.2-1B-Instruct-ONNX'
     },
     {
-        id: 'onnx-community/Qwen2.5-1.5B-Instruct',
-        label: 'Qwen 2.5 1.5B',
+        id: 'HuggingFaceTB/SmolLM2-1.7B-Instruct',
+        label: 'SmolLM2 1.7B',
         size: '~1.0 GB',
         sizeBytes: 1000,
-        tier: 'optional',
+        tier: 'quick',
         dtype: 'q4f16',
-        context: 32768,
-        capabilities: ['multilingual'],
-        desc: 'Salto notable en calidad manteniendo un consumo razonable.',
-        repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-1.5B-Instruct'
+        context: 8192,
+        capabilities: ['fast'],
+        verified: true,
+        desc: 'Muy equilibrado para chat general en equipos modestos.',
+        repoUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct'
     },
+    // ── Equilibrados / capaces (verificados) ─────────────────
     {
         id: 'onnx-community/Qwen2.5-Coder-1.5B-Instruct',
         label: 'Qwen 2.5 Coder 1.5B',
@@ -270,95 +305,9 @@ const WEBGPU_MODELS = [
         dtype: 'q4f16',
         context: 32768,
         capabilities: ['coding', 'multilingual'],
+        verified: true,
         desc: 'Muy buena opción para programación local con coste moderado.',
         repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-Coder-1.5B-Instruct'
-    },
-    {
-        id: 'onnx-community/Qwen2.5-Math-1.5B-Instruct',
-        label: 'Qwen 2.5 Math 1.5B',
-        size: '~1.4 GB',
-        sizeBytes: 1400,
-        tier: 'optional',
-        dtype: 'q4f16',
-        context: 32768,
-        capabilities: ['thinking', 'multilingual'],
-        desc: 'Especializado en razonamiento y resolución paso a paso.',
-        repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-Math-1.5B-Instruct'
-    },
-    {
-        id: 'onnx-community/Llama-3.2-3B-Instruct-ONNX',
-        label: 'Llama 3.2 3B',
-        size: '~2.4 GB',
-        sizeBytes: 2400,
-        tier: 'optional',
-        dtype: 'q4f16',
-        context: 131072,
-        capabilities: ['thinking'],
-        desc: 'Más consistente en seguimiento de instrucciones y contexto largo.',
-        repoUrl: 'https://huggingface.co/onnx-community/Llama-3.2-3B-Instruct-ONNX'
-    },
-    {
-        id: 'webgpu/Phi-4-mini-instruct-ONNX-GQA',
-        label: 'Phi-4 Mini',
-        size: '~2.2 GB',
-        sizeBytes: 2200,
-        tier: 'optional',
-        dtype: 'q4f16',
-        fallbackDtypes: ['q4'],
-        context: 131072,
-        capabilities: ['thinking', 'coding'],
-        desc: 'Muy potente para razonamiento y tareas técnicas en local. Si la variante q4f16 falla, la app intenta degradar automáticamente a q4 para mejorar compatibilidad.',
-        repoUrl: 'https://huggingface.co/webgpu/Phi-4-mini-instruct-ONNX-GQA'
-    },
-    {
-        id: 'onnx-community/Qwen2.5-Coder-3B-Instruct',
-        label: 'Qwen 2.5 Coder 3B',
-        size: '~2.1 GB',
-        sizeBytes: 2100,
-        tier: 'optional',
-        dtype: 'q4f16',
-        context: 32768,
-        capabilities: ['coding', 'multilingual'],
-        desc: 'El mejor equilibrio actual del catálogo para código en navegador.',
-        repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-Coder-3B-Instruct'
-    },
-    {
-        id: 'onnx-community/Apertus-8B-Instruct-2509-ONNX',
-        label: 'Apertus 8B',
-        size: '~5.4 GB',
-        sizeBytes: 5400,
-        tier: 'large',
-        dtype: 'q4f16',
-        context: 131072,
-        capabilities: ['thinking', 'large'],
-        desc: 'Modelo grande y muy capaz para equipos con GPU y memoria suficientes.',
-        repoUrl: 'https://huggingface.co/onnx-community/Apertus-8B-Instruct-2509-ONNX'
-    },
-    {
-        id: 'onnx-community/Qwen2-VL-2B-Instruct',
-        label: 'Qwen2 VL 2B',
-        size: '~2.8 GB',
-        sizeBytes: 2800,
-        tier: 'optional',
-        dtype: 'q4f16',
-        context: 32768,
-        capabilities: ['vision', 'multilingual', 'experimental'],
-        desc: 'Modelo multimodal de vision. Se intenta usar en chat VLM y, si falla, la app degrada automaticamente al analisis visual local.',
-        repoUrl: 'https://huggingface.co/onnx-community/Qwen2-VL-2B-Instruct',
-        experimental: true
-    },
-    {
-        id: 'onnx-community/Phi-3.5-vision-instruct',
-        label: 'Phi 3.5 Vision',
-        size: '~4.2 GB',
-        sizeBytes: 4200,
-        tier: 'large',
-        dtype: 'q4f16',
-        context: 8192,
-        capabilities: ['vision', 'thinking', 'experimental', 'large'],
-        desc: 'Entrada multimodal avanzada. Se intenta usar en chat VLM y, si falla, la app degrada automaticamente al analisis visual local.',
-        repoUrl: 'https://huggingface.co/onnx-community/Phi-3.5-vision-instruct',
-        experimental: true
     },
     {
         id: 'onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX',
@@ -369,12 +318,58 @@ const WEBGPU_MODELS = [
         dtype: 'q4f16',
         context: 32768,
         capabilities: ['thinking', 'multilingual'],
+        verified: true,
         desc: 'Modelo de razonamiento (R1) destilado de 1.5B. Escribe su cadena de pensamiento antes de responder.',
         repoUrl: 'https://huggingface.co/onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX'
+    },
+    {
+        id: 'onnx-community/Qwen2.5-Coder-3B-Instruct',
+        label: 'Qwen 2.5 Coder 3B',
+        size: '~2.1 GB',
+        sizeBytes: 2100,
+        tier: 'optional',
+        dtype: 'q4f16',
+        context: 32768,
+        capabilities: ['coding', 'multilingual'],
+        verified: true,
+        desc: 'El mejor equilibrio del catálogo para código en navegador.',
+        repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-Coder-3B-Instruct'
+    },
+    {
+        id: 'onnx-community/Llama-3.2-3B-Instruct-ONNX',
+        label: 'Llama 3.2 3B',
+        size: '~2.4 GB',
+        sizeBytes: 2400,
+        tier: 'optional',
+        dtype: 'q4f16',
+        context: 131072,
+        capabilities: ['thinking'],
+        verified: true,
+        desc: 'Más consistente en seguimiento de instrucciones y contexto largo.',
+        repoUrl: 'https://huggingface.co/onnx-community/Llama-3.2-3B-Instruct-ONNX'
+    },
+    // ── Grande / exigente (sin verificar: descarga OK pero la
+    //    compilación de kernels tardó demasiado en el test) ──
+    {
+        id: 'webgpu/Phi-4-mini-instruct-ONNX-GQA',
+        label: 'Phi-4 Mini',
+        size: '~2.2 GB',
+        sizeBytes: 2200,
+        tier: 'large',
+        dtype: 'q4f16',
+        fallbackDtypes: ['q4'],
+        context: 131072,
+        capabilities: ['thinking', 'coding', 'large'],
+        verified: false,
+        desc: 'Potente para razonamiento y tareas técnicas, pero pesado: la compilación de kernels puede tardar varios minutos la primera vez. Requiere un equipo con GPU holgada.',
+        repoUrl: 'https://huggingface.co/webgpu/Phi-4-mini-instruct-ONNX-GQA'
     }
-    // Nota: DeepSeek-R1-Distill-Qwen-7B-ONNX y DeepSeek-R1-Distill-Llama-8B-ONNX
-    // se retiraron del catálogo: los repos pasaron a "gated" en Hugging Face
-    // (401 sin autenticación), por lo que fallaban para cualquier usuario.
+    // Retirados tras probarlos uno a uno (2026-07-14, Transformers.js 3.8.1):
+    // · Qwen2.5-1.5B-Instruct y Qwen2.5-Math-1.5B → "Aborted()" al inicializar.
+    // · Qwen2-VL-2B y Phi-3.5-vision → pipeline 'image-text-to-text' no soportado.
+    // · Apertus-8B → "Unsupported model type: apertus".
+    // · gemma-3 (270m/1b), LFM2 (350M/700M), Qwen3-1.7B → fallo de runtime al cargar.
+    // · DeepSeek-R1 7B/8B → repos pasaron a gated (401).
 ];
 
 const WEBGPU_IMAGE_ASSIST = {

@@ -129,6 +129,7 @@ async function checkProviderStatus() {
                 dtype: m.dtype,
                 selectable: m.selectable !== false,
                 experimental: !!m.experimental,
+                verified: !!m.verified,
                 repoUrl: m.repoUrl,
                 custom: !!m.custom,
             }));
@@ -375,6 +376,27 @@ function getModelTags(model) {
     }));
 }
 
+// ─── Favoritos de modelos ────────────────────
+// Se guardan como IDs con prefijo de proveedor ("webgpu:onnx-.../..."),
+// para que un mismo nombre de modelo no colisione entre proveedores.
+function favoriteModelKey(modelId, providerId = state.settings.provider) {
+    return `${providerId}:${modelId}`;
+}
+
+function isFavoriteModel(modelId, providerId = state.settings.provider) {
+    return (state.settings.favoriteModels || []).includes(favoriteModelKey(modelId, providerId));
+}
+
+function toggleFavoriteModel(modelId, providerId = state.settings.provider) {
+    const key = favoriteModelKey(modelId, providerId);
+    const favs = state.settings.favoriteModels || (state.settings.favoriteModels = []);
+    const idx = favs.indexOf(key);
+    if (idx >= 0) favs.splice(idx, 1); else favs.push(key);
+    saveState();
+    if (state.rawModels) populateModels(state.rawModels);
+}
+window.toggleFavoriteModel = toggleFavoriteModel;
+
 function getModelPrice(m) {
     if (!m.pricing) return null;
     const p = parseFloat(m.pricing.prompt || m.pricing.input || 0);
@@ -534,6 +556,16 @@ function renderModelFunctionFilters(models) {
         return;
     }
 
+    const isWebGPU = state.settings.provider === 'webgpu';
+    const hasFavorites = models.some(m => isFavoriteModel(m.name));
+    const hasVerified = isWebGPU && models.some(m => m.verified);
+
+    // Toggles especiales siempre delante: favoritos y (en WebGPU) probados
+    const specialToggles = [
+        hasFavorites ? `<button type="button" class="filter-pill filter-pill-star ${state.modelShowFavoritesOnly ? 'active' : ''}" data-filter-key="__fav" title="Mostrar solo tus favoritos">⭐ Favoritos</button>` : '',
+        hasVerified ? `<button type="button" class="filter-pill filter-pill-verified ${state.modelShowVerifiedOnly ? 'active' : ''}" data-filter-key="__verified" title="Mostrar solo modelos probados y verificados">✅ Probados</button>` : '',
+    ].filter(Boolean).join('');
+
     const buttons = MODEL_FILTER_ORDER
         .filter(key => availableKeys.has(key))
         .map(key => {
@@ -543,11 +575,54 @@ function renderModelFunctionFilters(models) {
         })
         .join('');
 
-    const clearBtn = state.modelFeatureFilters.length
-        ? `<button type="button" class="filter-pill" data-filter-key="__clear">Limpiar</button>`
+    const anyActive = state.modelFeatureFilters.length || state.modelShowFavoritesOnly || state.modelShowVerifiedOnly;
+    const clearBtn = anyActive
+        ? `<button type="button" class="filter-pill filter-pill-clear" data-filter-key="__clear">✕ Limpiar</button>`
         : '';
 
-    dom.modelFunctionFilters.innerHTML = buttons + clearBtn;
+    dom.modelFunctionFilters.innerHTML = specialToggles + buttons + clearBtn;
+}
+
+/**
+ * renderModelCard — tarjeta unitaria de modelo con estrella de favorito y
+ * badge de estado claro (probado / cargado / en caché). Compartida por la
+ * sección de favoritos y por los grupos del catálogo.
+ */
+function renderModelCard(m, { isWebGPU }) {
+    const currentSelection = state.settings.model;
+    const isActive = m.name === currentSelection;
+    const isFav = isFavoriteModel(m.name);
+    const disabled = m.selectable === false;
+    const tags = getModelTags(m);
+    const star = `<button class="model-card-star ${isFav ? 'on' : ''}" title="${isFav ? 'Quitar de favoritos' : 'Marcar como favorito'}" onclick="event.stopPropagation(); toggleFavoriteModel('${escapeHtml(m.name)}')">${isFav ? '★' : '☆'}</button>`;
+    const repoLink = m.repoUrl ? `<a href="${m.repoUrl}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
+
+    // Badge de estado (prioridad: cargado > caché > probado)
+    let statusBadge = '';
+    if (isWebGPU) {
+        const isLoaded = webgpuState.loadedModelId === m.name;
+        const isCached = webgpuState.cachedModelIds && webgpuState.cachedModelIds.has(m.name);
+        if (isLoaded) statusBadge = '<span class="model-status-badge loaded" title="Modelo cargado en memoria">● Cargado</span>';
+        else if (isCached) statusBadge = `<span class="model-status-badge cached" title="Guardado en la caché del navegador">💾 En caché <button class="model-card-delete-cache-btn" onclick="event.stopPropagation(); deleteWebGPUModelCache('${escapeHtml(m.name)}')" title="Borrar de la caché">🗑️</button></span>`;
+        else if (m.verified) statusBadge = '<span class="model-status-badge verified" title="Probado: carga e infiere correctamente en WebGPU">✅ Probado</span>';
+        else statusBadge = '<span class="model-status-badge untested" title="Sin verificar: puede tardar o no funcionar en tu equipo">⚠️ Sin verificar</span>';
+    } else if (isActive) {
+        statusBadge = '<span class="model-status-badge loaded">✓ Activo</span>';
+    }
+
+    const price = !isWebGPU ? getModelPrice(m) : null;
+    const sizeStr = m.size || (m.details?.parameter_size || (m.size_vram ? `${(m.size_vram/(1024*1024*1024)).toFixed(1)} GB` : ''));
+
+    return `<div class="model-card ${isActive ? 'model-card-active' : ''} ${disabled ? 'model-card-disabled' : ''}" data-model="${escapeHtml(m.name)}" data-disabled="${disabled ? 'true' : 'false'}" title="${escapeHtml(m.desc || m.name)}">
+        ${star}
+        <div class="model-card-top">
+            <span class="model-card-name">${escapeHtml(m.label || m.name)}</span>
+        </div>
+        <div class="model-card-badges">${statusBadge}${sizeStr ? `<span class="model-card-size-chip">${escapeHtml(String(sizeStr))}</span>` : ''}${price ? `<span class="model-card-size-chip">${escapeHtml(price)}</span>` : ''}</div>
+        ${m.desc ? `<div class="model-card-desc">${escapeHtml(m.desc)}</div>` : ''}
+        <div class="model-card-tags">${renderModelTagsHtml(tags)}</div>
+        ${repoLink ? `<div class="model-card-actions">${repoLink}</div>` : ''}
+    </div>`;
 }
 
 function getFunctionalGroup(model) {
@@ -586,65 +661,48 @@ function populateModels(models) {
 
         const keys = getModelFunctionKeys(model);
         if (activeFilters.size > 0 && !Array.from(activeFilters).every(key => keys.includes(key))) return false;
+        if (state.modelShowFavoritesOnly && !isFavoriteModel(model.name)) return false;
+        if (state.modelShowVerifiedOnly && !model.verified) return false;
         return true;
     });
 
     if (filtered.length === 0) {
-        modelCardsContainer.innerHTML = `<div class="model-cards-empty">Ningún modelo coincide con los filtros</div>`;
+        const msg = state.modelShowFavoritesOnly ? 'Aún no tienes modelos favoritos. Marca la ⭐ de un modelo para añadirlo.' : 'Ningún modelo coincide con los filtros';
+        modelCardsContainer.innerHTML = `<div class="model-cards-empty">${msg}</div>`;
         return;
     }
 
-    const currentSelection = state.settings.model;
     const linksHeader = renderProviderExploreLinks();
+
+    // Sección de favoritos (siempre arriba, sin colapsar), salvo si ya estás
+    // filtrando solo por favoritos (sería redundante).
+    const favModels = filtered.filter(m => isFavoriteModel(m.name));
+    let favHtml = '';
+    if (favModels.length > 0 && !state.modelShowFavoritesOnly) {
+        favHtml = `<div class="model-favorites-section">
+            <div class="model-section-header">⭐ Tus favoritos <span class="model-tier-count">${favModels.length}</span></div>
+            <div class="model-cards-grid">${favModels.map(m => renderModelCard(m, { isWebGPU })).join('')}</div>
+        </div>`;
+    }
 
     if (isWebGPU) {
         const tiers = [
-            { key: 'quick',    label: '⚡ Ligero y rápido', color: 'tier-quick' },
-            { key: 'optional', label: '📦 Equilibrado / capaz', color: 'tier-optional' },
-            { key: 'large',    label: '🏋️ Grande y exigente', color: 'tier-large' },
+            { key: 'quick',    label: '⚡ Ligeros y rápidos', color: 'tier-quick' },
+            { key: 'optional', label: '📦 Equilibrados y capaces', color: 'tier-optional' },
+            { key: 'large',    label: '🏋️ Grandes y exigentes', color: 'tier-large' },
             { key: 'manual',   label: '🧩 Añadidos manualmente', color: 'tier-manual' },
         ];
 
-        let html = linksHeader ? `<div class="model-cards-webgpu-header">${linksHeader}</div>` : '';
+        let html = (linksHeader ? `<div class="model-cards-webgpu-header">${linksHeader}</div>` : '') + favHtml;
 
         tiers.forEach(tier => {
             const tierModels = filtered.filter(m => m.tier === tier.key);
             if (tierModels.length === 0) return;
-
-            const isOpen = tier.key === 'quick' || tier.key === 'optional';
+            const isOpen = tier.key === 'quick' || tier.key === 'optional' || tier.key === 'manual';
             html += `<details class="model-tier-group ${tier.color}" ${isOpen ? 'open' : ''}>
                 <summary class="model-tier-header">${tier.label} <span class="model-tier-count">${tierModels.length}</span></summary>
-                <div class="model-cards-grid">`;
-
-            tierModels.forEach(m => {
-                const isActive = m.name === currentSelection;
-                const isLoaded = webgpuState.loadedModelId === m.name;
-                const isCached = webgpuState.cachedModelIds && webgpuState.cachedModelIds.has(m.name);
-                const tags = getModelTags(m);
-                const disabled = m.selectable === false;
-                const repoLink = m.repoUrl ? `<a href="${m.repoUrl}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
-                const warningText = disabled
-                    ? 'Disponible para explorar y filtrar, pero todavía no activo en el runtime del chat WebGPU.'
-                    : m.custom
-                        ? 'Modelo externo agregado manualmente. La carga dependerá de que el repo sea compatible con Transformers.js y ONNX.'
-                    : m.tier === 'large'
-                        ? 'Modelo grande: asegúrate de tener suficiente VRAM/RAM disponible.'
-                        : '';
-                const tierWarning = warningText ? `<div class="model-card-warning">${escapeHtml(warningText)}</div>` : '';
-                html += `<div class="model-card ${isActive ? 'model-card-active' : ''} ${isLoaded ? 'model-card-loaded' : ''} ${disabled ? 'model-card-disabled' : ''}" data-model="${escapeHtml(m.name)}" data-disabled="${disabled ? 'true' : 'false'}" title="${escapeHtml(m.desc || m.name)}">
-                    <div class="model-card-top">
-                        <span class="model-card-name">${escapeHtml(m.label || m.name)}</span>
-                        ${disabled ? '<span class="model-card-selected-badge">Bloq.</span>' : (isLoaded ? '<span class="model-card-loaded-badge">● Cargado</span>' : (isCached ? `<span class="model-card-cached-badge" style="display: inline-flex; align-items: center; gap: 4px;" title="Modelo guardado localmente en tu navegador. Puedes borrarlo para forzar su redescarga.">💾 En caché <button class="model-card-delete-cache-btn" onclick="event.stopPropagation(); deleteWebGPUModelCache('${escapeHtml(m.name)}')" title="Borrar caché de este modelo">🗑️</button></span>` : (isActive ? '<span class="model-card-selected-badge">✓</span>' : '')))}
-                    </div>
-                    <div class="model-card-size">${escapeHtml(m.size || '')}</div>
-                    <div class="model-card-desc">${escapeHtml(m.desc || '')}</div>
-                    ${tierWarning}
-                    <div class="model-card-tags">${renderModelTagsHtml(tags)}</div>
-                    ${repoLink ? `<div class="model-card-actions">${repoLink}</div>` : ''}
-                </div>`;
-            });
-
-            html += `</div></details>`;
+                <div class="model-cards-grid">${tierModels.map(m => renderModelCard(m, { isWebGPU })).join('')}</div>
+            </details>`;
         });
 
         modelCardsContainer.innerHTML = html;
@@ -656,40 +714,14 @@ function populateModels(models) {
             groups[group.key].models.push(m);
         });
 
-        let html = linksHeader;
+        let html = (linksHeader || '') + favHtml;
         ['vision', 'coding', 'thinking', 'multilingual', 'general'].forEach(groupKey => {
             if (!groups[groupKey] || groups[groupKey].models.length === 0) return;
-            const groupModels = groups[groupKey].models.sort((a, b) => {
-                const aLarge = getModelFunctionKeys(a).includes('large') ? 1 : 0;
-                const bLarge = getModelFunctionKeys(b).includes('large') ? 1 : 0;
-                if (aLarge !== bLarge) return aLarge - bLarge;
-                return (a.name || '').localeCompare(b.name || '');
-            });
-
+            const groupModels = groups[groupKey].models.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             html += `<details class="model-letter-group" open>
                 <summary class="model-letter-header">${groups[groupKey].label} <span class="model-tier-count">${groupModels.length}</span></summary>
-                <div class="model-cards-grid">`;
-
-            groupModels.forEach(m => {
-                const isActive = m.name === currentSelection;
-                const tags = getModelTags(m);
-                const price = getModelPrice(m);
-                const sizeMB = m.size || (m.details?.parameter_size ? m.details.parameter_size : (m.size_vram ? `${(m.size_vram/(1024*1024*1024)).toFixed(1)} GB` : null));
-                const repoLink = m.repoUrl ? `<a href="${m.repoUrl}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
-
-                html += `<div class="model-card ${isActive ? 'model-card-active' : ''}" data-model="${escapeHtml(m.name)}" title="${escapeHtml(m.name)}">
-                    <div class="model-card-top">
-                        <span class="model-card-name">${escapeHtml(m.label || m.name)}</span>
-                        ${isActive ? '<span class="model-card-selected-badge">✓</span>' : ''}
-                    </div>
-                    ${price ? `<div class="model-card-price">${escapeHtml(price)}</div>` : ''}
-                    ${sizeMB ? `<div class="model-card-size">${escapeHtml(String(sizeMB))}</div>` : ''}
-                    <div class="model-card-tags">${renderModelTagsHtml(tags)}</div>
-                    ${repoLink ? `<div class="model-card-actions">${repoLink}</div>` : ''}
-                </div>`;
-            });
-
-            html += `</div></details>`;
+                <div class="model-cards-grid">${groupModels.map(m => renderModelCard(m, { isWebGPU })).join('')}</div>
+            </details>`;
         });
 
         modelCardsContainer.innerHTML = html;
@@ -721,6 +753,7 @@ function populateModels(models) {
     });
 
     // Sync hidden select against the full list so filters do not silently change the saved model
+    const currentSelection = state.settings.model;
     dom.modelSelect.innerHTML = state.rawModels.map(m =>
         `<option value="${escapeHtml(m.name)}" ${m.name === currentSelection ? 'selected' : ''}>${escapeHtml(m.label || m.name)}</option>`
     ).join('');

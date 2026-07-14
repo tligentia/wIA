@@ -3870,3 +3870,79 @@ option {
 .starter-row .starter-icon { width: 52px; text-align: center; }
 .starter-row .starter-title { flex: 1; min-width: 90px; }
 .starter-row .starter-prompt { flex: 2; }
+
+/* ─── Panel de modelos: favoritos, estado y filtros ────────── */
+.model-card { position: relative; }
+
+.model-card-star {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--text-tertiary);
+    padding: 2px;
+    transition: color var(--transition-fast), transform var(--transition-fast);
+    z-index: 2;
+}
+.model-card-star:hover { transform: scale(1.2); color: #f5b301; }
+.model-card-star.on { color: #f5b301; }
+
+.model-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0 4px;
+}
+
+.model-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.model-status-badge.verified { color: var(--success); background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
+.model-status-badge.untested { color: var(--warning); background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); }
+.model-status-badge.loaded   { color: var(--accent-secondary); background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.3); }
+.model-status-badge.cached   { color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-subtle); }
+
+.model-card-size-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.66rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: var(--text-tertiary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.model-favorites-section {
+    margin-bottom: 14px;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    background: rgba(245, 179, 1, 0.05);
+    border: 1px solid rgba(245, 179, 1, 0.2);
+}
+.model-section-header {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.filter-pill-star.active { background: rgba(245,179,1,0.18); color: #f5b301; border-color: rgba(245,179,1,0.4); }
+.filter-pill-verified.active { background: rgba(34,197,94,0.15); color: var(--success); border-color: rgba(34,197,94,0.35); }
+.filter-pill-clear { color: var(--danger); }

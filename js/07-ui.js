@@ -168,6 +168,12 @@ function bindEvents() {
         const key = btn.dataset.filterKey;
         if (key === '__clear') {
             state.modelFeatureFilters = [];
+            state.modelShowFavoritesOnly = false;
+            state.modelShowVerifiedOnly = false;
+        } else if (key === '__fav') {
+            state.modelShowFavoritesOnly = !state.modelShowFavoritesOnly;
+        } else if (key === '__verified') {
+            state.modelShowVerifiedOnly = !state.modelShowVerifiedOnly;
         } else if (state.modelFeatureFilters.includes(key)) {
             state.modelFeatureFilters = state.modelFeatureFilters.filter(item => item !== key);
         } else {
