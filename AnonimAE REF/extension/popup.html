@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    
+    <header class="header">
+      <div class="logo-icon">
+        <img src="icons/icon-pro-128.png" alt="AnonimAE Logo" width="28" height="28">
+      </div>
+      <div class="logo-text">
+        <h1>AnonimAE</h1>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
+          <span>Anonimización local en navegador</span>
+          <span id="extension-version-tag" style="font-size: 8.5px; font-weight: 900; color: var(--brand-red); background: var(--brand-red-light); padding: 1px 5px; border-radius: 2px; border: 1px solid #fee2e2;"></span>
+        </div>
+      </div>
+    </header>
+
+    <div class="tabs-navigation">
+      <button class="tab-btn active" data-tab="tab-settings">Seguridad</button>
+      <button class="tab-btn" data-tab="tab-domains">Sitios</button>
+      <button id="btn-open-dashboard" class="tab-btn console-tab-btn" type="button" title="Abrir consola interna">Consola</button>
+      <button id="btn-open-dashboard-settings" class="tab-btn settings-console-btn" type="button" title="Abrir ajustes avanzados de consola" aria-label="Ajustes de consola">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.17a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.17a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.17a1.65 1.65 0 0 0-1.43 1z"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div id="tab-settings" class="tab-content active">
+      <div class="status-card glass-panel" style="margin-bottom: 10px;">
+        <div class="status-row">
+            <span>Motor local</span>
+            <span id="connection-status" class="badge badge-checking">Validando</span>
+        </div>
+        <div id="hardware-acc" class="status-subtext">Inicializando motor local...</div>
+        <div class="quick-metrics">
+          <div class="metric-tile">
+            <strong id="rules-count">0</strong>
+            <span>reglas</span>
+          </div>
+          <div class="metric-tile">
+            <strong id="map-count">0</strong>
+            <span>mapas</span>
+          </div>
+          <div class="metric-tile">
+            <strong id="log-count">0</strong>
+            <span>logs</span>
+          </div>
+        </div>
+      </div>
+
+      <main class="main-options">
+        <div class="control-hub glass-panel">
+          <div class="control-grid">
+            <div class="control-tile">
+              <span class="control-label">Protección</span>
+              <label class="toggle-switch" title="Protección automática">
+                <input type="checkbox" id="auto-protect-toggle" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="control-tile">
+              <span class="control-label">Persistencia</span>
+              <span class="badge badge-online">Auto</span>
+            </div>
+            <div class="theme-tile">
+              <span class="control-label">Tema</span>
+              <button class="theme-cycle-btn" type="button" data-theme-cycle title="Tema: Sistema" aria-label="Tema: Sistema"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="engine-panel glass-panel">
+          <div class="engine-header">
+            <span class="control-label">Motor</span>
+            <span id="engine-mode-chip" class="badge badge-autonomous">Local</span>
+          </div>
+          <div class="engine-grid">
+            <label class="engine-field" for="select-anonymization-engine">
+              <span>Anonimización</span>
+              <select id="select-anonymization-engine" class="input-select">
+                <option value="rules-core">Reglas PRO</option>
+              </select>
+            </label>
+            <label class="engine-field" for="select-ai-engine">
+              <span>IA</span>
+              <select id="select-ai-engine" class="input-select">
+              </select>
+            </label>
+          </div>
+          <span id="engine-status-line" class="engine-status-line">Reglas locales activas.</span>
+        </div>
+
+        <div class="option-column glass-panel">
+          <label for="master-password" class="input-label">Clave maestra</label>
+          <div class="password-wrapper">
+            <input type="password" id="master-password" class="input-shield" placeholder="Clave AES local" value="ClavePrivadaAnimAE123!">
+            <button id="btn-toggle-view" class="eye-toggle" title="Mostrar u ocultar clave" type="button">Ver</button>
+          </div>
+          <span class="input-help">Solo local. Cifra y recupera mapas.</span>
+        </div>
+      </main>
+    </div>
+
+    <div id="tab-domains" class="tab-content">
+      <main class="main-options">
+        <div class="current-site-card glass-panel">
+          <div class="site-header">
+            <span class="site-label">Sitio actual</span>
+            <span id="current-tab-domain" class="site-domain">Detectando</span>
+          </div>
+          <div class="site-actions">
+            <button id="btn-toggle-current-site" class="btn btn-add-site" disabled>
+              Proteger sitio
+            </button>
+            <button id="btn-exclude-current-site" class="btn btn-secondary" disabled>
+              Excluir este sitio
+            </button>
+          </div>
+        </div>
+
+        <div class="option-column glass-panel">
+          <label class="input-label">Añadir dominio</label>
+          <div class="domain-adder-wrapper">
+            <input type="text" id="input-new-domain" class="input-shield" placeholder="ej. mi-ia.local o copilot.com" style="padding-right: 10px;">
+            <button id="btn-add-manual-domain" class="btn btn-add-manual">+</button>
+          </div>
+        </div>
+
+        <div class="option-column glass-panel" style="gap: 8px;">
+          <label class="input-label">Sitios protegidos</label>
+          <div id="domains-list-container" class="domains-scroll-list">
+          </div>
+        </div>
+
+        <div class="option-column glass-panel" style="gap: 8px;">
+          <label class="input-label label-danger">Sitios excluidos</label>
+          <div id="excluded-list-container" class="domains-scroll-list" style="max-height: 80px;">
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <footer class="footer">
+      <div class="status-badge">
+        <div class="status-dot"></div>
+        <span>Local activo</span>
+      </div>
+      <button id="btn-save-settings" class="btn btn-save">Guardar</button>
+    </footer>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

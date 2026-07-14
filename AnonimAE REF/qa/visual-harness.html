@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnonimAE QA Visual</title>
+  <style>
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background: #111;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    body[data-kind="dashboard"] {
+      padding: 0;
+    }
+
+    #stage {
+      width: fit-content;
+      min-height: 100%;
+    }
+
+    body[data-kind="dashboard"] #stage {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const kind = params.get('kind') === 'dashboard' ? 'dashboard' : 'popup';
+    const theme = ['system', 'light', 'dark'].includes(params.get('theme')) ? params.get('theme') : 'system';
+    document.body.dataset.kind = kind;
+
+    const page = kind === 'popup' ? 'popup.html' : 'dashboard.html';
+    const sheet = kind === 'popup' ? 'popup.css' : 'styles.css';
+
+    function parseColor(value) {
+      const match = String(value).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([.\d]+))?/);
+      if (!match) return null;
+      return [Number(match[1]), Number(match[2]), Number(match[3]), match[4] === undefined ? 1 : Number(match[4])];
+    }
+
+    function blend(foreground, background) {
+      const alpha = foreground[3] ?? 1;
+      return [
+        Math.round(foreground[0] * alpha + background[0] * (1 - alpha)),
+        Math.round(foreground[1] * alpha + background[1] * (1 - alpha)),
+        Math.round(foreground[2] * alpha + background[2] * (1 - alpha)),
+        1
+      ];
+    }
+
+    function luminance(rgb) {
+      return rgb.map((value) => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+      }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    }
+
+    function contrast(foreground, background) {
+      if (!foreground || !background) return 99;
+      const a = luminance(foreground);
+      const b = luminance(background);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    function effectiveBackground(element) {
+      let current = element;
+      let color = null;
+      while (current && current.nodeType === 1) {
+        const bg = parseColor(getComputedStyle(current).backgroundColor);
+        if (bg && bg[3] > 0) {
+          color = color ? blend(color, bg) : bg;
+          if (color[3] >= 1) return color;
+        }
+        current = current.parentElement;
+      }
+      return color || parseColor(getComputedStyle(document.body).backgroundColor);
+    }
+
+    async function render() {
+      const [htmlRaw, cssRaw] = await Promise.all([
+        fetch(`/extension/${page}`).then((response) => response.text()),
+        fetch(`/extension/${sheet}`).then((response) => response.text())
+      ]);
+      const parsed = new DOMParser().parseFromString(htmlRaw, 'text/html');
+      parsed.querySelectorAll('script').forEach((node) => node.remove());
+      parsed.querySelectorAll('link[rel="stylesheet"]').forEach((node) => node.remove());
+      parsed.querySelectorAll('img[src^="icons/"]').forEach((img) => {
+        img.src = `/extension/${img.getAttribute('src')}`;
+      });
+
+      const style = document.createElement('style');
+      style.textContent = cssRaw;
+      document.head.appendChild(style);
+
+      if (theme !== 'system') {
+        document.documentElement.dataset.theme = theme;
+      }
+      if (kind === 'dashboard') {
+        document.body.classList.add('selection-red');
+      }
+
+      const stage = document.getElementById('stage');
+      stage.innerHTML = parsed.body.innerHTML;
+    }
+
+    window.qaReport = function qaReport() {
+      const elements = Array.from(document.querySelectorAll('button, select, input, textarea, .nav-item, .theme-option, .btn, .input-shield, .glass-panel, .glass-card, .control-tile, .theme-tile, .engine-panel, .editor-pane'))
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          const styles = getComputedStyle(element);
+          return rect.width > 2 && rect.height > 2 && styles.display !== 'none' && styles.visibility !== 'hidden';
+        })
+        .map((element, index) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            index,
+            tag: element.tagName.toLowerCase(),
+            label: (element.innerText || element.value || element.getAttribute('aria-label') || element.getAttribute('title') || element.className || '').trim().slice(0, 70),
+            rect: { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height }
+          };
+        });
+
+      const overlaps = [];
+      for (let i = 0; i < elements.length; i += 1) {
+        for (let j = i + 1; j < elements.length; j += 1) {
+          const a = elements[i];
+          const b = elements[j];
+          const contains = (outer, inner) => inner.rect.x >= outer.rect.x && inner.rect.right <= outer.rect.right && inner.rect.y >= outer.rect.y && inner.rect.bottom <= outer.rect.bottom;
+          if (contains(a, b) || contains(b, a)) continue;
+          const xOverlap = Math.max(0, Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.x, b.rect.x));
+          const yOverlap = Math.max(0, Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.y, b.rect.y));
+          if (xOverlap > 3 && yOverlap > 3) {
+            overlaps.push({ a: a.label || a.tag, b: b.label || b.tag, area: Math.round(xOverlap * yOverlap) });
+          }
+        }
+      }
+
+      const contrastProblems = Array.from(document.querySelectorAll('body, h1, h2, h3, label, span, button, select, input, textarea, td, th, p, a'))
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          const text = (element.innerText || element.value || '').trim();
+          return text && rect.width > 2 && rect.height > 2 && getComputedStyle(element).visibility !== 'hidden';
+        })
+        .map((element) => {
+          const styles = getComputedStyle(element);
+          return {
+            text: (element.innerText || element.value || '').trim().slice(0, 80),
+            ratio: contrast(parseColor(styles.color), effectiveBackground(element))
+          };
+        })
+        .filter((item) => item.ratio < 3)
+        .slice(0, 12);
+
+      const text = document.body.innerText.replace(/\s+/g, ' ').trim();
+      const oldCopy = ['[+]', 'Playground', 'De-anon', 'DLP Autónomo', 'Guardar Cambios', 'No Network', 'Ok ('].filter((needle) => text.includes(needle));
+
+      return {
+        kind,
+        theme,
+        oldCopy,
+        overlaps,
+        contrastProblems,
+        controlCount: elements.length,
+        size: { scrollWidth: document.body.scrollWidth, scrollHeight: document.body.scrollHeight, innerWidth, innerHeight },
+        textSample: text.slice(0, 300)
+      };
+    };
+
+    render();
+  </script>
+</body>
+</html>

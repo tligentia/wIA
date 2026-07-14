@@ -363,7 +363,79 @@ const WEBGPU_MODELS = [
         verified: false,
         desc: 'Potente para razonamiento y tareas técnicas, pero pesado: la compilación de kernels puede tardar varios minutos la primera vez. Requiere un equipo con GPU holgada.',
         repoUrl: 'https://huggingface.co/webgpu/Phi-4-mini-instruct-ONNX-GQA'
+    },
+    // ── 👁 Visión: asistentes de imagen (verificados) ────────
+    //    Transformers.js (3.8.1 y también la última 4.2.0) NO soporta el
+    //    pipeline conversacional 'image-text-to-text', así que no hay VLM de
+    //    chat en navegador. Lo que sí funciona es 'image-to-text': estos
+    //    modelos convierten la imagen adjunta en texto (descripción u OCR)
+    //    que se inyecta como contexto del chat. Al elegir uno aquí se fija
+    //    como asistente visual, no como modelo de chat.
+    {
+        id: 'Xenova/vit-gpt2-image-captioning',
+        label: 'ViT-GPT2 Captioning',
+        size: '~250 MB',
+        sizeBytes: 250,
+        tier: 'vision',
+        visionAssist: true,
+        task: 'image-to-text',
+        context: 0,
+        capabilities: ['vision', 'fast'],
+        verified: true,
+        desc: 'Describe en una frase el contenido general de la imagen. Es el asistente visual por defecto.',
+        repoUrl: 'https://huggingface.co/Xenova/vit-gpt2-image-captioning'
+    },
+    {
+        id: 'onnx-community/distilvit-ONNX',
+        label: 'DistilViT Captioning',
+        size: '~230 MB',
+        sizeBytes: 230,
+        tier: 'vision',
+        visionAssist: true,
+        task: 'image-to-text',
+        context: 0,
+        capabilities: ['vision', 'fast'],
+        verified: true,
+        desc: 'Descripción de imágenes ligera (destilada, de Mozilla). Alternativa rápida al captioner por defecto.',
+        repoUrl: 'https://huggingface.co/onnx-community/distilvit-ONNX'
+    },
+    {
+        id: 'Xenova/trocr-small-printed',
+        label: 'TrOCR Texto impreso',
+        size: '~130 MB',
+        sizeBytes: 130,
+        tier: 'vision',
+        visionAssist: true,
+        task: 'image-to-text',
+        context: 0,
+        capabilities: ['vision', 'fast'],
+        verified: true,
+        desc: 'OCR: extrae el texto impreso de una imagen (capturas, documentos, carteles).',
+        repoUrl: 'https://huggingface.co/Xenova/trocr-small-printed'
+    },
+    {
+        id: 'Xenova/trocr-small-handwritten',
+        label: 'TrOCR Manuscrito',
+        size: '~130 MB',
+        sizeBytes: 130,
+        tier: 'vision',
+        visionAssist: true,
+        task: 'image-to-text',
+        context: 0,
+        capabilities: ['vision', 'fast'],
+        verified: true,
+        desc: 'OCR especializado en texto escrito a mano (notas, formularios rellenados).',
+        repoUrl: 'https://huggingface.co/Xenova/trocr-small-handwritten'
     }
+    // Probados el 2026-07-14 (Transformers.js 3.8.1) y NO añadidos:
+    // · Chat VLM (image-text-to-text): no existe el pipeline ni en 3.8.1 ni en
+    //   4.2.0 → Qwen2-VL-2B y Phi-3.5-vision siguen fuera.
+    // · CLIP/SigLIP (zero-shot-image-classification) y DETR/YOLOS
+    //   (object-detection) cargan bien, pero no producen una descripción
+    //   textual para el chat sin etiquetas candidatas o post-proceso.
+    // · Xenova/mobileclip_s0 y onnx-community/manga-ocr-base-ONNX → faltan
+    //   ficheros en el repo (model.onnx / tokenizer.json).
+    //
     // Retirados tras probarlos uno a uno (2026-07-14, Transformers.js 3.8.1):
     // · Qwen2.5-1.5B-Instruct y Qwen2.5-Math-1.5B → "Aborted()" al inicializar.
     // · Qwen2-VL-2B y Phi-3.5-vision → pipeline 'image-text-to-text' no soportado.
@@ -372,12 +444,27 @@ const WEBGPU_MODELS = [
     // · DeepSeek-R1 7B/8B → repos pasaron a gated (401).
 ];
 
+// Asistente visual por defecto (si el usuario no elige otro en el catálogo).
 const WEBGPU_IMAGE_ASSIST = {
     id: 'Xenova/vit-gpt2-image-captioning',
     task: 'image-to-text',
     label: 'Asistente visual local',
     desc: 'Convierte imágenes en descripciones locales para usarlas como contexto en el chat WebGPU.'
 };
+
+/**
+ * getVisionAssistDef — modelo de visión activo. El usuario puede elegir
+ * cualquiera del tier 'vision' del catálogo; si no ha elegido ninguno (o el
+ * guardado ya no existe), se usa el captioner por defecto.
+ */
+function getVisionAssistDef() {
+    const chosenId = state?.settings?.webgpuVisionModel;
+    if (chosenId) {
+        const def = WEBGPU_MODELS.find(m => m.id === chosenId && m.visionAssist);
+        if (def) return { id: def.id, task: def.task || 'image-to-text', label: def.label, desc: def.desc };
+    }
+    return WEBGPU_IMAGE_ASSIST;
+}
 
 const WEBGPU_TEXT_FALLBACK_MODEL = 'HuggingFaceTB/SmolLM2-1.7B-Instruct';
 const WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS = 180;

@@ -130,6 +130,8 @@ async function checkProviderStatus() {
                 selectable: m.selectable !== false,
                 experimental: !!m.experimental,
                 verified: !!m.verified,
+                visionAssist: !!m.visionAssist,
+                task: m.task || null,
                 repoUrl: m.repoUrl,
                 custom: !!m.custom,
             }));
@@ -590,19 +592,25 @@ function renderModelFunctionFilters(models) {
  */
 function renderModelCard(m, { isWebGPU }) {
     const currentSelection = state.settings.model;
-    const isActive = m.name === currentSelection;
+    // Los modelos de visión no son modelos de chat: su "activo" es ser el
+    // asistente visual elegido, no el modelo seleccionado para conversar.
+    const isVisionAssist = !!m.visionAssist;
+    const isActive = isVisionAssist
+        ? getVisionAssistDef().id === m.name
+        : m.name === currentSelection;
     const isFav = isFavoriteModel(m.name);
     const disabled = m.selectable === false;
     const tags = getModelTags(m);
     const star = `<button class="model-card-star ${isFav ? 'on' : ''}" title="${isFav ? 'Quitar de favoritos' : 'Marcar como favorito'}" onclick="event.stopPropagation(); toggleFavoriteModel('${escapeHtml(m.name)}')">${isFav ? '★' : '☆'}</button>`;
     const repoLink = m.repoUrl ? `<a href="${m.repoUrl}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
 
-    // Badge de estado (prioridad: cargado > caché > probado)
+    // Badge de estado (prioridad: en uso como asistente > cargado > caché > probado)
     let statusBadge = '';
     if (isWebGPU) {
         const isLoaded = webgpuState.loadedModelId === m.name;
         const isCached = webgpuState.cachedModelIds && webgpuState.cachedModelIds.has(m.name);
-        if (isLoaded) statusBadge = '<span class="model-status-badge loaded" title="Modelo cargado en memoria">● Cargado</span>';
+        if (isVisionAssist && isActive) statusBadge = '<span class="model-status-badge loaded" title="Es el asistente visual que describe tus imágenes adjuntas">👁 En uso</span>';
+        else if (isLoaded) statusBadge = '<span class="model-status-badge loaded" title="Modelo cargado en memoria">● Cargado</span>';
         else if (isCached) statusBadge = `<span class="model-status-badge cached" title="Guardado en la caché del navegador">💾 En caché <button class="model-card-delete-cache-btn" onclick="event.stopPropagation(); deleteWebGPUModelCache('${escapeHtml(m.name)}')" title="Borrar de la caché">🗑️</button></span>`;
         else if (m.verified) statusBadge = '<span class="model-status-badge verified" title="Probado: carga e infiere correctamente en WebGPU">✅ Probado</span>';
         else statusBadge = '<span class="model-status-badge untested" title="Sin verificar: puede tardar o no funcionar en tu equipo">⚠️ Sin verificar</span>';
@@ -690,6 +698,7 @@ function populateModels(models) {
             { key: 'quick',    label: '⚡ Ligeros y rápidos', color: 'tier-quick' },
             { key: 'optional', label: '📦 Equilibrados y capaces', color: 'tier-optional' },
             { key: 'large',    label: '🏋️ Grandes y exigentes', color: 'tier-large' },
+            { key: 'vision',   label: '👁 Visión (describe imágenes adjuntas)', color: 'tier-vision' },
             { key: 'manual',   label: '🧩 Añadidos manualmente', color: 'tier-manual' },
         ];
 
@@ -737,6 +746,21 @@ function populateModels(models) {
                 return;
             }
 
+            // Los modelos de visión no se "conversan": al elegirlos se fijan
+            // como asistente visual (describen las imágenes que adjuntes) y no
+            // tocan el modelo de chat seleccionado.
+            const visionDef = WEBGPU_MODELS.find(m => m.id === modelId && m.visionAssist);
+            if (visionDef) {
+                const yaActivo = getVisionAssistDef().id === modelId;
+                state.settings.webgpuVisionModel = yaActivo ? '' : modelId;
+                // Si cambia el asistente, descartar el pipeline visual previo
+                webgpuState.imageAssistPipeline = null;
+                webgpuState.imageAssistModelId = null;
+                saveState();
+                if (state.rawModels) populateModels(state.rawModels);
+                return;
+            }
+
             // Update hidden select value (used by saveSettings)
             dom.modelSelect.value = modelId;
             // Also store in state immediately for UI feedback
@@ -760,7 +784,8 @@ function populateModels(models) {
     if (state.rawModels.some(m => m.name === currentSelection)) {
         dom.modelSelect.value = currentSelection;
     } else {
-        const firstSelectable = state.rawModels.find(m => m.selectable !== false) || state.rawModels[0];
+        // Nunca caer en un modelo de visión: no sirven como modelo de chat
+        const firstSelectable = state.rawModels.find(m => m.selectable !== false && !m.visionAssist) || state.rawModels[0];
         if (firstSelectable) dom.modelSelect.value = firstSelectable.name;
     }
 

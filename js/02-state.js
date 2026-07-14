@@ -30,6 +30,7 @@ const state = {
         topK: 40,
         maxTokens: 8192,
         favoriteModels: [],   // IDs de modelos marcados como favoritos por el usuario
+        webgpuVisionModel: '',// Asistente visual elegido (tier 'vision'); vacío = el por defecto
         systemPrompt: `# System Prompt: Asistente IA Experto
 
 ## Rol y Personalidad

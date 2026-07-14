@@ -1,0 +1,31 @@
+{
+  "name": "anonimae",
+  "version": "26.6.43",
+  "description": "Local, private, offline, and auditable reversible anonymization platform",
+  "type": "module",
+  "main": "src/backend/server.js",
+  "scripts": {
+    "start": "node src/backend/server.js",
+    "dev": "node --watch src/backend/server.js",
+    "package-extension": "node scripts/package-extension.js",
+    "check:version": "node scripts/check-version-consistency.js",
+    "test": "node tests/engine.test.js"
+  },
+  "keywords": [
+    "anonymization",
+    "privacy",
+    "local-first",
+    "security",
+    "reversible",
+    "offline"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "express": "^4.19.2",
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5",
+    "yaml": "^2.4.5"
+  }
+}

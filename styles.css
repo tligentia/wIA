@@ -4005,3 +4005,7 @@ option {
 .webgpu-gauge-fill.mid  { background: var(--warning); }
 .webgpu-gauge-fill.high { background: var(--danger); }
 .webgpu-gauge-note { font-size: 0.66rem; color: var(--text-tertiary); margin-top: 5px; line-height: 1.4; }
+
+/* Tier de Visión en el catálogo WebGPU */
+.model-tier-group.tier-vision > summary { border-left: 3px solid #0ea5e9; }
+.model-tier-group.tier-vision .model-tier-header { color: #0ea5e9; }

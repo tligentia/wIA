@@ -292,6 +292,8 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 👁 **Categoría Visión en WebGPU (verificada)**: nueva categoría **👁 Visión** en el catálogo y filtro propio, con 4 asistentes de imagen probados uno a uno: **ViT-GPT2 Captioning**, **DistilViT Captioning** (descripción de imágenes) y **TrOCR Texto impreso / Manuscrito** (OCR). Al elegir uno se fija como asistente visual —describe las imágenes que adjuntes y pasa el texto como contexto del chat— sin tocar tu modelo de conversación.
+  > **Por qué no hay VLM de chat**: se comprobó que Transformers.js **no soporta el pipeline `image-text-to-text`** ni en la versión fijada (3.8.1) ni en la última (4.2.0), así que modelos tipo Qwen2-VL o Phi-3.5-Vision no pueden conversar sobre imágenes en el navegador. CLIP/SigLIP y DETR/YOLOS sí cargan, pero no producen una descripción textual utilizable para el chat.
 - 📊 **Monitor de WebGPU en vivo**: nuevo panel en Configuración que muestra aceleración (WebGPU/WASM + f16), adaptador real (vendor/arquitectura), estado de carga (Inactivo / Cargando / Generando / Listo), modo de ejecución (Worker o hilo principal), modelo en memoria, modelos en caché, buffer máximo de GPU y heap JS, con una barra de **ocupación estimada**. Se refresca cada 2 s.
 - 🧹 **Botón «Liberar memoria»**: descarga de RAM/VRAM el modelo y el worker de inferencia sin borrar la caché del navegador — el modelo se recarga al instante en el siguiente uso, sin redescargar.
 - ☀️ **Tema Claro por defecto** en instalaciones nuevas (Oscuro, Vanilla y Sistema siguen disponibles).

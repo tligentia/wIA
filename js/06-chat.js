@@ -1187,10 +1187,10 @@ async function sendMessage(content, autoSendBody = null) {
             if (!useVisionTask && supportsWebGPUImageAssist() && imageAssistMessages.length > 0) {
                 setMessageLoadingState(assistantMsg, {
                     phase: 'initializing',
-                    detail: `Analizando ${imageAssistMessages.reduce((sum, msg) => sum + normalizeImageMeta(msg.imageMeta, msg.images || []).length, 0)} imagen(es) con ${WEBGPU_IMAGE_ASSIST.label}.`,
+                    detail: `Analizando ${imageAssistMessages.reduce((sum, msg) => sum + normalizeImageMeta(msg.imageMeta, msg.images || []).length, 0)} imagen(es) con ${getVisionAssistDef().label}.`,
                     modelLabel,
                     deviceLabel,
-                    sourceUrl: buildWebGPURepoUrl(WEBGPU_IMAGE_ASSIST.id),
+                    sourceUrl: buildWebGPURepoUrl(getVisionAssistDef().id),
                     progress: 0,
                     progressLabel: 'Vision',
                     file: '',
@@ -1207,11 +1207,11 @@ async function sendMessage(content, autoSendBody = null) {
                             detail: `Analizando imagenes adjuntas localmente para enriquecer el prompt.`,
                             modelLabel,
                             deviceLabel,
-                            sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(WEBGPU_IMAGE_ASSIST.id),
+                            sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(getVisionAssistDef().id),
                             progress: pct,
                             progressLabel: 'Vision',
                             file: progress.file || '',
-                            note: `Modelo auxiliar: ${WEBGPU_IMAGE_ASSIST.id}`
+                            note: `Modelo auxiliar: ${getVisionAssistDef().id}`
                         });
                         updateStreamingMessage(msgIdx, assistantMsg);
                     });
@@ -1276,11 +1276,11 @@ async function sendMessage(content, autoSendBody = null) {
                                 detail: 'Analizando imagenes localmente para recuperar la conversacion.',
                                 modelLabel: fallbackModelLabel,
                                 deviceLabel,
-                                sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(WEBGPU_IMAGE_ASSIST.id),
+                                sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(getVisionAssistDef().id),
                                 progress: pct,
                                 progressLabel: 'Fallback',
                                 file: progress.file || '',
-                                note: `Modelo auxiliar: ${WEBGPU_IMAGE_ASSIST.id}`
+                                note: `Modelo auxiliar: ${getVisionAssistDef().id}`
                             });
                             updateStreamingMessage(msgIdx, assistantMsg);
                         });

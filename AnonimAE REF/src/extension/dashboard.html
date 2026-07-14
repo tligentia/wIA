@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="es" data-animae-app="true">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnonimAE · Consola Autónoma Integrada</title>
+  <meta name="description" content="Local, private, offline, and auditable reversible anonymization platform for enterprise security compliance.">
+  
+  <link rel="icon" type="image/png" href="icons/icon-pro-48.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Premium visual button overrides for seamless offline console close trigger */
+    .btn-close-console-item {
+      background: rgba(244, 63, 94, 0.1) !important;
+      color: var(--accent-rose, #f43f5e) !important;
+      border: 1px solid rgba(244, 63, 94, 0.3) !important;
+    }
+    .btn-close-console-item:hover {
+      background: rgba(244, 63, 94, 0.18) !important;
+      border-color: var(--accent-rose, #f43f5e) !important;
+      color: var(--text-primary) !important;
+    }
+  </style>
+</head>
+<body class="selection-red">
+
+  <div class="app-container">
+    
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="sidebar">
+      <div class="logo-section">
+        <div class="logo-icon">
+          <img src="icons/icon-pro-128.png" alt="AnonimAE Logo" width="36" height="36">
+        </div>
+        <div class="logo-text">
+          <h1>AnonimAE</h1>
+          <div class="logo-subtitle-row">
+            <span>Consola Autónoma</span>
+          </div>
+        </div>
+      </div>
+      
+      <ul class="nav-menu">
+        <li>
+          <a class="nav-item active" data-tab="tab-dashboard">
+            Panel
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-anonymizer">
+            Anonimizar
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-deanonymizer">
+            Restaurar
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-rules">
+            Reglas
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-settings">
+            Ajustes
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-ledger">
+            Auditoría
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-extension">
+            Extensión
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tab-design">
+            Arquitectura
+          </a>
+        </li>
+        <li style="margin-top: 15px; border-top: 1px dashed var(--border-gray); padding-top: 15px;">
+          <a class="nav-item btn-close-console-item" id="btn-close-console">
+            Cerrar Consola
+          </a>
+        </li>
+      </ul>
+      
+      <div class="sidebar-footer">
+        <div class="theme-control">
+          <span class="theme-control-label">Tema</span>
+          <button class="theme-cycle-btn theme-cycle-btn-sidebar" type="button" data-theme-cycle title="Tema: Sistema" aria-label="Tema: Sistema"></button>
+        </div>
+        <div class="status-badge">
+          <div class="status-dot"></div>
+          <span>Modo Autónomo Local</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN INTERACTIVE SPACE -->
+    <main class="main-content">
+      
+      <!-- NOTIFICATION OVERLAYS CONTAINER -->
+      <div class="notif-container" id="notification-root"></div>
+
+      <!-- Scrollable content wrapper -->
+      <div class="content-sections-wrapper">
+
+        <!-- ==========================================
+             TAB: DASHBOARD
+             ========================================== -->
+        <section class="content-section active" id="tab-dashboard">
+          <div class="section-header">
+            <h2>Panel de Control</h2>
+            <p>Consola local de indicadores de privacidad y aceleración en navegador de AnonimAE.</p>
+          </div>
+
+          <!-- Hardware & Diagnostic grid -->
+          <div class="glass-card">
+            <div class="glass-card-header">
+              <h3><i class="fa-solid fa-microchip text-cyan"></i> Diagnóstico del navegador</h3>
+              <span class="status-badge status-badge-red" id="hw-acc-method">Detectando</span>
+            </div>
+            <div class="hw-grid">
+              <div class="hw-card">
+                <div class="hw-label">Hilos del Navegador</div>
+                <div class="hw-value" id="cpu-model">Motor JavaScript</div>
+                <div class="hw-subtext"><span id="cpu-threads">0</span> hilos concurrentes detectados</div>
+              </div>
+              
+              <div class="hw-card">
+                <div class="hw-label">Aceleración Gráfica (WebGL)</div>
+                <div class="hw-subtext" style="margin-top: 6px;">
+                  <span class="hw-pill" id="flag-webgl">WebGL 1.0</span>
+                  <span class="hw-pill" id="flag-webgl2">WebGL 2.0</span>
+                  <span class="hw-pill" id="flag-canvas">Canvas 2D</span>
+                </div>
+              </div>
+
+              <div class="hw-card">
+                <div class="hw-label">Procesador Gráfico (GPU)</div>
+                <div class="hw-value" id="gpu-model">Cargando</div>
+                <div class="hw-subtext">Aceleración: <span class="hw-pill pill-purple" id="gpu-acc-mode">Cargando</span></div>
+              </div>
+
+              <div class="hw-card">
+                <div class="hw-label">WebGPU del navegador</div>
+                <div class="hw-value" id="webgpu-status">Validando</div>
+                <div class="hw-subtext">Para modelos NLP ONNX locales</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats indicators -->
+          <div class="stats-grid">
+            <div class="glass-card stat-card">
+              <div class="hw-label">Protecciones Locales</div>
+              <div class="stat-num" id="stats-docs">0</div>
+            </div>
+            <div class="glass-card stat-card">
+              <div class="hw-label">Mapeos AES Guardados</div>
+              <div class="stat-num" id="stats-entities">0</div>
+            </div>
+            <div class="glass-card stat-card">
+              <div class="hw-label">Habilitación Reguladora</div>
+              <div class="stat-num" style="font-size: 24px; margin-top: 24px;">RGPD / AI-Act</div>
+            </div>
+          </div>
+
+          <!-- Recent Audit log preview -->
+          <div class="glass-card">
+            <div class="glass-card-header">
+              <h3><i class="fa-solid fa-clock-rotate-left"></i> Registros de Auditoría Recientes</h3>
+              <button class="btn btn-dark" style="padding: 6px 14px; font-size: 11px;" id="btn-goto-ledger">Ver todo</button>
+            </div>
+            <div class="table-wrapper">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Fecha/Hora</th>
+                    <th>ID de Referencia (ANON_REF)</th>
+                    <th>Entidades</th>
+                    <th>Cant.</th>
+                    <th>Motor / Aceleración</th>
+                    <th>Info</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-logs-tbody">
+                  <tr>
+                    <td colspan="6" class="table-empty">Cargando registros...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: ANONYMIZER
+             ========================================== -->
+        <section class="content-section" id="tab-anonymizer">
+          <div class="section-header">
+            <h2>Anonimización reversible</h2>
+            <p>Pega tu prompt original o sube archivos locales para anonimizarlos de forma consistente y segura.</p>
+          </div>
+
+          <!-- Controls container -->
+          <div class="glass-card control-bar" style="position: relative; z-index: 100;">
+            <div class="input-group">
+              <button class="btn btn-dark file-upload-btn">
+                <i class="fa-solid fa-file-arrow-up"></i> Cargar archivo
+                <input type="file" id="file-uploader" accept=".txt,.md,.json,.html,.csv">
+              </button>
+              <span id="file-upload-status" style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Formatos: TXT, MD, JSON, CSV</span>
+            </div>
+
+            <div class="input-group input-group-popover">
+              <label for="select-nlp-model"><i class="fa-solid fa-brain text-cyan"></i> Perfil local:</label>
+              <div class="inline-control-row">
+                <select id="select-nlp-model" class="input-shield select-compact">
+                  <option value="rules-core" selected>Reglas PRO</option>
+                </select>
+                <button id="btn-manage-models" class="btn btn-dark btn-square" title="Gestionar perfiles locales">
+                  <i class="fa-solid fa-sliders"></i>
+                </button>
+              </div>
+
+              <!-- Floating models manager popover -->
+              <div id="models-manager-popover" class="glass-card" style="display: none; position: absolute; top: 65px; right: 0; z-index: 9999; width: 290px; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-gray); padding-bottom: 8px;">
+                  <h4 style="font-size: 12px; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-gears text-cyan"></i> Perfiles locales
+                    <i id="btn-update-models-catalog" class="fa-solid fa-rotate" style="cursor: pointer; color: var(--brand-red); font-size: 11px; margin-left: 6px; transition: 0.2s;" title="Restaurar catálogo local"></i>
+                  </h4>
+                  <i id="close-models-manager" class="fa-solid fa-xmark" style="cursor: pointer; opacity: 0.7; transition: 0.2s;"></i>
+                </div>
+                
+                <div id="models-manager-list" style="max-height: 130px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-right: 4px;">
+                  <!-- Dynamic items -->
+                </div>
+                
+                <div style="border-top: 1px solid var(--border-gray); padding-top: 12px;">
+                  <h5 style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 800;">Añadir perfil</h5>
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <input type="text" id="new-model-id" class="input-shield input-compact-full" placeholder="id: jurídico, contratos, rrhh...">
+                    <input type="text" id="new-model-name" class="input-shield input-compact-full" placeholder="Nombre visible del perfil">
+                    <button id="btn-add-model" class="btn btn-cyan btn-full-compact">
+                      <i class="fa-solid fa-plus"></i> Añadir perfil
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="select-ai-engine"><i class="fa-solid fa-microchip text-cyan"></i> IA:</label>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <select id="select-ai-engine" class="input-shield select-compact">
+                </select>
+                <span id="ai-engine-status" class="field-status">Reglas locales activas.</span>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="anon-password"><i class="fa-solid fa-shield-halved"></i> Clave:</label>
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="anon-password" class="input-shield input-password" placeholder="Clave maestra para derivación" value="ClavePrivadaAnimAE123!">
+                <i class="fa-regular fa-eye toggle-password" data-target="anon-password"></i>
+              </div>
+            </div>
+
+            <button class="btn btn-cyan" id="btn-run-anonymize">
+              <i class="fa-solid fa-shield-cat"></i> Anonimizar
+            </button>
+          </div>
+
+          <!-- Split editor panes -->
+          <div class="editor-layout">
+            <!-- original pane -->
+            <div class="glass-card editor-pane">
+              <div class="editor-label">
+                <span>Texto Original / Sensible</span>
+                <span id="char-count-orig" style="color: var(--text-muted);">0 caracteres</span>
+              </div>
+              <div class="editor-textarea-wrapper">
+                <textarea id="textarea-original" class="editor-textarea" placeholder="Pega tu correo, acta, contrato o texto con datos personales aquí...
+
+Ejemplo:
+Estimado Juan Pérez,
+Hemos recibido su solicitud relacionada con el DNI 12345678Z. Su transferencia bancaria se realizará a la cuenta IBAN ES2112345678901234567890. Para cualquier duda, puede contactar al teléfono +34 600123456 o al correo juan.perez@acme.com.
+
+Atentamente,
+ACME S.L."></textarea>
+              </div>
+              <div class="editor-textarea-footer editor-footer-info" style="display: flex; justify-content: space-between; font-size: 11px; padding: 8px 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-black);">
+                <span>Todo el análisis se procesa localmente</span>
+                <span>100% Privado</span>
+              </div>
+            </div>
+
+            <!-- anonymized pane -->
+            <div class="glass-card editor-pane">
+              <div class="editor-label">
+                <span>Texto Anonimizado</span>
+                <div>
+                  <button class="btn btn-dark btn-icon" id="btn-copy-anon" title="Copiar al portapapeles"><i class="fa-regular fa-copy"></i></button>
+                  <button class="btn btn-dark btn-icon" id="btn-download-anon" title="Descargar como archivo"><i class="fa-solid fa-file-arrow-down"></i></button>
+                </div>
+              </div>
+              <div class="editor-textarea-wrapper">
+                <textarea id="textarea-anonymized" class="editor-textarea" readonly placeholder="El texto anonimizado se generará aquí con placeholders del estilo [Nombre_001] consistentes..."></textarea>
+              </div>
+              <div class="editor-textarea-footer editor-footer-info" style="display: flex; justify-content: space-between; font-size: 11px; padding: 8px 12px; background: var(--bg-secondary); border-top: 1px solid var(--border-black);">
+                <span id="anon-ref-label">ANON_REF: Ninguno</span>
+                <span id="detection-summary">0 reemplazos</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Entity Toggles checklist -->
+          <div class="glass-card">
+            <div class="glass-card-header">
+              <h3><i class="fa-solid fa-list-check"></i> Activar / Desactivar Detectores de Entidades</h3>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px;">
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-regular fa-envelope text-cyan" style="width: 18px;"></i> Email</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="email">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-phone text-cyan" style="width: 18px;"></i> Teléfonos</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="telefono">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-fax text-cyan" style="width: 18px;"></i> Faxes</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="fax">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-id-card text-cyan" style="width: 18px;"></i> DNI / NIE / CIF</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="dni">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-building-columns text-cyan" style="width: 18px;"></i> IBAN Bancario</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="iban">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-credit-card text-cyan" style="width: 18px;"></i> Tarjetas</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="tarjeta">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-gavel text-cyan" style="width: 18px;"></i> Jurídico / Autos</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="juridico">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-folder-open text-cyan" style="width: 18px;"></i> Diligencias</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="diligencias">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-map-location-dot text-cyan" style="width: 18px;"></i> Cód. Postales</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="codigo_postal">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-passport text-cyan" style="width: 18px;"></i> Pasaporte</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="pasaporte">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-user text-cyan" style="width: 18px;"></i> Nombres</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="nombre">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-users-gear text-cyan" style="width: 18px;"></i> Empresas</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="organizacion">
+                  <span class="slider"></span>
+                </div>
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa-solid fa-location-dot text-cyan" style="width: 18px;"></i> Direcciones</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" checked class="entity-toggle" data-entity="direccion">
+                  <span class="slider"></span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: SETTINGS
+             ========================================== -->
+        <section class="content-section" id="tab-settings">
+          <div class="section-header">
+            <h2>Ajustes</h2>
+            <p>Gestiona los sistemas de IA disponibles y conserva cada configuración de forma local e independiente.</p>
+          </div>
+
+          <div class="settings-layout">
+            <div class="glass-card settings-panel">
+              <div class="glass-card-header">
+                <h3><i class="fa-solid fa-gears"></i> Sistema IA activo</h3>
+                <span id="ai-settings-auth-badge" class="hw-pill pill-cyan">LOCAL</span>
+              </div>
+
+              <div class="settings-form-grid">
+                <label class="settings-field" for="select-ai-provider-settings">
+                  <span>Proveedor</span>
+                  <select id="select-ai-provider-settings" class="input-shield"></select>
+                </label>
+
+                <label class="settings-field" for="input-ai-model">
+                  <span>Modelo</span>
+                  <input id="input-ai-model" class="input-shield" type="text" placeholder="Modelo activo">
+                </label>
+
+                <label class="settings-field settings-field-wide" for="input-ai-endpoint">
+                  <span>Endpoint</span>
+                  <input id="input-ai-endpoint" class="input-shield" type="url" placeholder="URL local o cloud">
+                </label>
+
+                <label class="settings-field" for="input-ai-api-key">
+                  <span>API Key</span>
+                  <div class="settings-secret-row">
+                    <input id="input-ai-api-key" class="input-shield" type="password" placeholder="Solo si el proveedor lo requiere" autocomplete="off">
+                    <button id="btn-toggle-ai-key" class="btn btn-dark btn-square" type="button" title="Mostrar u ocultar API key">
+                      <i class="fa-regular fa-eye"></i>
+                    </button>
+                  </div>
+                </label>
+
+                <label class="settings-field" for="input-ai-max-tokens">
+                  <span>Tokens máximos</span>
+                  <input id="input-ai-max-tokens" class="input-shield" type="number" min="256" max="200000" step="256" placeholder="8192">
+                </label>
+
+                <label class="settings-field settings-toggle-field" for="toggle-ai-cors">
+                  <span>CORS asistido</span>
+                  <div class="settings-toggle-row">
+                    <div>
+                      <strong id="ai-cors-mode-label">Desactivado</strong>
+                      <small>Usa el puente seguro de la extensión cuando el navegador bloquee el endpoint.</small>
+                    </div>
+                    <div class="toggle-switch">
+                      <input type="checkbox" id="toggle-ai-cors">
+                      <span class="slider"></span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <div class="settings-status-card">
+                <strong id="ai-settings-provider-label">DLP local</strong>
+                <span id="ai-settings-status">Anonimización por reglas locales. No se envía contenido a modelos.</span>
+              </div>
+
+              <div class="settings-help-card">
+                <strong id="ai-cors-help-title">CORS asistido</strong>
+                <span id="ai-cors-help-text">Actívalo solo si tu endpoint local o proveedor bloquea peticiones desde la consola del navegador.</span>
+                <code id="ai-cors-help-code">Sin comando necesario.</code>
+              </div>
+
+              <div class="settings-actions-row">
+                <button id="btn-save-ai-settings" class="btn btn-cyan">
+                  <i class="fa-solid fa-check"></i> Guardar sistema IA
+                </button>
+                <button id="btn-reset-ai-settings" class="btn btn-dark">
+                  <i class="fa-solid fa-rotate"></i> Restaurar valores
+                </button>
+              </div>
+            </div>
+
+            <div class="glass-card settings-panel">
+              <div class="glass-card-header">
+                <h3><i class="fa-solid fa-microchip"></i> Catálogo multimotor</h3>
+                <span class="hw-pill">Local + Cloud</span>
+              </div>
+              <div id="ai-provider-cards" class="ai-provider-cards"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: DE-ANONYMIZER
+             ========================================== -->
+        <section class="content-section" id="tab-deanonymizer">
+          <div class="section-header">
+            <h2>Restauración controlada</h2>
+            <p>Inserta tu texto anonimizado (debe contener el pie de firma `[Referencia: &lt;UUID&gt;]`) y proporciona la clave correspondiente para restaurar de forma segura los datos originales.</p>
+          </div>
+
+          <!-- Controls container -->
+          <div class="glass-card control-bar">
+            <div class="input-group">
+              <button class="btn btn-dark file-upload-btn">
+                <i class="fa-solid fa-file-arrow-up"></i> Cargar archivo
+                <input type="file" id="deanon-file-uploader" accept=".txt,.md,.json,.html,.csv">
+              </button>
+              <span id="deanon-file-status" style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Formatos: TXT, MD, JSON, CSV</span>
+            </div>
+
+            <div class="input-group">
+              <label for="deanon-ref"><i class="fa-solid fa-fingerprint"></i> ID Ref:</label>
+              <input type="text" id="deanon-ref" class="input-shield" style="width: 200px;" placeholder="UUID (Opcional)">
+            </div>
+
+            <div class="input-group">
+              <label for="deanon-password"><i class="fa-solid fa-key"></i> Clave:</label>
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="deanon-password" class="input-shield" placeholder="Clave maestra correspondiente" style="padding-right: 40px; width: 220px;" value="ClavePrivadaAnimAE123!">
+                <i class="fa-regular fa-eye toggle-password" data-target="deanon-password" style="position: absolute; right: 12px; cursor: pointer; color: var(--text-muted); transition: var(--transition-fast);"></i>
+              </div>
+            </div>
+
+            <button class="btn btn-purple" id="btn-run-deanonymize">
+              <i class="fa-solid fa-unlock-keyhole"></i> Desanonimizar
+            </button>
+          </div>
+
+          <!-- Split editor panes -->
+          <div class="editor-layout">
+            <!-- original pane -->
+            <div class="glass-card editor-pane">
+              <div class="editor-label">
+                <span>Texto Anonimizado / Placeholders</span>
+              </div>
+              <div class="editor-textarea-wrapper">
+                <textarea id="textarea-anon-input" class="editor-textarea" placeholder="Pega aquí el contenido con los placeholders y su firma de referencia...
+
+Ejemplo:
+Estimado [Nombre_001],
+Hemos recibido su solicitud relacionada con el DNI [DNI_001].
+
+[Referencia: 7f4c2e90-98b1-4df7-a2e2-91c9e7c82e11]"></textarea>
+              </div>
+            </div>
+
+            <!-- anonymized pane -->
+            <div class="glass-card editor-pane">
+              <div class="editor-label">
+                <span>Texto Original Restaurado</span>
+                <div>
+                  <button class="btn btn-dark btn-icon" id="btn-clean-asterisks" title="Eliminar doble asterisco (**)"><i class="fa-solid fa-asterisk"></i></button>
+                  <button class="btn btn-dark btn-icon" id="btn-copy-restored" title="Copiar al portapapeles"><i class="fa-regular fa-copy"></i></button>
+                  <button class="btn btn-dark btn-icon" id="btn-download-restored" title="Descargar como archivo"><i class="fa-solid fa-file-arrow-down"></i></button>
+                </div>
+              </div>
+              <div class="editor-textarea-wrapper">
+                <textarea id="textarea-restored" class="editor-textarea" readonly placeholder="El texto original reconstruido aparecerá aquí después de validar la firma de auditoría local..."></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: RULES CONFIGURATOR
+             ========================================== -->
+        <section class="content-section" id="tab-rules">
+          <div class="section-header">
+            <h2>Configurador de Reglas de Detección</h2>
+            <p>Inspecciona las expresiones regulares de seguridad e diccionarios activos en tu motor local.</p>
+          </div>
+
+          <div class="rules-container">
+            <!-- Regex view only card -->
+            <div class="glass-card">
+              <div class="glass-card-header">
+                <h3><i class="fa-solid fa-magnifying-glass-chart"></i> Expresiones Regulares Activas (regex)</h3>
+                <span class="status-badge">Modo lectura cifrada</span>
+              </div>
+              
+              <div class="rules-grid" id="regex-rules-container">
+                <!-- Dynamically populated -->
+                <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">Cargando expresiones regulares...</div>
+              </div>
+            </div>
+
+            <!-- Dictionary view & edit card -->
+            <div class="glass-card">
+              <div class="glass-card-header">
+                <h3><i class="fa-solid fa-book-atlas"></i> Diccionarios de Alta Fidelidad (Spanish specialized)</h3>
+                <button class="btn btn-cyan" id="btn-save-rules"><i class="fa-regular fa-floppy-disk"></i> Guardar</button>
+              </div>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                <div class="dict-block" style="display: flex; flex-direction: column; gap: 8px;">
+                  <div class="editor-label">Nombres Comunes</div>
+                  <textarea id="dict-names" class="dict-textarea" placeholder="Un nombre por línea"></textarea>
+                  <div class="hw-subtext">Causa reemplazos del placeholder <strong>[Nombre_XXX]</strong></div>
+                </div>
+
+                <div class="dict-block" style="display: flex; flex-direction: column; gap: 8px;">
+                  <div class="editor-label">Organizaciones Comunes</div>
+                  <textarea id="dict-orgs" class="dict-textarea" placeholder="Una organización por línea"></textarea>
+                  <div class="hw-subtext">Causa reemplazos del placeholder <strong>[Empresa_XXX]</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: AUDIT LEDGER (AUDITORÍA)
+             ========================================== -->
+        <section class="content-section" id="tab-ledger">
+          <div class="section-header">
+            <h2>Bitácora General de Auditoría</h2>
+            <p>Trazabilidad criptográfica absoluta. El sellado digital local garantiza que todas las restauraciones quedan registradas de manera inmutable.</p>
+          </div>
+
+          <div class="glass-card">
+            <div class="glass-card-header">
+              <h3><i class="fa-solid fa-shield-halved"></i> Transacciones locales registradas (audit.json)</h3>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <button id="btn-export-ledger" class="btn btn-dark" style="font-size: 11px; padding: 6px 14px;">Exportar</button>
+                <button id="btn-import-ledger" class="btn btn-dark" style="font-size: 11px; padding: 6px 14px;">Importar</button>
+                <input type="file" id="import-ledger-file" accept=".json,application/json" style="display: none;">
+                <button id="btn-clear-logs" class="btn btn-dark" style="color: var(--brand-red); border-color: var(--brand-red); font-size: 11px; padding: 6px 14px;">Vaciar Historial</button>
+                <div class="input-group">
+                  <input type="text" id="audit-search" class="input-shield" style="padding: 6px 12px; width: 220px; font-size: 12.5px;" placeholder="Buscar por ANON_REF...">
+                </div>
+              </div>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Fecha/Hora</th>
+                    <th>UUID Ref (ANON_REF)</th>
+                    <th>Hash Original</th>
+                    <th>Hash Anonimizado</th>
+                    <th>Entidades</th>
+                    <th>Cant.</th>
+                    <th>Motor Utilizado</th>
+                    <th>Aceleración</th>
+                    <th>Info</th>
+                  </tr>
+                </thead>
+                <tbody id="ledger-table-tbody">
+                  <!-- Dynamically populated -->
+                  <tr>
+                    <td colspan="9" class="table-empty table-empty-large">Cargando registros...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: EXTENSION INSTALL
+             ========================================== -->
+        <section class="content-section" id="tab-extension">
+          <div class="section-header">
+            <h2>Extensión del navegador</h2>
+            <p>Descarga el plugin de AnonimAE e instálalo manualmente en modo desarrollo.</p>
+          </div>
+
+          <div class="extension-install-layout">
+            <div class="glass-card extension-download-card">
+              <div>
+                <div class="install-kicker">Plugin local-first</div>
+                <h3>AnonimAE para Chrome, Edge, Brave y Opera</h3>
+                <p>
+                  La extensión protege prompts y archivos directamente en tu navegador. El procesamiento es local:
+                  los textos sensibles se anonimizan antes de compartirlos con servicios externos.
+                </p>
+              </div>
+              <div class="extension-actions">
+                <a class="btn btn-cyan btn-install-primary" href="https://github.com/tligentia/AnonimAE/releases/latest" target="_blank" rel="noopener">
+                  Descargar plugin
+                </a>
+                <a class="btn btn-dark" href="https://github.com/tligentia/AnonimAE/releases" target="_blank" rel="noopener">
+                  Ver versiones
+                </a>
+              </div>
+              <p class="install-note">
+                En GitHub, abre la última versión y descarga el archivo ZIP de la extensión desde la sección Assets.
+              </p>
+            </div>
+
+            <div class="glass-card extension-steps-card">
+              <div class="glass-card-header">
+                <h3>Instalación manual</h3>
+              </div>
+              <ol class="install-steps">
+                <li>
+                  <span class="step-number">1</span>
+                  <div>
+                    <strong>Descarga y descomprime el ZIP.</strong>
+                    <p>Guarda la carpeta resultante en una ubicación fácil de encontrar.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="step-number">2</span>
+                  <div>
+                    <strong>Abre la página de extensiones.</strong>
+                    <p>En Chrome, Edge, Brave u Opera escribe <code>chrome://extensions</code> en la barra de direcciones.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="step-number">3</span>
+                  <div>
+                    <strong>Activa el modo de desarrollador.</strong>
+                    <p>El interruptor suele estar en la parte superior derecha de la pantalla.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="step-number">4</span>
+                  <div>
+                    <strong>Carga la extensión sin empaquetar.</strong>
+                    <p>Haz clic en <code>Cargar descomprimida</code> y selecciona la carpeta de AnonimAE que acabas de descomprimir.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="step-number">5</span>
+                  <div>
+                    <strong>Comprueba que aparece AnonimAE.</strong>
+                    <p>Fija el icono en la barra del navegador y revisa sus ajustes antes de usarla con tus herramientas de IA.</p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB: DESIGN & ARCHITECTURE
+             ========================================== -->
+        <section class="content-section" id="tab-design">
+          <div class="section-header">
+            <h2>Arquitectura del Sistema y Cumplimiento</h2>
+            <p>Detalles técnicos de diseño de seguridad offline y adecuación normativa.</p>
+          </div>
+
+          <div class="design-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <!-- Left side: flow -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 20px;">
+              <div class="glass-card-header">
+                <h3><i class="fa-solid fa-sitemap"></i> Estructura y Flujo Criptográfico</h3>
+              </div>
+              
+              <div class="c4-visual" style="background: #090d16; padding: 15px; border-radius: 4px; display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-black);">
+                <svg width="460" height="340" viewBox="0 0 460 340" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="460" height="340" rx="4" fill="#090d16"/>
+                  <!-- Inputs -->
+                  <rect x="20" y="30" width="100" height="40" rx="2" fill="#1e293b" stroke="#ef4444"/>
+                  <text x="32" y="55" fill="#f8fafc" font-family="Inter" font-size="11" font-weight="700">Texto original</text>
+                  
+                  <rect x="20" y="90" width="100" height="40" rx="2" fill="#1e293b" stroke="#d90000"/>
+                  <text x="40" y="115" fill="#f8fafc" font-family="Inter" font-size="11" font-weight="700">Password</text>
+
+                  <!-- Engine node -->
+                  <rect x="180" y="30" width="120" height="100" rx="4" fill="rgba(15, 23, 42, 0.6)" stroke="#ef4444" stroke-width="2"/>
+                  <text x="200" y="65" fill="#ef4444" font-family="Inter" font-size="13" font-weight="900">DETECCIÓN</text>
+                  <text x="205" y="85" fill="#94a3b8" font-family="Inter" font-size="11">y Placeholder</text>
+                  <text x="215" y="105" fill="#d90000" font-family="Inter" font-size="11">Consistente</text>
+
+                  <!-- Encryption node -->
+                  <rect x="180" y="190" width="120" height="110" rx="4" fill="rgba(15, 23, 42, 0.6)" stroke="#d90000" stroke-width="2"/>
+                  <text x="195" y="215" fill="#d90000" font-family="Inter" font-size="13" font-weight="900">AES-256-GCM</text>
+                  <text x="205" y="235" fill="#94a3b8" font-family="Inter" font-size="11">Derivación PBKDF2</text>
+                  <text x="208" y="255" fill="#94a3b8" font-family="Inter" font-size="11">Salt: Random hex</text>
+                  <text x="205" y="275" fill="#d90000" font-family="Inter" font-size="11">Integridad GCM</text>
+
+                  <!-- Data Storage output -->
+                  <rect x="340" y="190" width="100" height="110" rx="2" fill="#020617" stroke="#d90000"/>
+                  <text x="350" y="220" fill="#d90000" font-family="Inter" font-size="11" font-weight="900">Almacenamiento local</text>
+                  <text x="355" y="245" fill="#94a3b8" font-family="Inter" font-size="10">map_UUID</text>
+                  <text x="355" y="265" fill="#94a3b8" font-family="Inter" font-size="10">auditLogs</text>
+                  <text x="360" y="285" fill="#d90000" font-family="Inter" font-size="10">100% local</text>
+
+                  <!-- Connectors -->
+                  <path d="M120 50 H180" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="3 3"/>
+                  <path d="M120 110 H180" stroke="#d90000" stroke-width="1.5" stroke-dasharray="3 3"/>
+                  <path d="M240 130 V190" stroke="#f8fafc" stroke-width="1.5"/>
+                  <path d="M300 245 H340" stroke="#d90000" stroke-width="1.5"/>
+                </svg>
+              </div>
+              
+              <p style="font-size: 13.5px; color: var(--text-secondary); font-weight: 500;">El flujo criptográfico garantiza que la desanonimización no se puede derivar sin la clave exacta de cifrado. Incluso si el atacante obtiene el archivo de mapeo, la clave PBKDF2 posee suficiente coste computacional para resistir ataques por fuerza bruta.</p>
+            </div>
+
+            <!-- Lista de cumplimiento -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 20px;">
+              <div class="glass-card-header">
+                <h3><i class="fa-solid fa-scale-balanced"></i> Conformidad RGPD y Ley IA</h3>
+              </div>
+
+              <ul class="info-list" style="list-style: none; display: flex; flex-direction: column; gap: 16px; padding: 0; margin: 0;">
+                <li style="display: flex; gap: 12px;">
+                  <i class="fa-solid fa-circle-check" style="color: #d90000; font-size: 16px; margin-top: 2px;"></i>
+                  <div>
+                    <div style="font-size: 13.5px; font-weight: bold; color: var(--text-primary);">Minimización de Datos (Art. 5 RGPD)</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 3px;">Evita el envío accidental de información personal e identificadores directos e indirectos a APIs terceras de LLM (ChatGPT, Claude, etc.) mediante filtrado previo de placeholders.</div>
+                  </div>
+                </li>
+
+                <li style="display: flex; gap: 12px;">
+                  <i class="fa-solid fa-circle-check" style="color: #d90000; font-size: 16px; margin-top: 2px;"></i>
+                  <div>
+                    <div style="font-size: 13.5px; font-weight: bold; color: var(--text-primary);">Seguridad del Tratamiento (Art. 32 RGPD)</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 3px;">El cifrado simétrico AES-256-GCM garantiza que los mapeos identificativos se almacenan localmente de forma ininteligible y protegida de accesos no autorizados.</div>
+                  </div>
+                </li>
+
+                <li style="display: flex; gap: 12px;">
+                  <i class="fa-solid fa-circle-check" style="color: #d90000; font-size: 16px; margin-top: 2px;"></i>
+                  <div>
+                    <div style="font-size: 13.5px; font-weight: bold; color: var(--text-primary);">Trazabilidad de Decisiones (Ley de IA de la UE)</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 3px;">Cumple con la trazabilidad técnica mediante la bitácora inmutable en tiempo real, registrando las metodologías de aceleración, hashes y número de reemplazos.</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+      </div> <!-- End .content-sections-wrapper -->
+
+      <!-- ==========================================
+           LOCKED FOOTER (Target Copied Design)
+           ========================================== -->
+      <footer class="site-footer">
+        <div class="footer-container">
+          <div class="version-pill">
+            <span id="app-version-tag">Cargando</span>
+          </div>
+
+          <!-- Center: Dynamic metric pill -->
+          <div class="metrics-outer-pill">
+            <div id="footer-metric-ready" class="metric-indicator-active" style="padding: 4px 20px; color: #9ca3af; gap: 8px;">
+              <div class="metric-pulse-dot" style="background-color: #d1d5db; animation: none;"></div>
+              <span style="font-size: 9px; font-weight: 900; letter-spacing: 0.2em; text-transform: uppercase;">Sistema Local Autónomo Activo</span>
+            </div>
+            
+            <div id="footer-metric-active" class="metric-indicator-active" style="display: none;">
+              <!-- Latency pill -->
+              <div class="metric-pill-item">
+                <span class="metric-pulse-dot"></span>
+                <span class="metric-label-text">LAT:</span>
+                <span id="footer-metric-lat" class="metric-value-num">0ms</span>
+              </div>
+              <!-- Divider -->
+              <div class="metric-divider"></div>
+              <!-- Word Count pill -->
+              <div style="display: flex; align-items: center; gap: 8px; padding: 4px 16px;">
+                <span class="metric-label-text">VOL:</span>
+                <span id="footer-metric-vol" class="metric-value-num">0</span>
+                <span class="metric-unit-text">WDS</span>
+              </div>
+              <!-- Divider -->
+              <div class="metric-divider"></div>
+              <!-- Replacement count pill -->
+              <div style="display: flex; align-items: center; gap: 8px; padding: 4px 16px;">
+                <span id="footer-metric-obj-label" class="metric-label-text text-red-600">ANO:</span>
+                <span id="footer-metric-obj" class="metric-value-num">0</span>
+                <span class="metric-unit-text">OBJ</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Action Buttons & Credits -->
+          <div style="display: flex; align-items: center; gap: 24px;">
+            <button id="btn-footer-privacy" class="footer-btn-legal">
+              Cookies y Privacidad
+            </button>
+            <button id="btn-footer-protocol" class="footer-btn-protocol">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" style="width: 13px; height: 13px;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              </svg>
+              <span>Protocolo</span>
+              <span style="color: var(--brand-red); font-weight: 900; margin-left: 2px;">✓</span>
+            </button>
+            <div class="credits-divider"></div>
+            <div class="credits-links">
+              <a href="https://jesus.depablos.es/" target="_blank">Jesús de Pablos</a>
+              <span style="color: #e5e7eb;">/</span>
+              <a href="https://tligent.com/" target="_blank">Tligent</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Modal informativo de auditoría -->
+  <div id="audit-info-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 540px; width: 90%;">
+      <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-black); padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 style="font-family: var(--font-title); display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 900; margin: 0; text-transform: uppercase;">
+          <i class="fa-solid fa-circle-info" style="color: var(--brand-red);"></i> Detalles de Transacción (Local)
+        </h3>
+        <button id="close-audit-modal" class="btn-close" style="font-size: 16px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="detail-row"><span class="detail-label">ANON_REF:</span> <span id="modal-anon-ref" class="detail-value text-highlight" style="font-weight: 900;"></span></div>
+        <div class="detail-row"><span class="detail-label">Fecha/Hora:</span> <span id="modal-timestamp" class="detail-value"></span></div>
+        <div class="detail-row"><span class="detail-label">Usuario / Credenciales:</span> <span id="modal-user" class="detail-value" style="color: #d90000; font-weight: 800;"></span></div>
+        <div class="detail-row"><span class="detail-label">Origen / Plataforma URL:</span> <span id="modal-url" class="detail-value" style="word-break: break-all; font-weight: 700;"></span></div>
+        <div class="detail-row"><span class="detail-label">Entidades Protegidas:</span> <span id="modal-entities" class="detail-value"></span></div>
+        <div class="detail-row"><span class="detail-label">Reemplazos Totales:</span> <span id="modal-replacements" class="detail-value" style="font-weight: 800;"></span></div>
+        <div class="detail-row"><span class="detail-label">Motor DLP:</span> <span id="modal-engine" class="detail-value"></span></div>
+        <div class="detail-row"><span class="detail-label">Aceleración:</span> <span id="modal-acceleration" class="detail-value"></span></div>
+        
+        <div style="border-top: 1px solid var(--border-gray); padding-top: 12px; margin-top: 8px;">
+          <div style="margin-bottom: 6px; font-weight: 800; font-size: 11px; color: var(--text-secondary); text-transform: uppercase;">Sellado Digital Criptográfico (Local SHA-256)</div>
+          <div class="detail-row" style="font-size: 11px;"><span class="detail-label" style="font-size: 10px;">Hash Original:</span> <code id="modal-hash-orig" style="word-break: break-all; color: var(--text-muted); font-family: monospace; font-size: 10px; font-weight: 600;"></code></div>
+          <div class="detail-row" style="font-size: 11px; margin-top: 4px;"><span class="detail-label" style="font-size: 10px;">Hash Anonimizado:</span> <code id="modal-hash-anon" style="word-break: break-all; color: var(--text-muted); font-family: monospace; font-size: 10px; font-weight: 600;"></code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: Cookies y Privacidad (Legal Protocol) -->
+  <div id="legal-privacy-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content modal-content-legal">
+      <div class="modal-header-legal">
+        <h2 style="font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">Protocolo Legal y de Privacidad</h2>
+        <button id="close-privacy-modal" class="btn-close" style="font-size: 16px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body-scroll">
+        <section class="regulatory-item">
+          <h3 class="regulatory-tag">1. Procesamiento 100% Local (Edge Computing)</h3>
+          <p class="regulatory-desc">
+            Esta aplicación procesa sus documentos exclusivamente en la memoria RAM de su navegador. <strong>Ningún fragmento de texto, nombre o dato sensible se envía, almacena o registra en servidores externos.</strong> La tecnología utilizada se basa en expresiones regulares (RegEx) y motores de sustitución locales que garantizan la soberanía absoluta de sus datos.
+          </p>
+        </section>
+
+        <section class="regulatory-item">
+          <h3 class="regulatory-tag">2. Política de Cookies y Almacenamiento</h3>
+          <p class="regulatory-desc">
+            No utilizamos cookies de seguimiento, publicidad ni análisis de terceros. El sistema utiliza únicamente almacenamiento local del navegador (<code>chrome.storage.local</code> en extensión o <code>localStorage</code> en npm) para memorizar sus preferencias de sesión, logs históricos y llaves de desanonimización temporal. Esta información permanece en su dispositivo y los mapas sensibles se cifran simétricamente con AES-GCM.
+          </p>
+        </section>
+
+        <section class="regulatory-item">
+          <h3 class="regulatory-tag">3. Exención de Responsabilidad</h3>
+          <p class="regulatory-desc">
+            Aunque la herramienta es altamente precisa en la identificación de patrones y protección de datos, el usuario es el responsable final de verificar que la anonimización cumple con sus requisitos específicos de cumplimiento legal o RGPD antes de compartir el documento resultante con cualquier tercero o plataforma de IA.
+          </p>
+        </section>
+      </div>
+      <div style="border-top: 1px solid var(--border-black); padding-top: 16px; margin-top: 20px; display: flex; justify-content: flex-end;">
+        <button id="btn-accept-privacy" class="btn btn-cyan" style="padding: 10px 24px;">Acepto el Protocolo Local</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Protocolo de cumplimiento -->
+  <div id="compliance-protocol-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content modal-content-legal" style="max-width: 760px;">
+      <div class="modal-header-legal">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="metric-pulse-dot"></div>
+          <h2 style="font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">Protocolo local de cumplimiento</h2>
+        </div>
+        <button id="close-compliance-modal" class="btn-close" style="font-size: 16px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body-scroll">
+        <div style="display: flex; flex-direction: row; gap: 24px; align-items: flex-start; padding-bottom: 16px; border-bottom: 1px solid var(--border-gray); margin-bottom: 8px;">
+          <div style="flex-shrink: 0; background: var(--brand-red); color: #ffffff; padding: 12px 18px; font-weight: 900; font-size: 20px; border: 1px solid var(--border-black); transform: rotate(2deg); box-shadow: 2px 2px 0px rgba(0,0,0,0.15); text-align: center; line-height: 1.2;">
+            100%<br>LOCAL
+          </div>
+          <div>
+            <p style="font-size: 13px; font-weight: 800; text-transform: uppercase; color: var(--text-primary); margin-bottom: 2px;">Soberanía de Datos por Diseño</p>
+            <p style="font-size: 12.5px; color: var(--text-secondary); font-weight: 500; line-height: 1.5;">
+              Nuestra tecnología opera íntegramente en la memoria volátil de su navegador. A diferencia de las soluciones basadas en API externas, <strong>ningún dato sale de su dispositivo</strong>. Esto garantiza el cumplimiento técnico de los reglamentos más estrictos al no existir tratamiento por terceros ni transferencias de datos internacionales.
+            </p>
+          </div>
+        </div>
+
+        <div class="compliance-grid">
+          <div class="regulatory-item">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--brand-red); margin-bottom: 2px;">
+              <i class="fa-solid fa-shield-halved"></i>
+              <span class="regulatory-title" style="font-size: 14px;">LOPDGDD</span>
+            </div>
+            <span class="regulatory-subtitle">Ley de Protección de Datos en España</span>
+            <p class="regulatory-desc" style="font-size: 12px; margin-top: 4px;">
+              Aseguramos el tratamiento de datos personales bajo los derechos ARSOPOL (Acceso, Rectificación, Supresión, Oposición, Portabilidad, Olvido y Limitación) en territorio nacional español de forma 100% controlada.
+            </p>
+          </div>
+
+          <div class="regulatory-item">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--brand-red); margin-bottom: 2px;">
+              <i class="fa-solid fa-globe"></i>
+              <span class="regulatory-title" style="font-size: 14px;">RGPD</span>
+            </div>
+            <span class="regulatory-subtitle">Reglamento General (UE) 2016/679</span>
+            <p class="regulatory-desc" style="font-size: 12px; margin-top: 4px;">
+              Cumplimiento estricto de la normativa europea sobre minimización de datos y transparencia. El procesamiento 100% local en origen elimina cualquier posibilidad de brechas de seguridad o transferencias indebidas.
+            </p>
+          </div>
+
+          <div class="regulatory-item">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--brand-red); margin-bottom: 2px;">
+              <i class="fa-solid fa-microchip"></i>
+              <span class="regulatory-title" style="font-size: 14px;">IA-ACT</span>
+            </div>
+            <span class="regulatory-subtitle">Ley de Inteligencia Artificial de la UE</span>
+            <p class="regulatory-desc" style="font-size: 12px; margin-top: 4px;">
+              Nuestra arquitectura garantiza un nivel de riesgo mínimo (cero exposición de datos a entrenamientos) al no procesar prompts en la nube, alineándose directamente con las directrices de seguridad de la nueva ley de la UE.
+            </p>
+          </div>
+
+          <div class="regulatory-item">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--brand-red); margin-bottom: 2px;">
+              <i class="fa-solid fa-building"></i>
+              <span class="regulatory-title" style="font-size: 14px;">RD 729/2023</span>
+            </div>
+            <span class="regulatory-subtitle">Implementación Segura y Ética en España</span>
+            <p class="regulatory-desc" style="font-size: 12px; margin-top: 4px;">
+              Adaptación nacional al marco europeo para el uso ético de la IA en Administraciones Públicas y corporaciones. Cumple la obligación de control local absoluto del usuario sobre su información.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div style="border-top: 1px solid var(--border-black); padding-top: 16px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+        <span class="verification-note">Verificación técnica correcta, sin actividad de red</span>
+        <button id="close-compliance-btn" class="btn btn-dark" style="padding: 8px 20px;">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load dependencies sequentially -->
+  <script src="lib/localCrypto.js"></script>
+  <script src="lib/localEngine.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

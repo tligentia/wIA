@@ -438,7 +438,8 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
 }
 
 async function loadWebGPUImageAssistPipeline(onProgress) {
-    if (webgpuState.imageAssistPipeline && webgpuState.imageAssistModelId === WEBGPU_IMAGE_ASSIST.id) {
+    const assist = getVisionAssistDef();
+    if (webgpuState.imageAssistPipeline && webgpuState.imageAssistModelId === assist.id) {
         return webgpuState.imageAssistPipeline;
     }
 
@@ -455,9 +456,9 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
 
     const deviceSupport = await checkWebGPUSupport();
     const device = deviceSupport === 'webgpu' ? 'webgpu' : 'wasm';
-    const sourceUrl = buildWebGPURepoUrl(WEBGPU_IMAGE_ASSIST.id);
+    const sourceUrl = buildWebGPURepoUrl(assist.id);
 
-    const pipe = await pipeline(WEBGPU_IMAGE_ASSIST.task, WEBGPU_IMAGE_ASSIST.id, {
+    const pipe = await pipeline(assist.task, assist.id, {
         device,
         progress_callback: (progress) => {
             if (!onProgress) return;
@@ -476,7 +477,7 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
     });
 
     webgpuState.imageAssistPipeline = pipe;
-    webgpuState.imageAssistModelId = WEBGPU_IMAGE_ASSIST.id;
+    webgpuState.imageAssistModelId = assist.id;
     return pipe;
 }
 
@@ -887,13 +888,13 @@ async function analyzeImagesForWebGPUViaWorker(imageMetaList = [], onProgress) {
 
     const router = createWebGPULoadProgressRouter({
         onProgress,
-        sourceUrl: buildWebGPURepoUrl(WEBGPU_IMAGE_ASSIST.id)
+        sourceUrl: buildWebGPURepoUrl(getVisionAssistDef().id)
     });
     try {
         const done = await webgpuWorker.call({
             type: 'caption',
-            assistModelId: WEBGPU_IMAGE_ASSIST.id,
-            assistTask: WEBGPU_IMAGE_ASSIST.task,
+            assistModelId: getVisionAssistDef().id,
+            assistTask: getVisionAssistDef().task,
             images: normalized.map(img => ({
                 dataUrl: `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`,
                 name: img.name
