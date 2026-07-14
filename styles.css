@@ -3874,10 +3874,30 @@ option {
 /* ─── Panel de modelos: favoritos, estado y filtros ────────── */
 .model-card { position: relative; }
 
-.model-card-star {
+.model-card-corner {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    z-index: 2;
+}
+
+.model-card-remove {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    opacity: 0.55;
+    transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+.model-card-remove:hover { opacity: 1; background: rgba(239, 68, 68, 0.15); }
+
+.model-card-star {
     background: transparent;
     border: none;
     cursor: pointer;
@@ -3886,7 +3906,6 @@ option {
     color: var(--text-tertiary);
     padding: 2px;
     transition: color var(--transition-fast), transform var(--transition-fast);
-    z-index: 2;
 }
 .model-card-star:hover { transform: scale(1.2); color: #f5b301; }
 .model-card-star.on { color: #f5b301; }
@@ -4009,3 +4028,7 @@ option {
 /* Tier de Visión en el catálogo WebGPU */
 .model-tier-group.tier-vision > summary { border-left: 3px solid #0ea5e9; }
 .model-tier-group.tier-vision .model-tier-header { color: #0ea5e9; }
+
+/* Etiqueta de modelos sin censura */
+.tag-uncensored { background: rgba(244, 63, 94, 0.12); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.28); }
+.filter-pill.active.filter-pill-uncensored { background: rgba(244,63,94,0.15); color: #f43f5e; border-color: rgba(244,63,94,0.35); }

@@ -180,10 +180,18 @@ const MODEL_FUNCTION_DEFS = {
     fast:         { label: '⚡ Ligero', shortLabel: 'Ligero', cls: 'tag-fast' },
     large:        { label: '💎 Grande', shortLabel: 'Grande', cls: 'tag-large' },
     free:         { label: '🆓 Gratis', shortLabel: 'Gratis', cls: 'tag-free' },
+    uncensored:   { label: '🔓 Sin censura', shortLabel: 'Sin censura', cls: 'tag-uncensored' },
     experimental: { label: '🧪 Experimental', shortLabel: 'Experimental', cls: 'tag-experimental' },
 };
 
-const MODEL_FILTER_ORDER = ['vision', 'thinking', 'coding', 'tools', 'multilingual', 'fast', 'large', 'free', 'experimental'];
+const MODEL_FILTER_ORDER = ['vision', 'thinking', 'coding', 'tools', 'multilingual', 'fast', 'large', 'free', 'uncensored', 'experimental'];
+
+// Marcas habituales de modelos sin alineamiento/censura en HF, Ollama y
+// OpenRouter. Se detectan por el nombre del repo/modelo.
+const UNCENSORED_NAME_HINTS = [
+    'uncensored', 'abliterated', 'ablated', 'unfiltered', 'unaligned',
+    'dolphin', 'nsfw', 'lewd', 'toxic-dpo', 'unlocked', 'decensored',
+];
 
 // ─── WebGPU Curated Model Catalog ───────────
 // Catálogo curado de modelos que corren en el navegador. El campo `verified`

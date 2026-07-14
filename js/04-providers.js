@@ -348,6 +348,8 @@ function getModelFunctionKeys(model, providerId = state.settings.provider) {
     if (/(qwen|gemma|llama|gemini|claude|ministral|mistral|multilingual)/.test(name)) keys.add('multilingual');
     if (/(tiny|mini|flash|haiku|turbo|360m|0\.5b|1b|1\.5b)/.test(name)) keys.add('fast');
     if (/(7b|8b|11b|70b|72b|405b|large|apertus-8b)/.test(name)) keys.add('large');
+    // Modelos sin alineamiento: se reconocen por las marcas habituales del repo
+    if (UNCENSORED_NAME_HINTS.some(hint => name.includes(hint))) keys.add('uncensored');
 
     if (sizeMB !== null) {
         if (sizeMB <= 1200) keys.add('fast');
@@ -539,6 +541,54 @@ function addManualWebGPUModel(inputValue) {
     return true;
 }
 
+/**
+ * removeManualWebGPUModel — quita del catálogo un modelo añadido a mano.
+ * También borra sus ficheros de la caché del navegador y, si era el modelo
+ * activo, devuelve la selección a un modelo verificado del catálogo.
+ */
+async function removeManualWebGPUModel(modelId) {
+    const current = getWebGPUCustomModels();
+    const def = current.find(m => m.id === modelId);
+    if (!def) return false;
+    if (!confirm(`¿Quitar «${def.label || modelId}» de tus modelos añadidos manualmente?\n\nSe eliminará del catálogo y se borrarán sus archivos de la caché del navegador. No afecta al repositorio original en Hugging Face.`)) {
+        return false;
+    }
+
+    saveWebGPUCustomModels(current.filter(m => m.id !== modelId));
+
+    // Si estaba cargado en memoria, liberarlo
+    if (webgpuState.loadedModelId === modelId || webgpuWorker.loadedModelId === modelId) {
+        try { await releaseWebGPUMemory(); } catch (e) {}
+    }
+    // Borrar sus ficheros cacheados (sin preguntar otra vez)
+    try {
+        const cache = await caches.open('transformers-cache');
+        for (const req of await cache.keys()) {
+            if (decodeURIComponent(req.url).includes(modelId)) await cache.delete(req);
+        }
+        webgpuState.cachedModelIds = await getCachedWebGPUModels();
+    } catch (e) { console.warn('[WebGPU] no se pudo limpiar la caché del modelo manual:', e); }
+
+    // Si era el modelo seleccionado, volver a uno verificado
+    if (state.settings.model === modelId) {
+        const fallback = WEBGPU_MODELS.find(m => m.verified && !m.visionAssist) || WEBGPU_MODELS[0];
+        if (fallback) {
+            state.settings.model = fallback.id;
+            getActiveProviderConfig().model = fallback.id;
+        }
+    }
+    if (state.settings.webgpuVisionModel === modelId) state.settings.webgpuVisionModel = '';
+    // Quitar también de favoritos para no dejar huérfanos
+    const favKey = favoriteModelKey(modelId, 'webgpu');
+    state.settings.favoriteModels = (state.settings.favoriteModels || []).filter(k => k !== favKey);
+
+    saveState();
+    await checkProviderStatus();
+    updateStatusMeta();
+    return true;
+}
+window.removeManualWebGPUModel = removeManualWebGPUModel;
+
 function renderProviderExploreLinks() {
     const links = getProviderExploreLinks();
     if (links.length === 0) return '';
@@ -602,6 +652,10 @@ function renderModelCard(m, { isWebGPU }) {
     const disabled = m.selectable === false;
     const tags = getModelTags(m);
     const star = `<button class="model-card-star ${isFav ? 'on' : ''}" title="${isFav ? 'Quitar de favoritos' : 'Marcar como favorito'}" onclick="event.stopPropagation(); toggleFavoriteModel('${escapeHtml(m.name)}')">${isFav ? '★' : '☆'}</button>`;
+    // Los modelos añadidos a mano se pueden quitar del catálogo
+    const removeBtn = m.custom
+        ? `<button class="model-card-remove" title="Quitar este modelo añadido manualmente" onclick="event.stopPropagation(); removeManualWebGPUModel('${escapeHtml(m.name)}')">🗑️</button>`
+        : '';
     const repoLink = m.repoUrl ? `<a href="${m.repoUrl}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
 
     // Badge de estado (prioridad: en uso como asistente > cargado > caché > probado)
@@ -622,7 +676,7 @@ function renderModelCard(m, { isWebGPU }) {
     const sizeStr = m.size || (m.details?.parameter_size || (m.size_vram ? `${(m.size_vram/(1024*1024*1024)).toFixed(1)} GB` : ''));
 
     return `<div class="model-card ${isActive ? 'model-card-active' : ''} ${disabled ? 'model-card-disabled' : ''}" data-model="${escapeHtml(m.name)}" data-disabled="${disabled ? 'true' : 'false'}" title="${escapeHtml(m.desc || m.name)}">
-        ${star}
+        <div class="model-card-corner">${removeBtn}${star}</div>
         <div class="model-card-top">
             <span class="model-card-name">${escapeHtml(m.label || m.name)}</span>
         </div>
