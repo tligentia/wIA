@@ -6,38 +6,226 @@
    ============================================ */
 
 // ─── Backend Connection ──────────────────────
-async function checkProviderStatus() {
+async function providerHttpError(response) {
+    let detail = response.statusText || 'Error del proveedor';
+    try {
+        const payload = await response.clone().json();
+        detail = payload.error?.message || payload.error?.detail || payload.message || detail;
+    } catch (_) {
+        try {
+            const text = await response.text();
+            if (text && text.length < 240) detail = text;
+        } catch (_) {}
+    }
+    return new Error(`${response.status}: ${detail}`);
+}
+
+function describeConnectionError(error) {
+    const raw = String(error?.message || error || 'Error desconocido');
+    const normalized = raw.toLowerCase();
+
+    if (normalized.includes('api key requerida')) {
+        return { code: 'missing-api-key', message: 'Introduce una API Key para validar', status: 'API Key requerida' };
+    }
+    if (normalized.includes('url del servidor requerida')) {
+        return { code: 'missing-url', message: 'Introduce la URL del servidor', status: 'URL requerida' };
+    }
+    if (/\b(401|403)\b/.test(normalized) || normalized.includes('unauthorized') || normalized.includes('invalid api key') || normalized.includes('authentication')) {
+        return { code: 'auth', message: 'API Key no válida o sin permisos', status: 'Credenciales no válidas' };
+    }
+    if (/\b404\b/.test(normalized)) {
+        return { code: 'not-found', message: 'Endpoint no encontrado; revisa la URL', status: 'URL no válida' };
+    }
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError' || normalized.includes('timed out') || normalized.includes('timeout')) {
+        return { code: 'timeout', message: 'Tiempo de espera agotado', status: 'Sin respuesta' };
+    }
+    if (normalized.includes('failed to fetch') || normalized.includes('cors') || normalized.includes('networkerror')
+        || normalized.includes('proxy error') || normalized.includes('econnrefused') || /\b(502|503|504)\b/.test(normalized)) {
+        return {
+            code: 'network',
+            message: 'No se pudo alcanzar el motor. Comprueba el servicio, la URL, la red y los permisos CORS.',
+            status: 'Sin acceso al motor'
+        };
+    }
+    return { code: 'provider', message: raw.slice(0, 180), status: 'Desconectado' };
+}
+
+function configureConnectionHelp(failure = {}) {
+    const providerId = state.settings.provider;
+    const provider = getProviderDef(providerId);
+    const endpoint = state.settings.ollamaUrl || provider.defaultUrl || 'URL sin configurar';
+    const mixedContent = window.location.protocol === 'https:' && /^http:\/\//i.test(endpoint);
+    const title = document.getElementById('corsHelpTitle');
+    const summaryTitle = document.getElementById('corsHelpSummaryTitle');
+    const summary = document.getElementById('corsHelpSummary');
+    const steps = document.getElementById('corsHelpSteps');
+    const badgeText = document.getElementById('corsWarningText');
+    if (!steps) return;
+
+    if (title) title.textContent = `🛡️ Diagnóstico · ${provider.name}`;
+    if (summaryTitle) summaryTitle.textContent = `No se pudo acceder a ${provider.name}`;
+    if (badgeText) badgeText.textContent = `${provider.name}: sin acceso · Ver diagnóstico`;
+
+    let summaryText = `${failure.message || 'El navegador no recibió respuesta.'} Endpoint: ${endpoint}.`;
+    const items = [];
+
+    if (mixedContent) {
+        summaryText = `La página usa HTTPS, pero el motor está configurado con HTTP (${endpoint}). El navegador puede bloquear esta conexión por contenido mixto.`;
+        items.push(['Usa un endpoint compatible', 'Sirve el motor mediante HTTPS o abre wIA desde un origen HTTP/local de confianza.']);
+    }
+
+    if (providerId === 'ollama') {
+        items.push(
+            ['1. Comprueba Ollama', `Confirma que Ollama está abierto y responde en ${escapeHtml(endpoint)}. Una conexión rechazada no es un error CORS.`],
+            ['2. Autoriza el origen de wIA', 'Si Ollama responde fuera de wIA pero el navegador lo bloquea, configura OLLAMA_ORIGINS y reinicia completamente Ollama.<code class="connection-help-command">launchctl setenv OLLAMA_ORIGINS "*"</code><code class="connection-help-command">[System.Environment]::SetEnvironmentVariable(\'OLLAMA_ORIGINS\', \'*\', \'User\')</code>'],
+            ['3. Reintenta', 'Vuelve a wIA después de reiniciar Ollama. Si continúa, revisa que la URL y el puerto sean correctos.']
+        );
+    } else if (providerId === 'lmstudio') {
+        items.push(
+            ['1. Inicia el servidor local', 'En LM Studio abre Developer/Local Server, carga un modelo y arranca el servidor.'],
+            ['2. Revisa el endpoint y CORS', `La URL suele terminar en /v1 (actual: ${escapeHtml(endpoint)}). Habilita las peticiones desde navegador en la configuración del servidor.`]
+        );
+    } else if (providerId === 'ollama_remote') {
+        items.push(
+            ['1. Verifica alcance y protocolo', 'Comprueba que el host remoto sea accesible desde este dispositivo y usa HTTPS si wIA también se sirve por HTTPS.'],
+            ['2. Configura el servidor remoto', 'Autoriza el origen de wIA con OLLAMA_ORIGINS o añade Access-Control-Allow-Origin en tu proxy inverso. No expongas Ollama directamente a Internet sin autenticación.']
+        );
+    } else {
+        items.push(
+            ['1. Comprueba la red y el endpoint', `Verifica que ${escapeHtml(endpoint)} sea accesible y que no haya VPN, proxy, firewall o bloqueo DNS.`],
+            ['2. Distingue red de credenciales', 'Los errores 401/403 se muestran como credenciales no válidas. Este diagnóstico aparece cuando el navegador no puede obtener ninguna respuesta.'],
+            ['3. Usa el servidor de wIA si es necesario', 'Al ejecutar wIA con server.js, el proxy local puede evitar restricciones CORS de proveedores que no aceptan llamadas directas desde el navegador.']
+        );
+    }
+
+    if (summary) summary.textContent = summaryText;
+    steps.innerHTML = items.map(([heading, body]) =>
+        `<div class="connection-help-step"><strong>${heading}</strong>${body}</div>`
+    ).join('');
+}
+
+function prepareModelPanelForProvider(providerId = state.settings.provider) {
+    const provider = getProviderDef(providerId);
+    state.rawModels = [];
+    state.rawModelsProvider = providerId;
+    state.modelCatalogState = 'loading';
+    state.modelFeatureFilters = [];
+    state.modelShowFavoritesOnly = false;
+    state.modelShowVerifiedOnly = false;
+    const search = document.getElementById('modelSearchInput');
+    if (search) search.value = '';
+    if (dom.modelFunctionFilters) dom.modelFunctionFilters.innerHTML = '';
+    const cards = document.getElementById('modelCardsContainer');
+    if (cards) cards.innerHTML = `<div class="model-cards-empty is-loading">Cargando modelos de ${escapeHtml(provider.name)}…</div>`;
+    if (dom.modelSelect) {
+        dom.modelSelect.innerHTML = `<option value="${escapeHtml(state.settings.model || '')}" selected>${escapeHtml(state.settings.model || 'Cargando catálogo…')}</option>`;
+    }
+    updateSettingsActiveContext();
+}
+
+function setConnectionValidationFeedback(kind = 'idle', message = 'Sin validar') {
+    if (!dom.connectionValidationResult) return;
+    dom.connectionValidationResult.className = `connection-validation-result is-${kind}`;
+    dom.connectionValidationResult.textContent = message;
+}
+
+function setProviderAvailability(providerId, status, detail = '') {
+    state.providerAvailability[providerId] = { status, detail, checkedAt: Date.now() };
+    renderProviderOptions();
+    updateSettingsActiveContext();
+}
+
+async function detectLocalProviderAvailability({ selectDefault = false } = {}) {
+    const priority = ['webgpu', 'ollama', 'lmstudio'];
+    priority.forEach(id => {
+        state.providerAvailability[id] = { status: 'checking', detail: 'Comprobando' };
+    });
+    renderProviderOptions();
+    updateSettingsActiveContext();
+
+    const probeJsonEndpoint = async (url) => {
+        try {
+            const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
+            return response.ok;
+        } catch (_) {
+            return false;
+        }
+    };
+
+    // Las comprobaciones se ejecutan en paralelo para no penalizar el arranque;
+    // la elección conserva estrictamente el orden de prioridad solicitado.
+    const [webgpuMode, ollamaAvailable, lmstudioAvailable] = await Promise.all([
+        checkWebGPUSupport(),
+        probeJsonEndpoint(`${PROVIDERS.ollama.defaultUrl}/api/tags`),
+        probeJsonEndpoint(`${PROVIDERS.lmstudio.defaultUrl}/models`),
+    ]);
+
+    const results = {
+        webgpu: webgpuMode === 'webgpu',
+        ollama: ollamaAvailable,
+        lmstudio: lmstudioAvailable,
+    };
+    priority.forEach(id => {
+        state.providerAvailability[id] = {
+            status: results[id] ? 'available' : 'unavailable',
+            detail: results[id] ? 'Disponible' : (id === 'webgpu' && webgpuMode === 'wasm' ? 'Solo WASM' : 'No detectado'),
+            checkedAt: Date.now(),
+        };
+    });
+
+    const hasUsage = Array.isArray(state.settings.providerUsageHistory) && state.settings.providerUsageHistory.length > 0;
+    if (selectDefault && !state.hasSavedSettings && !hasUsage) {
+        // Si no se detecta ninguno, WebGPU sigue siendo el fallback final porque
+        // puede degradar a WASM y no requiere un servicio externo.
+        const selectedProvider = priority.find(id => results[id]) || 'webgpu';
+        state.settings.provider = selectedProvider;
+        syncProviderToState();
+    }
+
+    renderProviderOptions();
+    updateStatusMeta();
+    return results;
+}
+
+let providerStatusRun = 0;
+
+async function checkProviderStatus(options = {}) {
+    const runId = ++providerStatusRun;
+    const providerId = state.settings.provider;
     dom.statusDot.className = 'status-dot loading';
     dom.statusText.textContent = 'Verificando...';
     updateStatusMeta();
+    dom.corsWarningBadge?.classList.add('hidden');
     
-    const prov = getProviderDef(state.settings.provider);
+    const prov = getProviderDef(providerId);
     const provType = prov.type;
+    if (state.rawModelsProvider !== providerId) {
+        prepareModelPanelForProvider(providerId);
+    }
     
     try {
         let models = [];
         const headers = getAuthHeaders();
+        const baseUrl = String(state.settings.ollamaUrl || '').trim().replace(/\/+$/, '');
+
+        if (provType !== 'webgpu' && !baseUrl) throw new Error('URL del servidor requerida');
+        if (prov.auth === 'apikey' && !String(state.settings.apiKey || '').trim()) {
+            throw new Error('API Key requerida');
+        }
         
         if (provType === 'ollama') {
             // Ollama native API
-            const url = `${state.settings.ollamaUrl}/api/tags`;
+            const url = `${baseUrl}/api/tags`;
             const res = await fetch(url, { headers, signal: AbortSignal.timeout(5000) });
-            if (!res.ok) throw new Error('Bad response');
+            if (!res.ok) throw await providerHttpError(res);
             const data = await res.json();
             models = data.models || [];
             
         } else if (provType === 'openai') {
             // OpenAI-compatible (LMStudio, Groq, OpenRouter, OpenAI)
-            const url = `${state.settings.ollamaUrl}/models`;
+            const url = `${baseUrl}/models`;
             const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
-            if (!res.ok) {
-                let errorText = res.statusText;
-                try {
-                    const errorJson = await res.json();
-                    errorText = errorJson.error?.message || errorJson.message || errorText;
-                } catch(e) {}
-                throw new Error(`${res.status}: ${errorText}`);
-            }
+            if (!res.ok) throw await providerHttpError(res);
             const data = await res.json();
             // Map pricing metadata if provided (OpenRouter mostly)
             models = (data.data || []).map(m => ({
@@ -53,9 +241,9 @@ async function checkProviderStatus() {
             // Gemini REST API
             const apiKey = state.settings.apiKey;
             if (!apiKey) throw new Error('API Key requerida');
-            const url = `${state.settings.ollamaUrl}/models?key=${apiKey}`;
+            const url = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
             const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            if (!res.ok) throw await providerHttpError(res);
             const data = await res.json();
             models = (data.models || [])
                 .filter(m => m.name && m.supportedGenerationMethods?.includes('generateContent'))
@@ -81,18 +269,11 @@ async function checkProviderStatus() {
             ];
             const apiKey = state.settings.apiKey;
             if (apiKey) {
-                const res = await fetch(`${state.settings.ollamaUrl}/models?limit=100`, {
+                const res = await fetch(`${baseUrl}/models?limit=100`, {
                     headers,
                     signal: AbortSignal.timeout(8000)
                 });
-                if (!res.ok) {
-                    let errorText = res.statusText;
-                    try {
-                        const errorJson = await res.json();
-                        errorText = errorJson.error?.message || errorText;
-                    } catch (e) {}
-                    throw new Error(`${res.status}: ${errorText}`);
-                }
+                if (!res.ok) throw await providerHttpError(res);
                 const data = await res.json();
                 models = (data.data || []).map(m => ({
                     name: m.id,
@@ -109,6 +290,9 @@ async function checkProviderStatus() {
             
             // Scan Cache Storage
             webgpuState.cachedModelIds = await getCachedWebGPUModels();
+            if (runId !== providerStatusRun || state.settings.provider !== providerId) {
+                return { ok: false, stale: true, provider: providerId };
+            }
             const cacheCount = webgpuState.cachedModelIds.size;
             const cacheSuffix = cacheCount > 0 ? ` · ${cacheCount} en caché` : '';
 
@@ -131,6 +315,8 @@ async function checkProviderStatus() {
                 experimental: !!m.experimental,
                 verified: !!m.verified,
                 visionAssist: !!m.visionAssist,
+                omnimodal: !!m.omnimodal,
+                engine: m.engine || null,
                 task: m.task || null,
                 repoUrl: m.repoUrl,
                 custom: !!m.custom,
@@ -174,8 +360,8 @@ async function checkProviderStatus() {
                 applySettingsToUI();
             }
 
-            state.rawModels = models;
             populateModels(models);
+            setProviderAvailability(providerId, 'available', support === 'webgpu' ? 'Disponible' : 'WASM');
 
             // Check if currently selected model is already loaded
             if (webgpuState.loadedModelId === state.settings.model) {
@@ -185,13 +371,29 @@ async function checkProviderStatus() {
             await fetchModelCapabilities(state.settings.model);
             updateInputDisclaimer();
             updateStatusMeta();
-            return; // Skip further common logic
+            return {
+                ok: true,
+                provider: state.settings.provider,
+                models,
+                modelCount: models.length,
+                mode: support
+            }; // Skip further common logic
         }
         
-        state.rawModels = models;
+        if (runId !== providerStatusRun || state.settings.provider !== providerId) {
+            return { ok: false, stale: true, provider: providerId };
+        }
+        let hasModel = models.some(m => m.name === state.settings.model);
+        if (!hasModel && models.length > 0) {
+            const fallbackModel = models.find(m => m.name === prov.defaultModel) || models[0];
+            state.settings.model = fallbackModel.name;
+            getActiveProviderConfig().model = fallbackModel.name;
+            saveState();
+            hasModel = true;
+        }
         populateModels(models);
-        
-        const hasModel = models.some(m => m.name === state.settings.model || m.name.startsWith(state.settings.model.split(':')[0]));
+        setProviderAvailability(providerId, 'available', 'Disponible');
+
         dom.statusDot.className = 'status-dot online';
         dom.statusText.textContent = hasModel ? 'Conectado' : 'Modelo no encontrado';
         
@@ -202,23 +404,48 @@ async function checkProviderStatus() {
             dom.improvePromptBtn?.classList.add('hidden');
         }
         updateStatusMeta();
+        return {
+            ok: true,
+            provider: state.settings.provider,
+            models,
+            modelCount: models.length
+        };
     } catch (e) {
+        if (runId !== providerStatusRun || state.settings.provider !== providerId) {
+            return { ok: false, stale: true, provider: providerId, error: e };
+        }
         dom.statusDot.className = 'status-dot offline';
-        const isCors = e.message?.includes('Failed to fetch') || e.message?.includes('CORS');
-        dom.statusText.textContent = isCors ? 'Error CORS (Configuración req.)' : 'Desconectado';
+        const failure = describeConnectionError(e);
+        setProviderAvailability(providerId, failure.code === 'network' ? 'unavailable' : 'error', failure.status);
+        const isCors = failure.code === 'network';
+        dom.statusText.textContent = failure.status;
         dom.improvePromptBtn?.classList.add('hidden');
         
         if (isCors) {
-            console.warn('Ollama Connection Error: Possible CORS issue. To fix run instructions in help modal.');
+            console.warn(`[Conexión] ${getProviderDef(state.settings.provider).name}: sin respuesta; puede ser red, servicio, URL o CORS.`, e);
+            configureConnectionHelp(failure);
             dom.corsWarningBadge.classList.remove('hidden');
         } else {
             dom.corsWarningBadge.classList.add('hidden');
         }
 
-        if (dom.modelSelect.options.length === 0 || dom.modelSelect.innerHTML.includes('Cargando modelos')) {
-            dom.modelSelect.innerHTML = `<option value="${state.settings.model}" selected>${state.settings.model} (Offline)</option>`;
-        }
+        state.rawModels = [];
+        state.rawModelsProvider = state.settings.provider;
+        state.modelCatalogState = 'error';
+        if (dom.modelFunctionFilters) dom.modelFunctionFilters.innerHTML = '';
+        const modelCards = document.getElementById('modelCardsContainer');
+        if (modelCards) modelCards.innerHTML = `<div class="model-cards-empty is-error">No se pudo cargar el catálogo de ${escapeHtml(prov.name)}.<br>${escapeHtml(failure.message)}</div>`;
+        dom.modelSelect.innerHTML = `<option value="${escapeHtml(state.settings.model)}" selected>${escapeHtml(state.settings.model)} (sin verificar)</option>`;
+        updateSettingsActiveContext();
         updateStatusMeta();
+        return {
+            ok: false,
+            provider: state.settings.provider,
+            error: e,
+            code: failure.code,
+            message: failure.message,
+            modelCount: 0
+        };
     }
 }
 
@@ -279,6 +506,12 @@ function updateToolbarVisibility() {
         dom.toolInternet.classList.add('hidden');
         dom.toolInternet.classList.remove('active');
     }
+
+    // Indicador de visión: se muestra cuando el motor puede analizar imágenes.
+    // En WebGPU eso significa que hay un asistente visual disponible (siempre lo
+    // hay: por defecto o el elegido). En proveedores con visión nativa, si el
+    // modelo la soporta.
+    updateVisionIndicator();
     
     // Thinking
     if (state.capabilities.includes('thinking') || state.settings.model.includes('gemma') || state.settings.model.includes('deepseek') || state.settings.model.includes('claude') || state.settings.model.includes('o1') || state.settings.model.includes('o3')) {
@@ -315,13 +548,37 @@ function isFreeModel(model) {
 
 function getNumericSizeMB(model) {
     if (typeof model?.sizeBytes === 'number') return model.sizeBytes;
-    if (typeof model?.size === 'number') return model.size;
+    // Ollama devuelve `size` en bytes; el catálogo WebGPU usa `sizeBytes` en MB.
+    if (typeof model?.size === 'number') return model.size / (1024 * 1024);
     if (typeof model?.size_vram === 'number') return model.size_vram / (1024 * 1024);
     const text = String(model?.size || '').toLowerCase();
     const match = text.match(/([\d.]+)\s*(gb|mb)/);
     if (!match) return null;
     const value = parseFloat(match[1]);
     return match[2] === 'gb' ? value * 1024 : value;
+}
+
+function formatModelSizeGB(model) {
+    const gigabyte = 1024 * 1024 * 1024;
+    const megabyte = 1024 * 1024;
+
+    if (typeof model?.size === 'number' && model.size > 0) {
+        return `${(model.size / gigabyte).toFixed(2)} GB`;
+    }
+    if (typeof model?.sizeBytes === 'number' && model.sizeBytes > 0) {
+        return `${(model.sizeBytes / 1024).toFixed(2)} GB`;
+    }
+    if (typeof model?.size_vram === 'number' && model.size_vram > 0) {
+        return `${(model.size_vram / gigabyte).toFixed(2)} GB`;
+    }
+
+    const text = String(model?.size || '').trim();
+    const match = text.match(/^(~?\s*)([\d.]+)\s*(gb|mb)$/i);
+    if (!match) return text || (model?.details?.parameter_size || '');
+    const prefix = match[1].replace(/\s/g, '');
+    const value = Number(match[2]);
+    const bytes = match[3].toLowerCase() === 'gb' ? value * gigabyte : value * megabyte;
+    return `${prefix}${(bytes / gigabyte).toFixed(2)} GB`;
 }
 
 function getModelFunctionKeys(model, providerId = state.settings.provider) {
@@ -342,6 +599,7 @@ function getModelFunctionKeys(model, providerId = state.settings.provider) {
     if (model?.experimental || model?.selectable === false) keys.add('experimental');
 
     if (/(vision|vl|llava|pixtral|omni|gpt-4o|gpt-4\.1|qwen2-vl|phi-3\.5-vision|smolvlm|gemini|claude-3|claude-sonnet-4|claude-opus-4)/.test(name)) keys.add('vision');
+    if (model?.omnimodal || allHints.has('omnimodal')) keys.add('omnimodal');
     if (/(think|reason|reasoning|r1|qwq|o1|o3|deepseek|math)/.test(name)) keys.add('thinking');
     if (/(coder|codex|code|devstral|deepcoder)/.test(name)) keys.add('coding');
     if (/(tool|function|gpt-4\.1|gpt-4o|gemini|claude|llama-3\.3|qwen2\.5|qwen3)/.test(name)) keys.add('tools');
@@ -589,6 +847,38 @@ async function removeManualWebGPUModel(modelId) {
 }
 window.removeManualWebGPUModel = removeManualWebGPUModel;
 
+/**
+ * updateVisionIndicator — muestra el icono 👁 en la caja de prompt cuando el
+ * motor activo puede analizar imágenes, con un tooltip que nombra el modelo
+ * de visión (y, en WebGPU, la cadena visión → chat).
+ */
+function updateVisionIndicator() {
+    const el = document.getElementById('visionIndicator');
+    if (!el) return;
+    const provType = getProviderDef(state.settings.provider).type;
+    let active = false, tip = '';
+
+    if (provType === 'webgpu' && typeof getVisionAssistDef === 'function') {
+        const chatDef = WEBGPU_MODELS.find(m => m.id === state.settings.model);
+        active = true;
+        const chatLabel = chatDef?.label || state.settings.model;
+        if (chatDef?.omnimodal) {
+            tip = `Visión omnimodal activa · ${chatLabel} recibe la imagen y responde directamente.`;
+        } else {
+            const assist = getVisionAssistDef();
+            tip = `Cadena visual activa · ${assist.label} analiza tus imágenes → ${chatLabel} responde.`;
+        }
+    } else if (state.capabilities.includes('vision') || getModelFunctionKeys({ name: state.settings.model }).includes('vision')) {
+        active = true;
+        tip = 'Visión nativa activa: este modelo entiende las imágenes que adjuntes.';
+    }
+
+    el.classList.toggle('hidden', !active);
+    el.classList.toggle('active', active);
+    if (active) el.title = tip;
+}
+window.updateVisionIndicator = updateVisionIndicator;
+
 function renderProviderExploreLinks() {
     const links = getProviderExploreLinks();
     if (links.length === 0) return '';
@@ -673,7 +963,7 @@ function renderModelCard(m, { isWebGPU }) {
     }
 
     const price = !isWebGPU ? getModelPrice(m) : null;
-    const sizeStr = m.size || (m.details?.parameter_size || (m.size_vram ? `${(m.size_vram/(1024*1024*1024)).toFixed(1)} GB` : ''));
+    const sizeStr = formatModelSizeGB(m);
 
     return `<div class="model-card ${isActive ? 'model-card-active' : ''} ${disabled ? 'model-card-disabled' : ''}" data-model="${escapeHtml(m.name)}" data-disabled="${disabled ? 'true' : 'false'}" title="${escapeHtml(m.desc || m.name)}">
         <div class="model-card-corner">${removeBtn}${star}</div>
@@ -689,6 +979,9 @@ function renderModelCard(m, { isWebGPU }) {
 
 function getFunctionalGroup(model) {
     const keys = getModelFunctionKeys(model);
+    if (keys.includes('omnimodal')) return { key: 'omnimodal', label: '◉ Omnimodal' };
+    if (keys.includes('medical')) return { key: 'medical', label: '⚕ Imagen médica' };
+    if (keys.includes('uncensored')) return { key: 'uncensored', label: '🔓 Modelos sin censura' };
     if (keys.includes('vision')) return { key: 'vision', label: '👁 Modelos con visión' };
     if (keys.includes('coding')) return { key: 'coding', label: '💻 Modelos para código' };
     if (keys.includes('thinking')) return { key: 'thinking', label: '🧠 Modelos analíticos' };
@@ -700,6 +993,11 @@ function populateModels(models) {
     const modelCardsContainer = document.getElementById('modelCardsContainer');
     if (!modelCardsContainer) return;
 
+    state.rawModels = Array.isArray(models) ? [...models] : [];
+    state.rawModelsProvider = state.settings.provider;
+    state.modelCatalogState = 'ready';
+    updateSettingsActiveContext();
+
     if (!models || models.length === 0) {
         modelCardsContainer.innerHTML = `<div class="model-cards-empty">No hay modelos disponibles</div>`;
         if (dom.modelFunctionFilters) dom.modelFunctionFilters.innerHTML = '';
@@ -709,7 +1007,6 @@ function populateModels(models) {
     }
 
     const isWebGPU = state.settings.provider === 'webgpu';
-    state.rawModels = [...models];
     renderModelFunctionFilters(state.rawModels);
 
     const searchTerm = (document.getElementById('modelSearchInput')?.value || '').toLowerCase().trim();
@@ -752,7 +1049,10 @@ function populateModels(models) {
             { key: 'quick',    label: '⚡ Ligeros y rápidos', color: 'tier-quick' },
             { key: 'optional', label: '📦 Equilibrados y capaces', color: 'tier-optional' },
             { key: 'large',    label: '🏋️ Grandes y exigentes', color: 'tier-large' },
-            { key: 'vision',   label: '👁 Visión (describe imágenes adjuntas)', color: 'tier-vision' },
+            { key: 'omnimodal', label: '◉ Omnimodal (ve y responde directamente)', color: 'tier-omnimodal' },
+            { key: 'medical', label: '⚕ Imagen médica (análisis local orientativo)', color: 'tier-medical' },
+            { key: 'vision',   label: '👁 Asistentes visuales (describen u obtienen texto)', color: 'tier-vision' },
+            { key: 'uncensored', label: '🔓 Sin censura (menos rechazos)', color: 'tier-uncensored' },
             { key: 'manual',   label: '🧩 Añadidos manualmente', color: 'tier-manual' },
         ];
 
@@ -761,7 +1061,7 @@ function populateModels(models) {
         tiers.forEach(tier => {
             const tierModels = filtered.filter(m => m.tier === tier.key);
             if (tierModels.length === 0) return;
-            const isOpen = tier.key === 'quick' || tier.key === 'optional' || tier.key === 'manual';
+            const isOpen = tier.key === 'quick' || tier.key === 'optional' || tier.key === 'omnimodal' || tier.key === 'medical' || tier.key === 'uncensored' || tier.key === 'manual';
             html += `<details class="model-tier-group ${tier.color}" ${isOpen ? 'open' : ''}>
                 <summary class="model-tier-header">${tier.label} <span class="model-tier-count">${tierModels.length}</span></summary>
                 <div class="model-cards-grid">${tierModels.map(m => renderModelCard(m, { isWebGPU })).join('')}</div>
@@ -778,7 +1078,7 @@ function populateModels(models) {
         });
 
         let html = (linksHeader || '') + favHtml;
-        ['vision', 'coding', 'thinking', 'multilingual', 'general'].forEach(groupKey => {
+        ['omnimodal', 'medical', 'uncensored', 'vision', 'coding', 'thinking', 'multilingual', 'general'].forEach(groupKey => {
             if (!groups[groupKey] || groups[groupKey].models.length === 0) return;
             const groupModels = groups[groupKey].models.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             html += `<details class="model-letter-group" open>
@@ -821,12 +1121,14 @@ function populateModels(models) {
             state.settings.model = modelId;
             getActiveProviderConfig().model = modelId;
             fetchModelCapabilities(modelId);
+            saveState();
 
             // Re-render to update active card
             if (state.rawModels) populateModels(state.rawModels);
 
             updateInputDisclaimer();
             updateStatusMeta();
+            updateModelContextIndicator();
         });
     });
 
@@ -875,7 +1177,7 @@ async function renderManagedModelList() {
         }
 
         dom.managedModelList.innerHTML = models.map(m => {
-            const sizeGB = (m.size / (1024 * 1024 * 1024)).toFixed(1);
+            const sizeGB = (m.size / (1024 * 1024 * 1024)).toFixed(2);
             return `
                 <div class="model-list-item">
                     <div class="model-item-info">
@@ -889,15 +1191,14 @@ async function renderManagedModelList() {
             `;
         }).join('');
     } catch (e) {
-        const isCors = e.message?.includes('Failed to fetch');
-        const errorMessage = isCors 
-            ? 'Error de Red/CORS: Abre Ollama con OLLAMA_ORIGINS="*" para permitir acceso desde wIA.'
-            : e.message;
+        const failure = describeConnectionError(e);
+        const needsDiagnosis = failure.code === 'network';
+        if (needsDiagnosis) configureConnectionHelp(failure);
         
         dom.managedModelList.innerHTML = `
             <div style="text-align: center; color: var(--danger); padding: 20px;">
-                <p>${errorMessage}</p>
-                ${isCors ? '<p style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; user-select: all;">env OLLAMA_ORIGINS="*" ollama serve</p>' : ''}
+                <p>${escapeHtml(failure.message)}</p>
+                ${needsDiagnosis ? '<button type="button" class="btn-secondary" onclick="document.getElementById(\'corsErrorModal\').classList.remove(\'hidden\')" style="margin-top:10px;">Ver diagnóstico</button>' : ''}
             </div>
         `;
     }
@@ -987,5 +1288,3 @@ async function pullModel(name) {
 
 window.deleteModel = deleteModel;
 window.pullModel = pullModel;
-
-

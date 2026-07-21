@@ -198,6 +198,7 @@ function applyAgentEngine(proj) {
     saveCurrentProviderConfig();
     if (wantsProvider) {
         state.settings.provider = proj.agentProvider;
+        markProviderUsed(proj.agentProvider);
         syncProviderToState();
     }
     if (proj.agentModel) state.settings.model = proj.agentModel;
@@ -367,8 +368,8 @@ function openProjectEditor(projectId) {
     dom.projectTemperature.value = typeof proj.agentTemperature === 'number' ? proj.agentTemperature : '';
 
     dom.projectProvider.innerHTML = '<option value="">— Global (ajustes generales) —</option>' +
-        Object.entries(PROVIDERS).map(([id, def]) =>
-            `<option value="${id}" ${proj.agentProvider === id ? 'selected' : ''}>${def.icon} ${def.name}</option>`
+        getOrderedProviderEntries().map(([id, def]) =>
+            `<option value="${id}" ${proj.agentProvider === id ? 'selected' : ''}>${Array.isArray(state.settings.favoriteProviders) && state.settings.favoriteProviders.includes(id) ? '★ ' : ''}${def.icon} ${def.name}</option>`
         ).join('');
 
     renderStartersEditor(proj);
@@ -775,4 +776,3 @@ function renderChatList() {
         });
     });
 }
-

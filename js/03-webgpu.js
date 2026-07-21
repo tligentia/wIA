@@ -60,6 +60,11 @@ async function releaseWebGPUMemory() {
             await webgpuState.pipeline.dispose();
         }
     } catch (e) { console.warn('[WebGPU] error liberando pipeline inline:', e); }
+    try {
+        if (webgpuState.imageAssistPipeline && typeof webgpuState.imageAssistPipeline.dispose === 'function') {
+            await webgpuState.imageAssistPipeline.dispose();
+        }
+    } catch (e) { console.warn('[WebGPU] error liberando asistente visual:', e); }
     try { webgpuWorker.dispose(); webgpuWorker.shutdown(); } catch (e) {}
     webgpuState.pipeline = null;
     webgpuState.loadedModelId = null;
@@ -151,9 +156,47 @@ async function renderWebGPUMonitor() {
  */
 function startWebGPUMonitor() {
     renderWebGPUMonitor();
+    renderVisionChain();
     clearInterval(_webgpuMonitorTimer);
     _webgpuMonitorTimer = setInterval(renderWebGPUMonitor, 2000);
 }
+
+/**
+ * renderVisionChain — panel donde el usuario escoge la combinación
+ * «modelo de visión → modelo de chat» para las imágenes adjuntas.
+ */
+function renderVisionChain() {
+    const wrap = document.getElementById('visionChain');
+    if (!wrap) return;
+    if (state.settings.provider !== 'webgpu') { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+
+    const visionModels = WEBGPU_MODELS.filter(m => m.visionAssist);
+    const chatModels = WEBGPU_MODELS.filter(m => !m.visionAssist);
+    const activeVision = getVisionAssistDef().id;
+    const selectedChat = WEBGPU_MODELS.find(m => m.id === state.settings.model);
+    const isOmnimodal = !!selectedChat?.omnimodal;
+
+    const vSel = document.getElementById('visionModelSelect');
+    const cSel = document.getElementById('visionChatSelect');
+    const desc = document.getElementById('visionChainDesc');
+    wrap.classList.toggle('omnimodal-active', isOmnimodal);
+    if (desc) desc.innerHTML = isOmnimodal
+        ? `<b>${escapeHtml(selectedChat.label)}</b> ve la imagen y responde directamente. El asistente visual queda en espera y solo se usará si cambias a un modelo de texto o si se activa el fallback.`
+        : 'La imagen se analiza localmente y su resultado pasa al <b>modelo de chat</b> que redacta la respuesta. Elige la combinación:';
+    if (vSel) {
+        vSel.innerHTML = visionModels.map(m =>
+            `<option value="${escapeHtml(m.id)}" ${m.id === activeVision ? 'selected' : ''}>${escapeHtml(m.label)}${m.recommended ? ' ⭐' : ''}</option>`
+        ).join('');
+        vSel.disabled = isOmnimodal;
+    }
+    if (cSel) {
+        cSel.innerHTML = chatModels.map(m =>
+            `<option value="${escapeHtml(m.id)}" ${m.id === state.settings.model ? 'selected' : ''}>${escapeHtml(m.label)}</option>`
+        ).join('');
+    }
+}
+window.renderVisionChain = renderVisionChain;
 
 async function getCachedWebGPUModels() {
     const cachedModels = new Set();
@@ -458,9 +501,11 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
     const device = deviceSupport === 'webgpu' ? 'webgpu' : 'wasm';
     const sourceUrl = buildWebGPURepoUrl(assist.id);
 
-    const pipe = await pipeline(assist.task, assist.id, {
-        device,
-        progress_callback: (progress) => {
+    const dtypeCandidates = [assist.dtype, ...(assist.fallbackDtypes || [])].filter(Boolean);
+    if (dtypeCandidates.length === 0) dtypeCandidates.push(undefined);
+    let pipe = null;
+    let lastError = null;
+    const progressCallback = (progress) => {
             if (!onProgress) return;
             if (progress.status === 'progress' && progress.total) {
                 const pct = Math.round((progress.loaded / progress.total) * 100);
@@ -473,12 +518,322 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
             } else if (progress.status === 'init') {
                 onProgress(0, { ...progress, sourceUrl });
             }
+        };
+    for (const dtype of dtypeCandidates) {
+        try {
+            pipe = await pipeline(assist.task, assist.id, {
+                device,
+                ...(dtype ? { dtype } : {}),
+                progress_callback: progressCallback
+            });
+            break;
+        } catch (error) {
+            lastError = error;
+            console.warn(`[WebGPU] asistente ${assist.id} falló con ${dtype || 'dtype por defecto'}; reintentando.`, error);
         }
-    });
+    }
+    if (!pipe) throw lastError || new Error(`No se pudo cargar ${assist.label}.`);
 
     webgpuState.imageAssistPipeline = pipe;
     webgpuState.imageAssistModelId = assist.id;
     return pipe;
+}
+
+// ─── Motores de visión avanzados (Florence-2 y VLM) ──────────
+// Corren inline (no worker) porque usan clases de modelo específicas, no el
+// pipeline estándar. El resultado (texto) alimenta la cadena visión → chat.
+async function _prepareHfEnv() {
+    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    webgpuState.hfModule = hf;
+    const { env } = hf;
+    env.allowLocalModels = false; env.allowRemoteModels = true; env.useBrowserCache = true;
+    env.remoteHost = 'https://huggingface.co'; env.remotePathTemplate = '{model}/resolve/{revision}';
+    return hf;
+}
+
+function _visionProgressCb(onProgress, sourceUrl) {
+    const st = { ts: 0, pct: -1, file: '', completedFiles: new Set() };
+    return (progress) => {
+        if (!onProgress) return;
+        if (progress.status === 'progress' && progress.total) {
+            const pct = Math.round((progress.loaded / progress.total) * 100);
+            if (!shouldEmitWebGPUProgress(st, pct, progress)) return;
+            onProgress(pct, { ...progress, sourceUrl });
+        } else if (progress.status === 'done') {
+            onProgress(estimateInstallProgress(st, progress.file), { ...progress, sourceUrl, status: 'installing', file: progress.file || 'Registrando modelo de visión' });
+        } else if (progress.status === 'ready') {
+            onProgress(97, { ...progress, sourceUrl, status: 'initializing', file: 'Inicializando modelo de visión' });
+        } else if (progress.status === 'init') {
+            onProgress(0, { ...progress, sourceUrl });
+        }
+    };
+}
+
+async function loadFlorence2VisionModel(onProgress) {
+    const assist = getVisionAssistDef();
+    if (webgpuState.imageAssistPipeline?.__florence2 && webgpuState.imageAssistModelId === assist.id) {
+        return webgpuState.imageAssistPipeline;
+    }
+    const hf = await _prepareHfEnv();
+    const device = (await checkWebGPUSupport()) === 'webgpu' ? 'webgpu' : 'wasm';
+    const cb = _visionProgressCb(onProgress, buildWebGPURepoUrl(assist.id));
+    const model = await hf.Florence2ForConditionalGeneration.from_pretrained(assist.id, {
+        dtype: { embed_tokens: 'fp16', vision_encoder: 'fp16', encoder_model: 'q4', decoder_model_merged: 'q4' },
+        device, progress_callback: cb
+    });
+    const processor = await hf.AutoProcessor.from_pretrained(assist.id);
+    const bundle = { __florence2: true, model, processor, async dispose() { try { await model.dispose?.(); } catch (e) {} } };
+    webgpuState.imageAssistPipeline = bundle;
+    webgpuState.imageAssistModelId = assist.id;
+    return bundle;
+}
+
+async function runFlorence2Analysis(bundle, rawImage) {
+    const { model, processor } = bundle;
+    const parts = [];
+    for (const task of ['<MORE_DETAILED_CAPTION>', '<OCR>']) {
+        try {
+            const inputs = await processor(rawImage, task);
+            const gen = await model.generate({ ...inputs, max_new_tokens: 200, num_beams: 1, do_sample: false });
+            const text = processor.batch_decode(gen, { skip_special_tokens: false })[0];
+            const parsed = processor.post_process_generation(text, task, rawImage.size);
+            const val = parsed[task];
+            if (val && String(val).trim()) {
+                parts.push(task === '<OCR>' ? `Texto detectado: "${String(val).trim()}"` : String(val).trim());
+            }
+        } catch (e) { console.warn('[Florence-2] tarea', task, 'falló:', e); }
+    }
+    return parts.join(' · ');
+}
+
+async function loadVLMVisionModel(onProgress) {
+    const assist = getVisionAssistDef();
+    if (webgpuState.imageAssistPipeline?.__vlm && webgpuState.imageAssistModelId === assist.id) {
+        return webgpuState.imageAssistPipeline;
+    }
+    const hf = await _prepareHfEnv();
+    const device = (await checkWebGPUSupport()) === 'webgpu' ? 'webgpu' : 'wasm';
+    const cb = _visionProgressCb(onProgress, buildWebGPURepoUrl(assist.id));
+    const processor = await hf.AutoProcessor.from_pretrained(assist.id);
+    const model = await hf.AutoModelForVision2Seq.from_pretrained(assist.id, {
+        dtype: { embed_tokens: 'fp16', vision_encoder: 'q4', decoder_model_merged: 'q4' },
+        device, progress_callback: cb
+    });
+    const bundle = { __vlm: true, model, processor, async dispose() { try { await model.dispose?.(); } catch (e) {} } };
+    webgpuState.imageAssistPipeline = bundle;
+    webgpuState.imageAssistModelId = assist.id;
+    return bundle;
+}
+
+async function runVLMAnalysis(bundle, rawImage, question) {
+    const { model, processor } = bundle;
+    const q = (question || '').trim() || 'Describe la imagen con detalle.';
+    const messages = [{ role: 'user', content: [{ type: 'image' }, { type: 'text', text: q }] }];
+    const text = processor.apply_chat_template(messages, { add_generation_prompt: true });
+    const inputs = await processor(text, [rawImage], { do_image_splitting: false });
+    const gen = await model.generate({ ...inputs, max_new_tokens: 160, do_sample: false });
+    const decoded = processor.batch_decode(gen, { skip_special_tokens: true })[0] || '';
+    // La salida incluye el prompt; nos quedamos con lo posterior a "Assistant:"
+    const idx = decoded.lastIndexOf('Assistant:');
+    return (idx >= 0 ? decoded.slice(idx + 'Assistant:'.length) : decoded).trim();
+}
+
+// El export ONNX de DINOv2 X-Ray declara por error BlipImageProcessor, una
+// clase que no existe en Transformers.js 3.8.1. Cargamos el grafo DINO
+// directamente y aplicamos el preprocesamiento publicado por el propio repo.
+async function loadDinoMedicalVisionModel(onProgress) {
+    const assist = getVisionAssistDef();
+    if (webgpuState.imageAssistPipeline?.__medicalEmbedding && webgpuState.imageAssistModelId === assist.id) {
+        return webgpuState.imageAssistPipeline;
+    }
+    const hf = await _prepareHfEnv();
+    const device = (await checkWebGPUSupport()) === 'webgpu' ? 'webgpu' : 'wasm';
+    const cb = _visionProgressCb(onProgress, buildWebGPURepoUrl(assist.id));
+    const candidates = [assist.dtype, ...(assist.fallbackDtypes || [])].filter(Boolean);
+    let model = null;
+    let lastError = null;
+    for (const dtype of candidates) {
+        try {
+            model = await hf.AutoModel.from_pretrained(assist.id, { dtype, device, progress_callback: cb });
+            break;
+        } catch (error) {
+            lastError = error;
+            console.warn(`[DINOv2 X-Ray] fallo con ${dtype}; reintentando.`, error);
+        }
+    }
+    if (!model) throw lastError || new Error('No se pudo cargar DINOv2 X-Ray.');
+    const bundle = {
+        __medicalEmbedding: true,
+        model,
+        async dispose() { try { await model.dispose?.(); } catch (e) {} }
+    };
+    webgpuState.imageAssistPipeline = bundle;
+    webgpuState.imageAssistModelId = assist.id;
+    return bundle;
+}
+
+async function runDinoMedicalEmbedding({ model }, rawImage) {
+    const hf = webgpuState.hfModule;
+    const image = await rawImage.rgb().resize(224, 224);
+    const width = 224, height = 224;
+    const pixels = new Float32Array(3 * width * height);
+    const mean = [0.485, 0.456, 0.406];
+    const std = [0.229, 0.224, 0.225];
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const source = (y * width + x) * 3;
+            for (let channel = 0; channel < 3; channel++) {
+                pixels[channel * width * height + y * width + x] =
+                    (image.data[source + channel] / 255 - mean[channel]) / std[channel];
+            }
+        }
+    }
+    const output = await model({
+        pixel_values: new hf.Tensor('float32', pixels, [1, 3, height, width])
+    });
+    return output.pooler_output || output.last_hidden_state || output;
+}
+
+// Omnimodal nativo: imagen + texto -> respuesta final. Este bundle ocupa el
+// slot principal del chat y conserva la conversación multimodal completa.
+async function loadWebGPUOmnimodalModel(modelId, onProgress) {
+    if (webgpuState.pipeline?.__omnimodal && webgpuState.loadedModelId === modelId) return webgpuState.pipeline;
+    if (webgpuState.isLoading) return null;
+    webgpuState.isLoading = true;
+    webgpuState.cancelRequested = false;
+
+    try {
+        if (webgpuState.pipeline?.dispose) await webgpuState.pipeline.dispose();
+        if (webgpuState.imageAssistPipeline?.dispose) await webgpuState.imageAssistPipeline.dispose();
+        try { webgpuWorker.dispose(); webgpuWorker.shutdown(); } catch (e) {}
+        webgpuState.pipeline = null;
+        webgpuState.imageAssistPipeline = null;
+        webgpuState.imageAssistModelId = null;
+        webgpuState.loadedModelId = null;
+        webgpuState.loadedTask = null;
+        webgpuState.executionMode = 'inline';
+
+        const hf = await _prepareHfEnv();
+        const device = (await checkWebGPUSupport()) === 'webgpu' ? 'webgpu' : 'wasm';
+        const sourceUrl = buildWebGPURepoUrl(modelId);
+        const cb = _visionProgressCb(onProgress, sourceUrl);
+        const processor = await hf.AutoProcessor.from_pretrained(modelId, { progress_callback: cb });
+        const officialDtype = { embed_tokens: 'fp16', vision_encoder: 'q4', decoder_model_merged: 'q4' };
+        const safeDtype = { embed_tokens: 'q4', vision_encoder: 'q4', decoder_model_merged: 'q4' };
+        const candidates = device === 'webgpu' && webgpuState.fp16Supported ? [officialDtype, safeDtype] : [safeDtype];
+        let model = null;
+        let lastError = null;
+
+        for (let i = 0; i < candidates.length; i++) {
+            try {
+                if (i > 0 && onProgress) onProgress(0, {
+                    status: 'init', file: 'Reintentando el VLM con cuantización q4 completa', sourceUrl,
+                    retryingWithDtype: 'q4', previousError: formatErrorDetail(lastError)
+                });
+                model = await hf.AutoModelForVision2Seq.from_pretrained(modelId, {
+                    dtype: candidates[i], device, progress_callback: cb
+                });
+                break;
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        if (!model) throw lastError || new Error('No se pudo cargar el modelo omnimodal.');
+        if (webgpuState.cancelRequested) throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
+
+        const bundle = {
+            __omnimodal: true,
+            model,
+            processor,
+            async dispose() { try { await model.dispose?.(); } catch (e) {} }
+        };
+        webgpuState.pipeline = bundle;
+        webgpuState.loadedModelId = modelId;
+        webgpuState.loadedTask = 'omnimodal';
+        return bundle;
+    } finally {
+        webgpuState.isLoading = false;
+    }
+}
+
+async function runWebGPUOmnimodalGeneration({ model, processor }, promptInput, assistantMsg, msgIdx) {
+    const startTime = Date.now();
+    let tokenCount = 0;
+    let fullResponse = '';
+    const messages = (promptInput?.text || []).map(message => ({
+        role: message.role,
+        content: Array.isArray(message.content)
+            ? message.content
+            : [{ type: 'text', text: String(message.content || '') }]
+    }));
+    const images = promptInput?.images || [];
+    const prompt = processor.apply_chat_template(messages, { add_generation_prompt: true });
+    const inputs = await processor(prompt, images, { do_image_splitting: false });
+    const hf = webgpuState.hfModule;
+    const options = {
+        ...inputs,
+        // Los VLM compactos pueden volverse muy lentos con el límite global de 4K.
+        // 1024 conserva respuestas amplias sin bloquear innecesariamente la interfaz.
+        max_new_tokens: Math.min(parseInt(state.settings.maxTokens || 512), 1024),
+        temperature: parseFloat(state.settings.temperature ?? 0.8),
+        top_p: parseFloat(state.settings.topP || 0.9),
+        repetition_penalty: 1.1,
+        do_sample: parseFloat(state.settings.temperature ?? 0.8) > 0,
+    };
+
+    const tokenizer = processor.tokenizer;
+    if (hf?.TextStreamer && tokenizer) {
+        options.streamer = new hf.TextStreamer(tokenizer, {
+            skip_prompt: true,
+            skip_special_tokens: true,
+            callback_function: chunk => {
+                if (!chunk || state.abortController?.signal?.aborted) return;
+                fullResponse += chunk;
+                clearMessageLoadingState(assistantMsg);
+                applyWebGPUStreamedText(assistantMsg, fullResponse);
+                updateStreamingMessage(msgIdx, assistantMsg);
+                updateGenerationStatus(tokenCount, startTime);
+                maybeStopRepetitionLoop(assistantMsg, fullResponse);
+            },
+            token_callback_function: () => { tokenCount++; }
+        });
+    }
+
+    if (hf?.InterruptableStoppingCriteria) {
+        const stopper = new hf.InterruptableStoppingCriteria();
+        const signal = state.abortController?.signal;
+        if (signal?.aborted) stopper.interrupt();
+        else signal?.addEventListener('abort', () => stopper.interrupt(), { once: true });
+        options.stopping_criteria = stopper;
+        webgpuState.activeStopper = stopper;
+    }
+
+    let generatedIds;
+    try {
+        generatedIds = await model.generate(options);
+    } finally {
+        webgpuState.activeStopper = null;
+    }
+    const inputLength = inputs.input_ids?.dims?.at(-1) || 0;
+    const completionIds = inputLength && generatedIds?.slice
+        ? generatedIds.slice(null, [inputLength, null])
+        : generatedIds;
+    const decoded = processor.batch_decode(completionIds, { skip_special_tokens: true })[0] || '';
+    if (decoded.trim()) fullResponse = decoded.trim();
+
+    const elapsed = Date.now() - startTime;
+    const parts = splitWebGPUThinking(fullResponse);
+    let text = parts.content || (parts.thinking ? '*(El modelo solo genero razonamiento)*' : '*(Sin respuesta generada)*');
+    if (assistantMsg._loopStopped) text += WEBGPU_LOOP_STOP_NOTE;
+    return {
+        text,
+        thinking: parts.thinking,
+        metrics: tokenCount > 0 && elapsed > 0 ? {
+            eval_count: tokenCount,
+            total_time_ms: elapsed,
+            tps: (tokenCount / (elapsed / 1000)).toFixed(2)
+        } : null
+    };
 }
 
 // ─── WebGPU Web Worker Client ────────────────
@@ -843,7 +1198,7 @@ async function runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msg
             input,
             options: {
                 max_new_tokens: parseInt(state.settings.maxTokens || 2048),
-                temperature: parseFloat(state.settings.temperature || 0.7),
+                temperature: parseFloat(state.settings.temperature ?? 0.8),
                 top_p: parseFloat(state.settings.topP || 0.9),
             }
         }, {
@@ -910,6 +1265,8 @@ async function analyzeImagesForWebGPUViaWorker(imageMetaList = [], onProgress) {
 
 // ─── WebGPU dispatchers (worker si es posible, inline si no) ─
 async function loadWebGPUModel(modelId, onProgress, task = 'text-generation') {
+    const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
+    if (modelDef?.omnimodal) return loadWebGPUOmnimodalModel(modelId, onProgress);
     const mode = await decideWebGPUExecutionMode();
     if (mode === 'worker') {
         try {
@@ -928,16 +1285,21 @@ async function loadWebGPUModel(modelId, onProgress, task = 'text-generation') {
 }
 
 async function runWebGPUGeneration(pipe, promptInput, assistantMsg, msgIdx) {
+    if (pipe?.__omnimodal) {
+        return runWebGPUOmnimodalGeneration(pipe, promptInput, assistantMsg, msgIdx);
+    }
     if (pipe && pipe.__worker) {
         return runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msgIdx);
     }
     return runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx);
 }
 
-async function analyzeImagesForWebGPU(imageMetaList = [], onProgress) {
-    if (webgpuState.executionMode === 'worker' && !webgpuWorker.broken) {
+async function analyzeImagesForWebGPU(imageMetaList = [], onProgress, userPrompt = '') {
+    const engine = getVisionAssistDef().engine || 'caption';
+    // Florence-2 y los VLM usan clases de modelo específicas que el worker de
+    // captioning no maneja: se ejecutan siempre inline.
+    if (engine === 'caption' && webgpuState.executionMode === 'worker' && !webgpuWorker.broken) {
         return analyzeImagesForWebGPUViaWorker(imageMetaList, onProgress);
     }
-    return analyzeImagesForWebGPUInline(imageMetaList, onProgress);
+    return analyzeImagesForWebGPUInline(imageMetaList, onProgress, userPrompt);
 }
-

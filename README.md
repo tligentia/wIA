@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AA)
+# wIA — Multi-Engine AI Chat Interface (v2607.AB)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,13 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 👁 **Visión WebGPU avanzada y elegible (v2607.AB)**: nuevos modelos de visión verificados uno a uno en el navegador y organizados en categorías propias del catálogo:
+  - **◉ Omnimodal**: **SmolVLM-256M** — VLM que *ve la imagen y responde la pregunta directamente* (verificado; el 500M queda como no verificado).
+  - **👁 Asistentes visuales**: **Florence-2** (Microsoft) — descripción detallada de la escena **+ OCR** en una pasada; el mejor asistente. Junto a ViT-GPT2, DistilViT y TrOCR.
+  - **⚕ Imagen médica (orientativa, no diagnóstica)**: **DINOv2 X-Ray** (Stanford AIMI, extrae firma radiológica para similitud/RAG) y **SigLIP zero-shot** (orienta modalidad/anatomía). Ambos con aviso claro de que no emiten diagnósticos.
+  - **Selector de cadena visión → chat**: en Configuración eliges la combinación «modelo de visión» + «modelo de chat»; la imagen se analiza con el primero y su resultado alimenta al segundo.
+  - **Icono 👁 en la caja de prompt**: aparece junto al resto de herramientas cuando hay análisis de imagen activo, con un tooltip que nombra la cadena.
+  > Nota honesta: no existen VLM médicos especializados en formato ONNX/web (MedGemma y MedSigLIP no publican ONNX). Lo verificable en navegador son encoders y clasificadores generalistas; por eso los modelos médicos se etiquetan como **orientativos**.
 - 🔓 **Modelos sin censura verificados (v2607.AA)**: tras rastrear los repositorios ONNX (búsquedas de `abliterated`, `uncensored`, `dolphin`, `unfiltered`) y probar 15 candidatos uno a uno, se añaden los **2 que realmente funcionan**: **Qwen 2.5 0.5B Abliterated v3** y **Qwen 2.5 0.5B Abliterated**. Requieren cuantización `q4` (con `q4f16` el runtime falla al crear la sesión), ya configurada en el catálogo.
   > La mayoría de candidatos se descartaron con motivo: sin *chat template* (Qwen3-heretic, gemma-3-270m, text2sql, Carbon-500M), con ficheros ausentes en el repo, o con arquitectura no soportada (Apertus v1.1, igual que el 8B).
 - 🗑️ **Borrar modelos añadidos manualmente**: los modelos que pegas por URL/repo de Hugging Face ahora tienen un botón para quitarlos del catálogo. Además de retirarlos, borra sus archivos de la caché del navegador, los saca de favoritos y devuelve la selección a un modelo verificado si estaba activo.

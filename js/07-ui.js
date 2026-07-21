@@ -5,6 +5,126 @@
    comparten el ámbito global igual que el antiguo app.js)
    ============================================ */
 
+// ─── Settings workspace navigation ──────────
+let activeSettingsSection = 'connection';
+
+function activateSettingsSection(sectionId, { focusNav = false } = {}) {
+    const modal = document.getElementById('settingsModal');
+    if (!modal) return;
+
+    const buttons = [...modal.querySelectorAll('[data-settings-section]')];
+    const panels = [...modal.querySelectorAll('[data-settings-panel]')];
+    const nextButton = buttons.find((button) => button.dataset.settingsSection === sectionId);
+    const nextPanel = panels.find((panel) => panel.dataset.settingsPanel === sectionId);
+    if (!nextButton || !nextPanel) return;
+
+    activeSettingsSection = sectionId;
+    buttons.forEach((button) => {
+        const isActive = button === nextButton;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', String(isActive));
+        button.tabIndex = isActive ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+        const isActive = panel === nextPanel;
+        panel.classList.toggle('active', isActive);
+        panel.hidden = !isActive;
+    });
+
+    const content = modal.querySelector('.settings-content');
+    if (content) content.scrollTop = 0;
+    if (focusNav) nextButton.focus();
+}
+
+function openSettings(sectionId = activeSettingsSection) {
+    applySettingsToUI();
+    dom.settingsModal.classList.remove('hidden');
+    activateSettingsSection(sectionId);
+}
+
+function initSettingsNavigation() {
+    const nav = document.querySelector('#settingsModal .settings-nav');
+    if (!nav) return;
+
+    nav.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-settings-section]');
+        if (button) activateSettingsSection(button.dataset.settingsSection);
+    });
+
+    nav.addEventListener('keydown', (event) => {
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+        const buttons = [...nav.querySelectorAll('[data-settings-section]')];
+        const currentIndex = buttons.findIndex((button) => button.dataset.settingsSection === activeSettingsSection);
+        if (currentIndex < 0) return;
+        event.preventDefault();
+        let nextIndex = currentIndex;
+        if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+        if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % buttons.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = buttons.length - 1;
+        activateSettingsSection(buttons[nextIndex].dataset.settingsSection, { focusNav: true });
+    });
+
+    activateSettingsSection(activeSettingsSection);
+}
+
+let connectionValidationRun = 0;
+
+function syncConnectionDraftToState({ persist = false } = {}) {
+    const prov = getProviderDef(state.settings.provider);
+    const typedUrl = String(dom.ollamaUrl?.value || '').trim();
+    state.settings.ollamaUrl = (typedUrl || prov.defaultUrl || '').replace(/\/+$/, '');
+    state.settings.apiKey = String(dom.apiKeyInput?.value || '').trim();
+    saveCurrentProviderConfig();
+    if (persist) saveState();
+}
+
+function markConnectionValidationPending() {
+    setConnectionValidationFeedback('pending', 'Cambios pendientes de validar');
+}
+
+function showConnectionValidationResult(result) {
+    if (result?.stale) return;
+    if (!result?.ok) {
+        setConnectionValidationFeedback('error', result?.message || 'No se pudo conectar');
+        return;
+    }
+
+    const count = Number(result.modelCount || 0);
+    if (state.settings.provider === 'webgpu') {
+        const engine = result.mode === 'webgpu' ? 'WebGPU listo' : 'WASM disponible';
+        setConnectionValidationFeedback('success', `${engine} · ${count} modelos`);
+        return;
+    }
+
+    const modelText = count === 1 ? '1 modelo' : `${count} modelos`;
+    setConnectionValidationFeedback('success', `Conexión válida · ${modelText}`);
+}
+
+async function validateCurrentProviderConnection({ persist = true } = {}) {
+    const runId = ++connectionValidationRun;
+    syncConnectionDraftToState({ persist });
+
+    const button = dom.validateConnectionBtn;
+    if (button) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+    }
+    if (dom.validateConnectionLabel) dom.validateConnectionLabel.textContent = 'Validando…';
+    setConnectionValidationFeedback('loading', 'Comprobando acceso…');
+
+    const result = await checkProviderStatus({ explicit: true });
+    if (runId !== connectionValidationRun) return result;
+
+    showConnectionValidationResult(result);
+    if (button) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+    }
+    updateProviderUI();
+    return result;
+}
+
 // ─── Event Bindings ─────────────────────────
 function bindEvents() {
     // Send message
@@ -52,12 +172,14 @@ function bindEvents() {
 
     dom.providerSelect?.addEventListener('change', (e) => {
         // Save current provider config before switching
-        saveCurrentProviderConfig();
+        syncConnectionDraftToState({ persist: true });
         
         // Switch to new provider
         state.settings.provider = e.target.value;
+        markProviderUsed(state.settings.provider);
         state.modelFeatureFilters = [];
         syncProviderToState();
+        prepareModelPanelForProvider(state.settings.provider);
         
         // Update UI with new provider's config
         dom.ollamaUrl.value = state.settings.ollamaUrl;
@@ -65,8 +187,26 @@ function bindEvents() {
         dom.modelSelect.innerHTML = `<option value="${state.settings.model}" selected>${state.settings.model}</option>`;
         
         updateProviderUI();
+        renderProviderOptions();
+        updateStatusMeta();
         saveState();
-        checkProviderStatus();
+        validateCurrentProviderConnection({ persist: false });
+    });
+
+    dom.providerFavoriteBtn?.addEventListener('click', () => {
+        const providerId = state.settings.provider;
+        const favorites = (Array.isArray(state.settings.favoriteProviders) ? state.settings.favoriteProviders : [])
+            .filter(id => PROVIDERS[id]);
+        state.settings.favoriteProviders = favorites.includes(providerId)
+            ? favorites.filter(id => id !== providerId)
+            : [providerId, ...favorites];
+        renderProviderOptions();
+        saveState();
+    });
+
+    document.getElementById('modelEngineChangeBtn')?.addEventListener('click', () => {
+        activateSettingsSection('connection', { focusNav: true });
+        dom.providerSelect?.focus();
     });
     
     // API Key toggle visibility
@@ -77,9 +217,23 @@ function bindEvents() {
         }
     });
 
+    dom.validateConnectionBtn?.addEventListener('click', () => {
+        validateCurrentProviderConnection();
+    });
+
+    dom.apiKeyInput?.addEventListener('input', markConnectionValidationPending);
+    dom.ollamaUrl?.addEventListener('input', markConnectionValidationPending);
+
+    [dom.apiKeyInput, dom.ollamaUrl].forEach((input) => {
+        input?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            validateCurrentProviderConnection();
+        });
+    });
+
     $('#settingsBtn').addEventListener('click', () => {
-        applySettingsToUI();
-        dom.settingsModal.classList.remove('hidden');
+        openSettings();
     });
 
     dom.modelStatus?.addEventListener('click', () => {
@@ -89,6 +243,8 @@ function bindEvents() {
     $('#closeSettings').addEventListener('click', () => {
         dom.settingsModal.classList.add('hidden');
     });
+
+    initSettingsNavigation();
 
     if (dom.exportSettingsBtn) {
         dom.exportSettingsBtn.addEventListener('click', () => {
@@ -137,7 +293,8 @@ function bindEvents() {
         dom.refreshModels.addEventListener('click', () => {
             const originalText = dom.refreshModels.textContent;
             dom.refreshModels.textContent = '🔄 Cargando...';
-            checkProviderStatus().finally(() => {
+            syncConnectionDraftToState({ persist: true });
+            checkProviderStatus().then(showConnectionValidationResult).finally(() => {
                 dom.refreshModels.textContent = originalText;
             });
         });
@@ -200,6 +357,31 @@ function bindEvents() {
         dom.webgpuAddModelBtn?.click();
     });
 
+    // Cadena de visión: elegir modelo de visión y modelo de chat
+    document.getElementById('visionModelSelect')?.addEventListener('change', (e) => {
+        const id = e.target.value;
+        const def = WEBGPU_MODELS.find(m => m.id === id);
+        // El captioner por defecto se guarda como '' (usa WEBGPU_IMAGE_ASSIST)
+        state.settings.webgpuVisionModel = (def && def.id === 'Xenova/vit-gpt2-image-captioning') ? '' : id;
+        webgpuState.imageAssistPipeline = null;
+        webgpuState.imageAssistModelId = null;
+        saveState();
+        updateVisionIndicator();
+        if (state.rawModels) populateModels(state.rawModels);
+    });
+    document.getElementById('visionChatSelect')?.addEventListener('change', (e) => {
+        const id = e.target.value;
+        state.settings.model = id;
+        dom.modelSelect.value = id;
+        getActiveProviderConfig().model = id;
+        saveState();
+        updateStatusMeta();
+        updateModelContextIndicator();
+        updateVisionIndicator();
+        renderVisionChain();
+        if (state.rawModels) populateModels(state.rawModels);
+    });
+
     document.getElementById('webgpuReleaseBtn')?.addEventListener('click', () => {
         const loaded = webgpuState.loadedModelId || webgpuWorker.loadedModelId;
         if (!loaded && !webgpuState.isLoading) { alert('No hay ningún modelo cargado en memoria ahora mismo.'); return; }
@@ -207,7 +389,7 @@ function bindEvents() {
     });
 
     $('#saveSettings').addEventListener('click', async () => {
-        state.settings.ollamaUrl = dom.ollamaUrl.value.replace(/\/+$/, '');
+        syncConnectionDraftToState();
         if (dom.themeSelect) state.settings.theme = dom.themeSelect.value;
         // Model is read from the hidden select which is synced by populateModels()
         if (dom.modelSelect.value) state.settings.model = dom.modelSelect.value;
@@ -223,7 +405,6 @@ function bindEvents() {
         if (state.settings.incognitoMode || wasPersistenceDisabled) {
             state.incognitoSessionActive = true;
         }
-        state.settings.apiKey = dom.apiKeyInput?.value || '';
         saveCurrentProviderConfig();
         if (window.SecureGate?.configure) {
             try {
@@ -249,7 +430,7 @@ function bindEvents() {
         state.settings.model = PROVIDERS[defaultProvider].defaultModel;
         state.settings.apiKey = '';
         state.settings.theme = 'light';
-        state.settings.temperature = 0.7;
+        state.settings.temperature = 0.8;
         state.settings.systemPrompt = `# System Prompt: Asistente IA Experto
 
 ## Rol y Personalidad
@@ -284,6 +465,8 @@ Cuando generes código:
         state.settings.thinkingMode = true;
         state.settings.incognitoMode = false;
         state.settings.privacyLockEnabled = false;
+        state.settings.favoriteProviders = [];
+        state.settings.providerUsageHistory = [];
         state.incognitoSessionActive = false;
         state.settings.topP = 0.9;
         state.settings.topK = 40;
@@ -637,18 +820,9 @@ Cuando generes código:
     // CORS Helper Events
     dom.closeCorsModal?.addEventListener('click', () => dom.corsErrorModal.classList.add('hidden'));
     
-    dom.copyCorsBtn?.addEventListener('click', () => {
-        const cmd = $('#corsCommandText').textContent;
-        navigator.clipboard.writeText(cmd).then(() => {
-            const originalText = dom.copyCorsBtn.textContent;
-            dom.copyCorsBtn.textContent = '¡Copiado!';
-            setTimeout(() => dom.copyCorsBtn.textContent = originalText, 2000);
-        });
-    });
-
     dom.retryCorsBtn.addEventListener('click', () => {
         dom.corsErrorModal.classList.add('hidden');
-        checkProviderStatus();
+        validateCurrentProviderConnection();
     });
 
     dom.corsWarningBadge.addEventListener('click', () => {
@@ -1481,7 +1655,12 @@ function renderSlashPrompts(categoryId, query) {
 }
 
 function renderModelSlashProviders(query) {
-    let providers = Object.entries(PROVIDERS).map(([id, def]) => ({ id, ...def }));
+    const favorites = Array.isArray(state.settings.favoriteProviders) ? state.settings.favoriteProviders : [];
+    let providers = getOrderedProviderEntries().map(([id, def]) => ({
+        id,
+        ...def,
+        favorite: favorites.includes(id),
+    }));
     if (query) {
         providers = providers.filter(p => p.name.toLowerCase().includes(query) || p.id.toLowerCase().includes(query));
     }
@@ -1497,7 +1676,7 @@ function renderModelSlashProviders(query) {
         return `<button class="slash-item ${i === modelSlashState.selectedIndex ? 'active' : ''}" data-idx="${i}">
             <span class="slash-item-icon">${item.icon}</span>
             <div class="slash-item-info">
-                <div class="slash-item-title">${escapeHtml(item.name)}</div>
+                <div class="slash-item-title">${item.favorite ? '★ ' : ''}${escapeHtml(item.name)}</div>
             </div>
         </button>`;
     }).join('');
@@ -1619,6 +1798,7 @@ async function selectModelSlashItem(idx) {
         dom.messageInput.value = '//';
         renderModelSlashProviders('');
     } else if (item.type === 'model') {
+        markProviderUsed(item.providerId);
         // Switch provider if needed
         if (state.settings.provider !== item.providerId) {
             saveCurrentProviderConfig();
@@ -1761,9 +1941,7 @@ function bindSlashCommandEvents() {
         const mobileSettingsBtn = document.getElementById('mobileSettingsBtn');
         if (mobileSettingsBtn) {
             mobileSettingsBtn.addEventListener('click', () => {
-                if (typeof applySettingsToUI === 'function') applySettingsToUI();
-                const modal = document.getElementById('settingsModal');
-                if (modal) modal.classList.remove('hidden');
+                if (typeof openSettings === 'function') openSettings();
             });
         }
         
@@ -1794,9 +1972,7 @@ function bindSlashCommandEvents() {
             // Ctrl+, — Open settings
             if (ctrl && e.key === ',') {
                 e.preventDefault();
-                if (typeof applySettingsToUI === 'function') applySettingsToUI();
-                const modal = document.getElementById('settingsModal');
-                if (modal) modal.classList.remove('hidden');
+                if (typeof openSettings === 'function') openSettings();
             }
             
             // Ctrl+E — Improve prompt

@@ -279,6 +279,14 @@
                                 </svg>
                             </button>
 
+                            <button class="btn-icon toolbar-btn vision-indicator hidden" id="visionIndicator"
+                                title="Análisis de imagen activo. Las imágenes que adjuntes se describen localmente con el modelo de visión antes de pasarlas al chat.">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+
                             <button class="btn-icon toolbar-btn feature-toggle hidden" id="toolInternet"
                                 title="Activa el uso de Tool Calling (búsqueda web simulada) en modelos que soporten esta capacidad sintáctica de forma nativa.">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -354,35 +362,75 @@
 
     <!-- Settings Modal -->
     <div class="modal-overlay hidden" id="settingsModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>Configuración</h2>
-                <button class="btn-icon" id="closeSettings">
+        <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+            <div class="modal-header settings-modal-header">
+                <div class="settings-title-wrap">
+                    <span class="settings-kicker">PREFERENCIAS DE wIA</span>
+                    <h2 id="settingsTitle">Ajustes</h2>
+                </div>
+                <div class="settings-active-context" aria-label="Configuración activa">
+                    <span class="settings-active-context-label">EN USO</span>
+                    <span class="settings-active-provider" id="settingsActiveProvider">🧠 WebGPU (Browser)</span>
+                    <span class="settings-active-separator" aria-hidden="true">·</span>
+                    <span class="settings-active-model" id="settingsActiveModel">◇ Llama 3.2 1B</span>
+                    <span class="settings-active-availability is-unknown" id="settingsActiveAvailability">Sin comprobar</span>
+                </div>
+                <button class="btn-icon" id="closeSettings" aria-label="Cerrar ajustes" title="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
                     </svg>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="settings-layout">
+                <nav class="settings-nav" aria-label="Secciones de ajustes">
+                    <button type="button" class="settings-nav-item active" data-settings-section="connection" aria-controls="settingsPanelConnection" aria-selected="true" title="Conexión">
+                        <span class="settings-nav-icon" aria-hidden="true">⌁</span>
+                        <span class="settings-nav-copy"><strong>Conexión</strong><small>Motor, URL y acceso</small></span>
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="models" aria-controls="settingsPanelModels" aria-selected="false" title="Modelos">
+                        <span class="settings-nav-icon" aria-hidden="true">◇</span>
+                        <span class="settings-nav-copy"><strong>Modelos</strong><small>Catálogo y WebGPU</small></span>
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="generation" aria-controls="settingsPanelGeneration" aria-selected="false" title="Generación">
+                        <span class="settings-nav-icon" aria-hidden="true">≋</span>
+                        <span class="settings-nav-copy"><strong>Generación</strong><small>Creatividad y límites</small></span>
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="experience" aria-controls="settingsPanelExperience" aria-selected="false" title="Experiencia">
+                        <span class="settings-nav-icon" aria-hidden="true">✦</span>
+                        <span class="settings-nav-copy"><strong>Experiencia</strong><small>Tema y comportamiento</small></span>
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="privacy" aria-controls="settingsPanelPrivacy" aria-selected="false" title="Privacidad">
+                        <span class="settings-nav-icon" aria-hidden="true">⌾</span>
+                        <span class="settings-nav-copy"><strong>Privacidad</strong><small>Sesión y bloqueo</small></span>
+                    </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="data" aria-controls="settingsPanelData" aria-selected="false" title="Datos">
+                        <span class="settings-nav-icon" aria-hidden="true">⇅</span>
+                        <span class="settings-nav-copy"><strong>Datos</strong><small>Copias y limpieza</small></span>
+                    </button>
+                </nav>
+
+                <div class="settings-content" id="settingsContent">
+                    <section class="settings-section active" id="settingsPanelConnection" data-settings-panel="connection" aria-labelledby="settingsHeadingConnection">
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">01 · CONECTIVIDAD</span><h3 id="settingsHeadingConnection">Conecta tu motor de IA</h3></div>
+                            <p>Elige dónde se ejecuta la inteligencia y configura sus credenciales.</p>
+                        </div>
+                        <div class="settings-grid">
                 <div class="setting-group">
                     <label class="setting-label" title="Selecciona la pasarela o motor IA al cual conectarte. Configura en caliente los adaptadores de red y dialectos correctos (Ollama, OpenAI, Gemini, etc.)">Motor de IA (Backend)</label>
-                    <select class="setting-input" id="providerSelect">
-                        <option value="ollama">🟢 Ollama (Local)</option>
-                        <option value="ollama_remote">🌐 Ollama (Remoto)</option>
-                        <option value="ollama_cloud">☁️ Ollama Cloud</option>
-                        <option value="lmstudio">💻 LM Studio</option>
-                        <option value="webgpu">🧠 WebGPU (Browser)</option>
-                        <option value="groq">⚡ Groq</option>
-                        <option value="openrouter">🔀 OpenRouter</option>
-                        <option value="gemini">✨ Google Gemini</option>
-                        <option value="claude">🟣 Claude (Anthropic)</option>
-                        <option value="openai">🤖 OpenAI</option>
-                        <option value="nvidia">🟢 Nvidia Integrate</option>
-                    </select>
+                    <div class="provider-select-row">
+                        <select class="setting-input" id="providerSelect">
+                            <option value="webgpu">🧠 WebGPU (Browser)</option>
+                            <option value="ollama">🟢 Ollama (Local)</option>
+                        </select>
+                        <button type="button" class="provider-favorite-btn" id="providerFavoriteBtn"
+                            aria-pressed="false" aria-label="Marcar motor como favorito"
+                            title="Marcar motor como favorito">★</button>
+                    </div>
                     <div id="corsWarningBadge" class="hidden" style="margin-top: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); border-radius: var(--radius-sm);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round"><path d="m12 8 4 4-4 4"/><path d="M8 12h7"/><path d="M22 12A10 10 0 1 1 12 2a10 10 0 0 1 10 10Z"/></svg>
-                        <span style="font-size: 0.75rem; color: var(--warning); font-weight: 600;">Error de Conexión (CORS). Haz clic para ayuda.</span>
+                        <span id="corsWarningText" style="font-size: 0.75rem; color: var(--warning); font-weight: 600;">No se pudo acceder al motor · Ver diagnóstico</span>
                     </div>
                     <div class="provider-auth-badge" id="providerAuthBadge"></div>
                 </div>
@@ -399,29 +447,57 @@
                     </div>
                     <p class="apikey-security-note">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        Tu API Key se almacena solo en tu navegador (localStorage) y nunca se envía a terceros.
+                        Tu API Key se guarda solo en este navegador y se envía únicamente al proveedor seleccionado al validar o consultar.
                     </p>
                 </div>
                 <div class="setting-group">
                     <label class="setting-label" title="End point HTTP/S de destino base. Especialmente útil para entornos self-hosted como LMStudio u Ollama remoto.">URL del Servidor</label>
                     <input type="text" class="setting-input" id="ollamaUrl" value="http://localhost:11434">
                 </div>
-                <div class="setting-group">
-                    <label class="setting-label" title="Renderiza todo el DOM aplicando tokens de paleta de colores diferentes">Tema Visual</label>
-                    <select class="setting-input" id="themeSelect">
-                        <option value="system">Sistema (Automático) 🖥️</option>
-                        <option value="dark">Oscuro (Premium) 🌙</option>
-                        <option value="light" selected>Claro (Premium) ☀️</option>
-                        <option value="vanilla">Vanilla (Minimalista) 🍦</option>
-                    </select>
+                <div class="setting-group connection-validation-card">
+                    <div class="connection-validation-copy">
+                        <span class="setting-label">Estado de la conexión</span>
+                        <p id="connectionValidationHint">Comprueba el acceso y actualiza los modelos disponibles sin cerrar Ajustes.</p>
+                    </div>
+                    <div class="connection-validation-actions">
+                        <button type="button" class="btn-primary connection-validate-btn" id="validateConnectionBtn">
+                            <span aria-hidden="true">✓</span>
+                            <span id="validateConnectionLabel">Validar conexión</span>
+                        </button>
+                        <span class="connection-validation-result is-idle" id="connectionValidationResult" role="status" aria-live="polite">Sin validar</span>
+                    </div>
                 </div>
-                <div class="setting-group">
+                        </div>
+                    </section>
+
+                    <section class="settings-section" id="settingsPanelModels" data-settings-panel="models" aria-labelledby="settingsHeadingModels" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">02 · CATÁLOGO</span><h3 id="settingsHeadingModels">Selecciona el modelo</h3></div>
+                            <p>Busca, filtra y gestiona los modelos disponibles para el motor activo.</p>
+                        </div>
+                        <div class="model-engine-context" id="modelEngineContext">
+                            <div class="model-engine-context-icon" aria-hidden="true">◇</div>
+                            <div class="model-engine-context-copy">
+                                <span class="model-engine-context-eyebrow">CATÁLOGO DEL MOTOR ACTIVO</span>
+                                <strong id="modelContextProvider">🧠 WebGPU (Browser)</strong>
+                                <span id="modelContextMeta">Ejecución local en el navegador</span>
+                            </div>
+                            <div class="model-engine-context-active">
+                                <span>Modelo en uso</span>
+                                <strong id="modelContextModel">Llama 3.2 1B</strong>
+                            </div>
+                            <span class="model-engine-context-count" id="modelContextCount">Catálogo pendiente</span>
+                            <button type="button" class="btn-secondary model-engine-change-btn" id="modelEngineChangeBtn">Cambiar conexión</button>
+                        </div>
+                <div class="setting-group settings-model-group">
                     <label class="setting-label" style="display: flex; justify-content: space-between;">
                         Modelo
-                        <span class="setting-value" id="refreshModels" style="cursor:pointer"
-                            title="Recargar modelos de Ollama">🔄 Actualizar</span>
-                        <span class="setting-value" id="manageModelsBtn" style="cursor:pointer; color: var(--accent-secondary); margin-left: 10px;"
-                            title="Gestionar modelos locales (Listar, Agregar, Eliminar)">⚙️ Gestionar</span>
+                        <span class="setting-actions-inline">
+                            <span class="setting-value" id="refreshModels" style="cursor:pointer"
+                                title="Recargar modelos de Ollama">🔄 Actualizar</span>
+                            <span class="setting-value" id="manageModelsBtn" style="cursor:pointer; color: var(--accent-secondary);"
+                                title="Gestionar modelos locales (Listar, Agregar, Eliminar)">⚙️ Gestionar</span>
+                        </span>
                     </label>
 
                     <!-- WebGPU Info Panel (shown only when webgpu provider is selected) -->
@@ -436,6 +512,23 @@
                                 <a href="https://huggingface.co/models?library=transformers.js&sort=downloads" target="_blank" class="webgpu-link">🔍 Ver modelos Transformers.js</a>
                                 <a href="https://huggingface.co/models?library=transformers.js&search=vision" target="_blank" class="webgpu-link">👁 Explorar modelos con visión</a>
                                 <a href="https://webgpureport.org/" target="_blank" class="webgpu-link">📊 Comprobar soporte WebGPU</a>
+                            </div>
+                        </div>
+
+                        <!-- Cadena de visión: modelo de imagen + modelo de chat -->
+                        <div class="vision-chain hidden" id="visionChain">
+                            <div class="vision-chain-title">👁 Cadena de análisis de imagen</div>
+                            <p class="vision-chain-desc" id="visionChainDesc">Cuando adjuntas una imagen, primero la analiza el <b>modelo de visión</b> y su resultado pasa al <b>modelo de chat</b> que responde. Elige la combinación:</p>
+                            <div class="vision-chain-row">
+                                <div class="vision-chain-step">
+                                    <label>👁 Modelo de visión</label>
+                                    <select class="setting-input" id="visionModelSelect"></select>
+                                </div>
+                                <span class="vision-chain-arrow">→</span>
+                                <div class="vision-chain-step">
+                                    <label>💬 Modelo de chat</label>
+                                    <select class="setting-input" id="visionChatSelect"></select>
+                                </div>
                             </div>
                         </div>
 
@@ -477,20 +570,26 @@
                         </select>
                     </div>
                 </div>
+                    </section>
+
+                    <section class="settings-section" id="settingsPanelGeneration" data-settings-panel="generation" aria-labelledby="settingsHeadingGeneration" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">03 · RESPUESTA</span><h3 id="settingsHeadingGeneration">Controla la generación</h3></div>
+                            <p>Ajusta creatividad, diversidad y longitud de las respuestas.</p>
+                        </div>
+                        <div class="settings-grid settings-grid-parameters">
                 <div class="setting-group">
                     <label class="setting-label" title="Parámetro determinista: 0.1 hace al modelo robótico y predecible. 1.0 (o sumamente alto) lo hace extremadamente espontáneo, creativo pero posiblemente caótico.">Temperatura <span class="setting-value"
-                            id="tempValue">0.7</span></label>
-                    <input type="range" class="setting-range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+                            id="tempValue">0.8</span></label>
+                    <input type="range" class="setting-range" id="temperature" min="0" max="2" step="0.1" value="0.8">
                 </div>
-                <div class="setting-inline-group">
-                    <div class="setting-group">
-                        <label class="setting-label" title="Nucleus Sampling: Poda estricta de base. Si se configura a 0.9, el modelo sólo considerará los tokens conformantes del 90% superior de probabilidad probabilística más alta.">Top-P <span class="setting-value" id="topPValue">0.9</span></label>
-                        <input type="range" class="setting-range" id="topP" min="0" max="1" step="0.05" value="0.9">
-                    </div>
-                    <div class="setting-group">
-                        <label class="setting-label" title="Absolute Top-K: Límite duro matemático. Tras cada token generado, restringe rígidamente las próximas opciones a los K tokens más predecibles en la rama del grafo.">Top-K <span class="setting-value" id="topKValue">40</span></label>
-                        <input type="range" class="setting-range" id="topK" min="1" max="100" step="1" value="40">
-                    </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="Nucleus Sampling: Poda estricta de base. Si se configura a 0.9, el modelo sólo considerará los tokens conformantes del 90% superior de probabilidad probabilística más alta.">Top-P <span class="setting-value" id="topPValue">0.9</span></label>
+                    <input type="range" class="setting-range" id="topP" min="0" max="1" step="0.05" value="0.9">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" title="Absolute Top-K: Límite duro matemático. Tras cada token generado, restringe rígidamente las próximas opciones a los K tokens más predecibles en la rama del grafo.">Top-K <span class="setting-value" id="topKValue">40</span></label>
+                    <input type="range" class="setting-range" id="topK" min="1" max="100" step="1" value="40">
                 </div>
                 <div class="setting-group">
                     <label class="setting-label" title="Límite absoluto de longitud del mensaje de salida (respuesta) generado durante la inferencia" style="display: flex; align-items: center;">
@@ -499,6 +598,24 @@
                         <span id="modelMaxContext" style="font-size: 0.65rem; color: var(--text-tertiary); margin-left: auto; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); display: none;">CTX: --</span>
                     </label>
                     <input type="range" class="setting-range" id="maxTokens" min="256" max="131072" step="256" value="4096">
+                </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section" id="settingsPanelExperience" data-settings-panel="experience" aria-labelledby="settingsHeadingExperience" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">04 · PERSONALIZACIÓN</span><h3 id="settingsHeadingExperience">Adapta tu experiencia</h3></div>
+                            <p>Define el aspecto de wIA y la forma en que debe comportarse el asistente.</p>
+                        </div>
+                        <div class="settings-grid">
+                <div class="setting-group">
+                    <label class="setting-label" title="Renderiza todo el DOM aplicando tokens de paleta de colores diferentes">Tema Visual</label>
+                    <select class="setting-input" id="themeSelect">
+                        <option value="system">Sistema (Automático) 🖥️</option>
+                        <option value="dark">Oscuro (Premium) 🌙</option>
+                        <option value="light" selected>Claro (Premium) ☀️</option>
+                        <option value="vanilla">Vanilla (Minimalista) 🍦</option>
+                    </select>
                 </div>
                 <div class="setting-group">
                     <label class="setting-label" title="Mandamientos centrales obligatorios incrustados al inicio absoluto de cualquier comunicación. Afecta fuertemente a la personalidad y respuestas estructurales.">System Prompt</label>
@@ -511,6 +628,15 @@
                         Modo Thinking (razonamiento visible)
                     </label>
                 </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section" id="settingsPanelPrivacy" data-settings-panel="privacy" aria-labelledby="settingsHeadingPrivacy" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">05 · PROTECCIÓN LOCAL</span><h3 id="settingsHeadingPrivacy">Controla tu privacidad</h3></div>
+                            <p>Decide qué se conserva en el navegador y protege el acceso casual.</p>
+                        </div>
+                        <div class="settings-grid">
                 <div class="setting-group">
                     <label class="setting-label" style="display:flex; align-items:center;">
                         <input type="checkbox" id="incognitoMode" style="margin-right: 8px;">
@@ -531,7 +657,16 @@
                         Este bloqueo protege la interfaz en este navegador, pero no sustituye autenticación de servidor.
                     </p>
                 </div>
-                <div class="setting-group"
+                        </div>
+                    </section>
+
+                    <section class="settings-section" id="settingsPanelData" data-settings-panel="data" aria-labelledby="settingsHeadingData" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">06 · ALMACENAMIENTO</span><h3 id="settingsHeadingData">Gestiona tus datos</h3></div>
+                            <p>Crea copias de tus preferencias o limpia el almacenamiento local.</p>
+                        </div>
+                        <div class="settings-grid settings-data-grid">
+                <div class="setting-group settings-data-card"
                     style="padding-top: 20px; border-top: 1px solid var(--border-subtle); margin-top: 10px;">
                     <label class="setting-label">💾 Copia de Seguridad de Ajustes</label>
                     <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 12px; line-height: 1.4;">
@@ -542,7 +677,7 @@
                         <input type="file" id="importSettingsFile" accept=".json" class="hidden">
                     </div>
                 </div>
-                <div class="setting-group"
+                <div class="setting-group settings-data-card danger-card"
                     style="padding-top: 20px; border-top: 1px solid var(--border-subtle); margin-top: 10px;">
                     <label class="setting-label" style="color: var(--danger);">Zona de Peligro</label>
                     <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 12px; line-height: 1.4;">
@@ -554,10 +689,16 @@
                             style="width: 100%;" title="Borra historial, proyectos y también todos los ajustes guardados, restaurando wIA a valores por defecto">Reset de fábrica</button>
                     </div>
                 </div>
+                        </div>
+                    </section>
+                </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" id="resetSettings">Restablecer</button>
-                <button class="btn-primary" id="saveSettings">Guardar</button>
+            <div class="modal-footer settings-modal-footer">
+                <span class="settings-save-note">Motor y modelo se aplican al seleccionarlos; el resto, al guardar.</span>
+                <div class="settings-footer-actions">
+                    <button class="btn-secondary" id="resetSettings">Restablecer</button>
+                    <button class="btn-primary" id="saveSettings">Guardar cambios</button>
+                </div>
             </div>
         </div>
     </div>
@@ -811,7 +952,7 @@
     <div class="modal-overlay hidden" id="corsErrorModal">
         <div class="modal">
             <div class="modal-header">
-                <h2>🛡️ Ayuda de Conexión (CORS)</h2>
+                <h2 id="corsHelpTitle">🛡️ Diagnóstico de conexión</h2>
                 <button class="btn-icon" id="closeCorsModal">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
@@ -820,39 +961,14 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="alert-box warning" style="background: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); padding: 16px; border-radius: var(--radius-md); margin-bottom: 20px;">
-                    <p style="font-size: 0.9rem; color: var(--warning); font-weight: 600; margin-bottom: 8px;">Conexión Bloqueada por Seguridad</p>
-                    <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
-                        wIA no puede comunicarse con Ollama. Esto ocurre porque Chrome bloquea las peticiones desde archivos locales (`file://`).
-                    </p>
+                <div class="connection-help-summary">
+                    <strong id="corsHelpSummaryTitle">No se pudo acceder al motor</strong>
+                    <p id="corsHelpSummary">La causa puede ser el servicio detenido, una URL incorrecta, la red o una política CORS del servidor.</p>
                 </div>
-                
-                <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">PASO 1: Configurar Permisos</h3>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Copia y ejecuta el comando según tu sistema operativo:</p>
-                
-                <div class="cors-tabs" style="margin-bottom: 16px;">
-                    <div style="margin-bottom: 8px; font-size: 0.75rem; color: var(--text-tertiary); font-weight: 600;"> macOS (Terminal)</div>
-                    <div class="code-block-container" style="background: var(--bg-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 12px; position: relative; margin-bottom: 12px;">
-                        <code style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-primary);">launchctl setenv OLLAMA_ORIGINS "*"</code>
-                        <button class="copy-btn-mini" onclick="copyText('launchctl setenv OLLAMA_ORIGINS \u0022*\u0022', this)">Copiar</button>
-                    </div>
-
-                    <div style="margin-bottom: 8px; font-size: 0.75rem; color: var(--text-tertiary); font-weight: 600;"> Windows (PowerShell Administrador)</div>
-                    <div class="code-block-container" style="background: var(--bg-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 12px; position: relative;">
-                        <code style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-primary);">[System.Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS', '*', 'User')</code>
-                        <button class="copy-btn-mini" onclick="copyText('[System.Environment]::SetEnvironmentVariable(\u0027OLLAMA_ORIGINS\u0027, \u0027*\u0027, \u0027User\u0027)', this)">Copiar</button>
-                    </div>
-                </div>
-
-                <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--danger);">PASO 2: ¡REINICIO OBLIGATORIO!</h3>
-                <div style="background: rgba(239, 68, 68, 0.05); padding: 12px; border-radius: var(--radius-md); border-left: 3px solid var(--danger);">
-                    <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
-                        Para que el cambio funcione, debes <strong>cerrar Ollama completamente</strong> (búscalo en la bandeja del sistema/barra de menú, botón derecho y "Quit") y volver a abrir la aplicación.
-                    </p>
-                </div>
+                <div class="connection-help-steps" id="corsHelpSteps"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn-primary" id="retryCorsBtn" style="width: 100%;">He reiniciado Ollama, Reintentar</button>
+                <button class="btn-primary" id="retryCorsBtn" style="width: 100%;">Reintentar conexión</button>
             </div>
         </div>
     </div>

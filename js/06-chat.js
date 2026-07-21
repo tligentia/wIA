@@ -469,10 +469,10 @@ function base64ToBlob(base64, mimeType) {
     return new Blob(byteArrays, { type: mimeType });
 }
 
-async function getWebGPURawImages(imageMetaList) {
+async function getWebGPURawImages(imageMetaList, forceInline = false) {
     // En modo worker las imágenes viajan como data-URLs y es el worker quien
     // las convierte a RawImage dentro de su contexto.
-    if (webgpuState.executionMode === 'worker' && !webgpuWorker.broken) {
+    if (!forceInline && webgpuState.executionMode === 'worker' && !webgpuWorker.broken) {
         return imageMetaList.map(img =>
             `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`);
     }
@@ -508,40 +508,114 @@ function supportsWebGPUImageAssist(providerId = state.settings.provider) {
 
 function formatWebGPUImageAssistContext(imageCaptions = []) {
     if (!Array.isArray(imageCaptions) || imageCaptions.length === 0) return '';
+    const medical = getVisionAssistDef()?.capabilities?.includes('medical');
     const lines = imageCaptions.map((item, idx) => {
         const prefix = `[Imagen ${idx + 1}${item.name ? ` · ${item.name}` : ''}]`;
         return `${prefix} ${item.caption}`.trim();
     });
-    return `\n\n--- Analisis visual local ---\n${lines.join('\n')}\n--- Fin del analisis visual ---\n`;
+    const title = medical
+        ? 'Análisis visual médico local (orientativo; no es un diagnóstico)'
+        : 'Análisis visual local';
+    return `\n\n--- ${title} ---\n${lines.join('\n')}\n--- Fin del análisis visual ---\n`;
 }
 
-async function analyzeImagesForWebGPUInline(imageMetaList = [], onProgress) {
+const MEDICAL_ZERO_SHOT_LABELS = [
+    'a chest X-ray',
+    'a bone or joint X-ray',
+    'a dental X-ray',
+    'a CT scan',
+    'an MRI scan',
+    'an ultrasound image',
+    'a retinal fundus photograph',
+    'a dermatology clinical photograph',
+    'a histopathology microscopy image',
+    'an endoscopy image',
+    'an electrocardiogram trace',
+    'a medical document or report',
+    'a non-medical photograph'
+];
+
+function formatMedicalZeroShot(output = []) {
+    const rows = (Array.isArray(output) ? output : [])
+        .filter(item => item?.label && Number.isFinite(Number(item.score)))
+        .slice(0, 5)
+        .map(item => `${item.label}: ${(Number(item.score) * 100).toFixed(1)}%`);
+    if (rows.length === 0) return 'SigLIP no produjo coincidencias interpretables.';
+    return `Clasificación zero-shot orientativa de modalidad/contenido: ${rows.join(' · ')}. Modelo generalista; no usar estas puntuaciones para diagnosticar.`;
+}
+
+function formatMedicalEmbedding(output) {
+    const tensor = output?.pooler_output || output?.last_hidden_state || output;
+    const dims = Array.isArray(tensor?.dims) ? tensor.dims.join(' × ') : 'desconocidas';
+    const values = tensor?.data;
+    let norm = null;
+    if (values?.length) {
+        let sum = 0;
+        for (let i = 0; i < values.length; i++) sum += Number(values[i]) ** 2;
+        norm = Math.sqrt(sum);
+    }
+    return `Firma radiológica DINOv2 extraída correctamente (dimensiones ${dims}${Number.isFinite(norm) ? `; norma ${norm.toFixed(3)}` : ''}). Sirve para similitud/RAG con radiografías de referencia; por sí sola no clasifica patologías ni emite diagnósticos.`;
+}
+
+async function analyzeImagesForWebGPUInline(imageMetaList = [], onProgress, userPrompt = '') {
     const normalized = normalizeImageMeta(imageMetaList);
     if (normalized.length === 0) return [];
 
-    const rawImages = await getWebGPURawImages(normalized);
-    const pipe = await loadWebGPUImageAssistPipeline(onProgress);
+    const assist = getVisionAssistDef();
+    const engine = assist.engine || 'caption';
+    // getWebGPURawImages puede devolver data-URLs en modo worker; aquí forzamos
+    // RawImage reales porque los motores de visión corren inline.
+    const dataUrls = normalized.map(img => `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`);
+    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    webgpuState.hfModule = hf;
+    const rawImages = await Promise.all(dataUrls.map(u => hf.RawImage.fromURL(u)));
+
     const results = [];
+    const emitProgress = (i) => onProgress && onProgress(Math.round((i / rawImages.length) * 100), {
+        status: 'progress', file: normalized[i]?.name || `imagen_${i + 1}`
+    });
 
-    for (let i = 0; i < rawImages.length; i++) {
-        if (onProgress) {
-            onProgress(Math.round((i / rawImages.length) * 100), {
-                status: 'progress',
-                file: normalized[i].name || `imagen_${i + 1}`
-            });
+    if (engine === 'florence2') {
+        const bundle = await loadFlorence2VisionModel(onProgress);
+        for (let i = 0; i < rawImages.length; i++) {
+            emitProgress(i);
+            const caption = await runFlorence2Analysis(bundle, rawImages[i]);
+            results.push({ name: normalized[i].name, caption: caption || 'No se pudo analizar la imagen.' });
         }
-        const output = await pipe(rawImages[i]);
-        const caption = extractGeneratedText(output).trim();
-        results.push({
-            name: normalized[i].name,
-            caption: caption || 'No se pudo extraer una descripcion util de la imagen.'
-        });
+    } else if (engine === 'vlm') {
+        const bundle = await loadVLMVisionModel(onProgress);
+        for (let i = 0; i < rawImages.length; i++) {
+            emitProgress(i);
+            const caption = await runVLMAnalysis(bundle, rawImages[i], userPrompt);
+            results.push({ name: normalized[i].name, caption: caption || 'No se pudo analizar la imagen.' });
+        }
+    } else if (engine === 'medical-zero-shot') {
+        const pipe = await loadWebGPUImageAssistPipeline(onProgress);
+        for (let i = 0; i < rawImages.length; i++) {
+            emitProgress(i);
+            const output = await pipe(rawImages[i], MEDICAL_ZERO_SHOT_LABELS, {
+                hypothesis_template: 'This medical image is {}.'
+            });
+            results.push({ name: normalized[i].name, caption: formatMedicalZeroShot(output) });
+        }
+    } else if (engine === 'medical-embedding') {
+        const bundle = await loadDinoMedicalVisionModel(onProgress);
+        for (let i = 0; i < rawImages.length; i++) {
+            emitProgress(i);
+            const output = await runDinoMedicalEmbedding(bundle, rawImages[i]);
+            results.push({ name: normalized[i].name, caption: formatMedicalEmbedding(output) });
+        }
+    } else {
+        const pipe = await loadWebGPUImageAssistPipeline(onProgress);
+        for (let i = 0; i < rawImages.length; i++) {
+            emitProgress(i);
+            const output = await pipe(rawImages[i]);
+            const caption = extractGeneratedText(output).trim();
+            results.push({ name: normalized[i].name, caption: caption || 'No se pudo extraer una descripcion util de la imagen.' });
+        }
     }
 
-    if (onProgress) {
-        onProgress(100, { status: 'ready', file: `${normalized.length} imagen(es)` });
-    }
-
+    if (onProgress) onProgress(100, { status: 'ready', file: `${normalized.length} imagen(es)` });
     return results;
 }
 
@@ -588,7 +662,7 @@ async function runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx
     const hf = webgpuState.hfModule;
     const generationOptions = {
         max_new_tokens: parseInt(state.settings.maxTokens || 2048),
-        temperature: parseFloat(state.settings.temperature || 0.7),
+        temperature: parseFloat(state.settings.temperature ?? 0.8),
         top_p: parseFloat(state.settings.topP || 0.9),
         repetition_penalty: 1.1,
         do_sample: true,
@@ -655,7 +729,7 @@ async function runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx
 
 function isWebGPUVisionModel(modelId = state.settings.model) {
     const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
-    return Array.isArray(modelDef?.capabilities) && modelDef.capabilities.includes('vision');
+    return !!modelDef?.omnimodal;
 }
 
 function getWebGPUTextFallbackModelId() {
@@ -1099,8 +1173,8 @@ async function sendMessage(content, autoSendBody = null) {
             const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
             const modelLabel = modelDef?.label || modelId;
             const deviceLabel = support === 'webgpu' ? 'WebGPU' : 'WASM / CPU';
-            const useVisionTask = isWebGPUVisionModel(modelId);
-            const pipelineTask = useVisionTask ? 'image-text-to-text' : 'text-generation';
+            const useVisionTask = !!modelDef?.omnimodal;
+            const pipelineTask = useVisionTask ? 'omnimodal' : 'text-generation';
             dom.statusDot.className = 'status-dot loading';
             dom.statusText.textContent = 'Inicializando...';
             setMessageLoadingState(assistantMsg, {
@@ -1214,7 +1288,7 @@ async function sendMessage(content, autoSendBody = null) {
                             note: `Modelo auxiliar: ${getVisionAssistDef().id}`
                         });
                         updateStreamingMessage(msgIdx, assistantMsg);
-                    });
+                    }, msg.content || '');
                     processedCount += normalizedImages.length;
                 }
                 if (processedCount > 0) saveState();
@@ -1241,7 +1315,7 @@ async function sendMessage(content, autoSendBody = null) {
                             note: 'Intentando primero el flujo VLM nativo del modelo de vision.'
                         });
                         updateStreamingMessage(msgIdx, assistantMsg);
-                        rawImages = await getWebGPURawImages(imageMetaList);
+                        rawImages = await getWebGPURawImages(imageMetaList, true);
                     }
 
                     generationOutcome = await runWebGPUGeneration(pipe, {
@@ -2065,4 +2139,3 @@ function stopStreaming() {
         }, 4000);
     }
 }
-

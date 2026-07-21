@@ -172,6 +172,8 @@ const PROVIDERS = {
 
 // ─── Model Function Metadata ────────────────
 const MODEL_FUNCTION_DEFS = {
+    omnimodal:    { label: '◉ Omnimodal', shortLabel: 'Omnimodal', cls: 'tag-omnimodal' },
+    medical:      { label: '⚕ Imagen médica', shortLabel: 'Imagen médica', cls: 'tag-medical' },
     vision:       { label: '👁 Visión', shortLabel: 'Visión', cls: 'tag-vision' },
     thinking:     { label: '🧠 Thinking', shortLabel: 'Thinking', cls: 'tag-thinking' },
     coding:       { label: '💻 Código', shortLabel: 'Código', cls: 'tag-coding' },
@@ -184,7 +186,7 @@ const MODEL_FUNCTION_DEFS = {
     experimental: { label: '🧪 Experimental', shortLabel: 'Experimental', cls: 'tag-experimental' },
 };
 
-const MODEL_FILTER_ORDER = ['vision', 'thinking', 'coding', 'tools', 'multilingual', 'fast', 'large', 'free', 'uncensored', 'experimental'];
+const MODEL_FILTER_ORDER = ['omnimodal', 'medical', 'vision', 'thinking', 'coding', 'tools', 'multilingual', 'fast', 'large', 'free', 'uncensored', 'experimental'];
 
 // Marcas habituales de modelos sin alineamiento/censura en HF, Ollama y
 // OpenRouter. Se detectan por el nombre del repo/modelo.
@@ -284,7 +286,7 @@ const WEBGPU_MODELS = [
         label: 'Qwen 2.5 0.5B Abliterated v3',
         size: '~500 MB',
         sizeBytes: 500,
-        tier: 'quick',
+        tier: 'uncensored',
         dtype: 'q4',
         context: 32768,
         capabilities: ['fast', 'multilingual', 'uncensored'],
@@ -297,7 +299,7 @@ const WEBGPU_MODELS = [
         label: 'Qwen 2.5 0.5B Abliterated',
         size: '~500 MB',
         sizeBytes: 500,
-        tier: 'quick',
+        tier: 'uncensored',
         dtype: 'q4',
         context: 32768,
         capabilities: ['fast', 'multilingual', 'uncensored'],
@@ -400,13 +402,101 @@ const WEBGPU_MODELS = [
         desc: 'Potente para razonamiento y tareas técnicas, pero pesado: la compilación de kernels puede tardar varios minutos la primera vez. Requiere un equipo con GPU holgada.',
         repoUrl: 'https://huggingface.co/webgpu/Phi-4-mini-instruct-ONNX-GQA'
     },
+    // ── ◉ Omnimodal: modelos que ven y responden directamente ──
+    //    El mismo modelo recibe imagen + texto y genera la respuesta final.
+    //    Requieren AutoModelForVision2Seq; el pipeline genérico
+    //    image-text-to-text no existe en Transformers.js 3.8.1.
+    {
+        id: 'HuggingFaceTB/SmolVLM-256M-Instruct',
+        label: 'SmolVLM 256M Omnimodal',
+        size: '~210 MB',
+        sizeBytes: 210,
+        tier: 'omnimodal',
+        omnimodal: true,
+        engine: 'vlm',
+        context: 8192,
+        capabilities: ['omnimodal', 'vision', 'thinking'],
+        verified: true,
+        recommended: true,
+        desc: 'VLM ultracompacto: recibe imagen y pregunta en el mismo contexto y responde directamente. Recomendado para equipos modestos.',
+        repoUrl: 'https://huggingface.co/HuggingFaceTB/SmolVLM-256M-Instruct'
+    },
+    {
+        id: 'HuggingFaceTB/SmolVLM-500M-Instruct',
+        label: 'SmolVLM 500M Omnimodal',
+        size: '~390 MB',
+        sizeBytes: 390,
+        tier: 'omnimodal',
+        omnimodal: true,
+        engine: 'vlm',
+        context: 8192,
+        capabilities: ['omnimodal', 'vision', 'thinking'],
+        verified: false,
+        desc: 'Más capaz para comprensión visual y preguntas concretas. Tiene demo WebGPU oficial, pero aún no se ha probado en este equipo.',
+        repoUrl: 'https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct'
+    },
+    // ── ⚕ Imagen médica: modelos compatibles con Transformers.js ──
+    // DINOv2 X-Ray es un encoder radiológico (no clasifica patologías). SigLIP
+    // aporta clasificación zero-shot orientativa para reconocer modalidad y
+    // anatomía, pero no fue entrenado como dispositivo diagnóstico.
+    {
+        id: 'onnx-community/dinov2-base-xray-224-ONNX',
+        label: 'DINOv2 Base X-Ray 224',
+        size: '~50 MB',
+        sizeBytes: 50,
+        tier: 'medical',
+        visionAssist: true,
+        engine: 'medical-embedding',
+        task: 'image-feature-extraction',
+        dtype: 'q4f16',
+        fallbackDtypes: ['q4'],
+        context: 0,
+        capabilities: ['medical', 'vision', 'fast'],
+        verified: true,
+        desc: 'Encoder de Stanford AIMI especializado en radiografías. Extrae una firma visual para comparación o RAG; no genera diagnósticos ni nombres de patologías.',
+        repoUrl: 'https://huggingface.co/onnx-community/dinov2-base-xray-224-ONNX'
+    },
+    {
+        id: 'Xenova/siglip-base-patch16-224',
+        label: 'SigLIP Medical Zero-Shot',
+        size: '~153 MB',
+        sizeBytes: 153,
+        tier: 'medical',
+        visionAssist: true,
+        engine: 'medical-zero-shot',
+        task: 'zero-shot-image-classification',
+        dtype: 'q4f16',
+        fallbackDtypes: ['q4'],
+        context: 0,
+        capabilities: ['medical', 'vision'],
+        verified: true,
+        desc: 'Clasificación visual zero-shot para orientar modalidad y región anatómica. Es un modelo generalista: sus resultados médicos son exploratorios, no diagnósticos.',
+        repoUrl: 'https://huggingface.co/Xenova/siglip-base-patch16-224'
+    },
     // ── 👁 Visión: asistentes de imagen (verificados) ────────
-    //    Transformers.js (3.8.1 y también la última 4.2.0) NO soporta el
-    //    pipeline conversacional 'image-text-to-text', así que no hay VLM de
-    //    chat en navegador. Lo que sí funciona es 'image-to-text': estos
-    //    modelos convierten la imagen adjunta en texto (descripción u OCR)
-    //    que se inyecta como contexto del chat. Al elegir uno aquí se fija
-    //    como asistente visual, no como modelo de chat.
+    //    Estos modelos analizan la imagen adjunta y producen texto que se
+    //    inyecta como contexto del modelo de chat (la "cadena visión → chat").
+    //    Cada uno declara un `engine` según cómo se ejecuta en Transformers.js:
+    //      · 'caption'   → pipeline image-to-text (descripción/OCR simple)
+    //      · 'florence2' → Florence-2 multitarea (descripción detallada + OCR)
+    //      · 'vlm'       → reservado para un VLM auxiliar que razone sobre la imagen
+    //    El pipeline conversacional 'image-text-to-text' no existe en el
+    //    runtime, pero los VLM SÍ funcionan cargando su clase de modelo.
+    {
+        id: 'onnx-community/Florence-2-base-ft',
+        label: 'Florence-2 (visión avanzada)',
+        size: '~450 MB',
+        sizeBytes: 450,
+        tier: 'vision',
+        visionAssist: true,
+        engine: 'florence2',
+        context: 0,
+        capabilities: ['vision', 'coding'],
+        verified: true,
+        recommended: true,
+        desc: 'Modelo de visión avanzado de Microsoft: descripción detallada de la escena + lectura de texto (OCR) en la misma pasada. El mejor asistente visual del catálogo.',
+        repoUrl: 'https://huggingface.co/onnx-community/Florence-2-base-ft'
+    },
     {
         id: 'Xenova/vit-gpt2-image-captioning',
         label: 'ViT-GPT2 Captioning',
@@ -414,11 +504,12 @@ const WEBGPU_MODELS = [
         sizeBytes: 250,
         tier: 'vision',
         visionAssist: true,
+        engine: 'caption',
         task: 'image-to-text',
         context: 0,
         capabilities: ['vision', 'fast'],
         verified: true,
-        desc: 'Describe en una frase el contenido general de la imagen. Es el asistente visual por defecto.',
+        desc: 'Describe en una frase el contenido general de la imagen. Ligero y rápido.',
         repoUrl: 'https://huggingface.co/Xenova/vit-gpt2-image-captioning'
     },
     {
@@ -428,6 +519,7 @@ const WEBGPU_MODELS = [
         sizeBytes: 230,
         tier: 'vision',
         visionAssist: true,
+        engine: 'caption',
         task: 'image-to-text',
         context: 0,
         capabilities: ['vision', 'fast'],
@@ -442,6 +534,7 @@ const WEBGPU_MODELS = [
         sizeBytes: 130,
         tier: 'vision',
         visionAssist: true,
+        engine: 'caption',
         task: 'image-to-text',
         context: 0,
         capabilities: ['vision', 'fast'],
@@ -456,6 +549,7 @@ const WEBGPU_MODELS = [
         sizeBytes: 130,
         tier: 'vision',
         visionAssist: true,
+        engine: 'caption',
         task: 'image-to-text',
         context: 0,
         capabilities: ['vision', 'fast'],
@@ -508,12 +602,11 @@ function getVisionAssistDef() {
     const chosenId = state?.settings?.webgpuVisionModel;
     if (chosenId) {
         const def = WEBGPU_MODELS.find(m => m.id === chosenId && m.visionAssist);
-        if (def) return { id: def.id, task: def.task || 'image-to-text', label: def.label, desc: def.desc };
+        if (def) return { ...def, task: def.task || 'image-to-text', engine: def.engine || 'caption' };
     }
-    return WEBGPU_IMAGE_ASSIST;
+    return { ...WEBGPU_IMAGE_ASSIST, engine: 'caption' };
 }
 
 const WEBGPU_TEXT_FALLBACK_MODEL = 'HuggingFaceTB/SmolLM2-1.7B-Instruct';
 const WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS = 180;
 const WEBGPU_PROGRESS_UI_MIN_DELTA_PCT = 2;
-

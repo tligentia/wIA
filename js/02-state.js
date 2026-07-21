@@ -13,6 +13,10 @@ const state = {
     abortController: null,
     attachments: [],
     capabilities: [],
+    rawModelsProvider: null,
+    modelCatalogState: 'idle',
+    providerAvailability: {},
+    hasSavedSettings: false,
     modelFeatureFilters: [],
     modelShowFavoritesOnly: false,
     modelShowVerifiedOnly: false,
@@ -25,11 +29,13 @@ const state = {
         model: 'gemma4:e4b',
         apiKey: '',
         theme: 'light',
-        temperature: 0.7,
+        temperature: 0.8,
         topP: 0.9,
         topK: 40,
         maxTokens: 8192,
         favoriteModels: [],   // IDs de modelos marcados como favoritos por el usuario
+        favoriteProviders: [],// Motores fijados al principio de sus listas
+        providerUsageHistory: [], // IDs de motores, del uso más reciente al más antiguo
         webgpuVisionModel: '',// Asistente visual elegido (tier 'vision'); vacío = el por defecto
         systemPrompt: `# System Prompt: Asistente IA Experto
 
@@ -67,20 +73,20 @@ Cuando generes código:
         privacyLockEnabled: false,
         // Per-provider configs — memorized independently
         providerConfigs: {
-            ollama:        { url: 'http://localhost:11434', model: 'gemma4:e4b', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            ollama_remote: { url: '', model: 'gemma4:e4b', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            ollama_cloud:  { url: 'https://ollama.com', model: 'qwen3-vl:235b-instruct', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            lmstudio:      { url: 'http://localhost:1234/v1', model: '', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            groq:          { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            openrouter:    { url: 'https://openrouter.ai/api/v1', model: 'google/gemma-3-27b-it', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 16384 },
-            gemini:        { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 16384 },
-            claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-20250514', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 16384 },
-            openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
-            nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 8192 },
+            ollama:        { url: 'http://localhost:11434', model: 'gemma4:e4b', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            ollama_remote: { url: '', model: 'gemma4:e4b', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            ollama_cloud:  { url: 'https://ollama.com', model: 'qwen3-vl:235b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            lmstudio:      { url: 'http://localhost:1234/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            groq:          { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            openrouter:    { url: 'https://openrouter.ai/api/v1', model: 'google/gemma-3-27b-it', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
+            gemini:        { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
+            claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-20250514', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
+            openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             // maxTokens contenido por defecto: los modelos pequeños de navegador
             // tienden a divagar sin emitir fin-de-secuencia, y 4096 tokens de
             // bucle parecen un cuelgue de minutos.
-            webgpu:        { url: '', model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', apiKey: '', temperature: 0.7, topP: 0.9, topK: 40, maxTokens: 1024 },
+            webgpu:        { url: '', model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 1024 },
         },
     },
 };
@@ -142,9 +148,18 @@ const dom = {
     fileUpload: $('#fileUpload'),
     attachBtn: $('#attachBtn'),
     toolInternet: $('#toolInternet'),
+    visionIndicator: $('#visionIndicator'),
     toolThinking: $('#toolThinking'),
     // Settings
     providerSelect: $('#providerSelect'),
+    providerFavoriteBtn: $('#providerFavoriteBtn'),
+    settingsActiveProvider: $('#settingsActiveProvider'),
+    settingsActiveModel: $('#settingsActiveModel'),
+    settingsActiveAvailability: $('#settingsActiveAvailability'),
+    modelContextProvider: $('#modelContextProvider'),
+    modelContextModel: $('#modelContextModel'),
+    modelContextMeta: $('#modelContextMeta'),
+    modelContextCount: $('#modelContextCount'),
     ollamaUrl: $('#ollamaUrl'),
     themeSelect: $('#themeSelect'),
     modelSelect: $('#modelSelect'),
@@ -163,6 +178,10 @@ const dom = {
     apiKeyGroup: $('#apiKeyGroup'),
     apiKeyToggle: $('#apiKeyToggle'),
     providerAuthBadge: $('#providerAuthBadge'),
+    validateConnectionBtn: $('#validateConnectionBtn'),
+    validateConnectionLabel: $('#validateConnectionLabel'),
+    connectionValidationHint: $('#connectionValidationHint'),
+    connectionValidationResult: $('#connectionValidationResult'),
     inputDisclaimer: $('#inputDisclaimer'),
     // Generation params
     topP: $('#topP'),
@@ -199,8 +218,6 @@ const dom = {
     closeCorsModal: document.getElementById('closeCorsModal'),
     retryCorsBtn: document.getElementById('retryCorsBtn'),
     corsWarningBadge: document.getElementById('corsWarningBadge'),
-    copyCorsBtn: $('#copyCorsBtn'),
-    dontShowCorsAgain: $('#dontShowCorsAgain'),
     // Prompt Manager
     promptManagerModal: $('#promptManagerModal'),
     pmCategories: $('#pmCategories'),
@@ -265,14 +282,21 @@ async function init() {
     }
 
     await loadState();
+    const localDetection = typeof detectLocalProviderAvailability === 'function'
+        ? detectLocalProviderAvailability({ selectDefault: !state.hasSavedSettings })
+        : Promise.resolve();
     loadPromptLibrary();
     renderProjectSelect();
     renderWelcomeStarters();
     renderChatList();
     bindEvents();
     bindSlashCommandEvents();
-    checkProviderStatus();
-    setInterval(checkProviderStatus, 30000); // 30s is plenty — halved polling overhead
+    await localDetection;
+    applySettingsToUI();
+    checkProviderStatus().then(result => showConnectionValidationResult?.(result));
+    setInterval(() => {
+        checkProviderStatus().then(result => showConnectionValidationResult?.(result));
+    }, 30000); // 30s is plenty — halved polling overhead
     autoResizeTextarea();
 
     // Render dynamic version
@@ -287,6 +311,69 @@ function getProviderDef(providerId) {
     return PROVIDERS[providerId] || PROVIDERS.ollama;
 }
 
+function getOrderedProviderEntries() {
+    const entries = Object.entries(PROVIDERS);
+    const validIds = new Set(entries.map(([id]) => id));
+    const favorites = (Array.isArray(state.settings.favoriteProviders) ? state.settings.favoriteProviders : [])
+        .filter(id => validIds.has(id));
+    const history = (Array.isArray(state.settings.providerUsageHistory) ? state.settings.providerUsageHistory : [])
+        .filter(id => validIds.has(id));
+    const fallbackOrder = [
+        'webgpu', 'ollama', 'lmstudio', 'ollama_remote', 'ollama_cloud',
+        'groq', 'openrouter', 'gemini', 'claude', 'openai', 'nvidia',
+    ];
+    const rank = (list, id) => {
+        const index = list.indexOf(id);
+        return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+    };
+
+    return entries.sort(([idA], [idB]) => {
+        const favoriteDiff = Number(!favorites.includes(idA)) - Number(!favorites.includes(idB));
+        if (favoriteDiff) return favoriteDiff;
+
+        const recentDiff = rank(history, idA) - rank(history, idB);
+        if (recentDiff) return recentDiff;
+
+        const favoriteRankDiff = rank(favorites, idA) - rank(favorites, idB);
+        if (favoriteRankDiff) return favoriteRankDiff;
+
+        return rank(fallbackOrder, idA) - rank(fallbackOrder, idB);
+    });
+}
+
+function markProviderUsed(providerId) {
+    if (!PROVIDERS[providerId]) return;
+    const history = (Array.isArray(state.settings.providerUsageHistory) ? state.settings.providerUsageHistory : [])
+        .filter(id => id !== providerId && PROVIDERS[id]);
+    state.settings.providerUsageHistory = [providerId, ...history];
+}
+
+function renderProviderOptions() {
+    if (!dom.providerSelect) return;
+    const selectedProvider = state.settings.provider || 'ollama';
+    const favorites = Array.isArray(state.settings.favoriteProviders) ? state.settings.favoriteProviders : [];
+    dom.providerSelect.innerHTML = getOrderedProviderEntries().map(([id, def]) => {
+        const favoriteMark = favorites.includes(id) ? '★ ' : '';
+        const availability = state.providerAvailability[id];
+        const availabilityMark = availability?.status === 'available'
+            ? ` · ✓ ${availability.detail || 'Disponible'}`
+            : (availability?.status === 'checking' ? ' · comprobando…' : '');
+        return `<option value="${id}">${favoriteMark}${def.icon} ${escapeHtml(def.name)}${escapeHtml(availabilityMark)}</option>`;
+    }).join('');
+    dom.providerSelect.value = selectedProvider;
+
+    if (dom.providerFavoriteBtn) {
+        const isFavorite = favorites.includes(selectedProvider);
+        const providerName = getProviderDef(selectedProvider).name;
+        dom.providerFavoriteBtn.classList.toggle('active', isFavorite);
+        dom.providerFavoriteBtn.setAttribute('aria-pressed', String(isFavorite));
+        dom.providerFavoriteBtn.setAttribute('aria-label', `${isFavorite ? 'Quitar' : 'Añadir'} ${providerName} ${isFavorite ? 'de' : 'a'} favoritos`);
+        dom.providerFavoriteBtn.title = isFavorite
+            ? `Quitar ${providerName} de favoritos`
+            : `Marcar ${providerName} como favorito`;
+    }
+}
+
 function getActiveProviderConfig() {
     const providerId = state.settings.provider;
     const def = getProviderDef(providerId);
@@ -298,7 +385,7 @@ function getActiveProviderConfig() {
             url: def.defaultUrl, 
             model: def.defaultModel, 
             apiKey: '',
-            temperature: 0.7,
+            temperature: 0.8,
             topP: 0.9,
             topK: 40,
             maxTokens: 4096
@@ -308,7 +395,7 @@ function getActiveProviderConfig() {
         // Fallback to defaults if missing
         if (!pc.url && def.defaultUrl) pc.url = def.defaultUrl;
         if (!pc.model && def.defaultModel) pc.model = def.defaultModel;
-        if (pc.temperature === undefined) pc.temperature = 0.7;
+        if (pc.temperature === undefined) pc.temperature = 0.8;
         if (pc.topP === undefined) pc.topP = 0.9;
         if (pc.topK === undefined) pc.topK = 40;
         if (pc.maxTokens === undefined) pc.maxTokens = 4096;
@@ -346,7 +433,7 @@ function syncProviderToState() {
     state.settings.ollamaUrl = pc.url || def.defaultUrl;
     state.settings.model = pc.model || def.defaultModel;
     state.settings.apiKey = pc.apiKey || '';
-    state.settings.temperature = pc.temperature !== undefined ? pc.temperature : 0.7;
+    state.settings.temperature = pc.temperature !== undefined ? pc.temperature : 0.8;
     state.settings.topP = pc.topP !== undefined ? pc.topP : 0.9;
     state.settings.topK = pc.topK !== undefined ? pc.topK : 40;
     state.settings.maxTokens = pc.maxTokens !== undefined ? pc.maxTokens : 4096;
@@ -427,6 +514,24 @@ function updateProviderUI() {
         } else {
             dom.refreshModels.textContent = '🔄 Actualizar';
             dom.refreshModels.title = 'Recargar la lista de modelos desde el servidor remoto';
+        }
+    }
+
+    // A single validation action covers credentials, URLs and local WebGPU.
+    if (dom.validateConnectionLabel) {
+        dom.validateConnectionLabel.textContent = isWebGPU
+            ? 'Comprobar WebGPU'
+            : (prov.auth === 'apikey' ? 'Validar API Key' : 'Validar conexión');
+    }
+    if (dom.connectionValidationHint) {
+        if (isWebGPU) {
+            dom.connectionValidationHint.textContent = 'Comprueba WebGPU/WASM y vuelve a escanear los modelos disponibles en el navegador.';
+        } else if (prov.auth === 'apikey') {
+            dom.connectionValidationHint.textContent = 'Valida la credencial y actualiza el catálogo de modelos de este proveedor.';
+        } else if (prov.auth === 'optional_bearer') {
+            dom.connectionValidationHint.textContent = 'Comprueba la URL y, si lo has indicado, también el Bearer Token.';
+        } else {
+            dom.connectionValidationHint.textContent = 'Comprueba la URL del servidor y actualiza sus modelos disponibles.';
         }
     }
     
@@ -553,6 +658,7 @@ async function loadState() {
         }
 
         const settings = localStorage.getItem('antigravity_settings');
+        state.hasSavedSettings = !!settings;
         if (settings) {
             const parsed = JSON.parse(settings);
             // Deep merge providerConfigs
@@ -740,6 +846,53 @@ function getCompactModelLabel(modelId = state.settings.model, providerId = state
     return modelId;
 }
 
+function updateSettingsActiveContext() {
+    const providerId = state.settings.provider;
+    const provider = getProviderDef(providerId);
+    const fullModel = state.settings.model || 'Sin modelo seleccionado';
+    const compactModel = getCompactModelLabel(fullModel, providerId);
+    const catalogReady = state.rawModelsProvider === providerId;
+    const modelCount = catalogReady && Array.isArray(state.rawModels) ? state.rawModels.length : null;
+    const runtimeLabel = providerId === 'webgpu'
+        ? 'Ejecución local en el navegador'
+        : (state.settings.ollamaUrl || provider.defaultUrl || 'Endpoint pendiente de configurar');
+
+    if (dom.settingsActiveProvider) {
+        dom.settingsActiveProvider.textContent = `${provider.icon} ${provider.name}`;
+        dom.settingsActiveProvider.title = `Motor activo: ${provider.name}`;
+    }
+    if (dom.settingsActiveModel) {
+        dom.settingsActiveModel.textContent = `◇ ${compactModel}`;
+        dom.settingsActiveModel.title = `Modelo activo: ${fullModel}`;
+    }
+    if (dom.settingsActiveAvailability) {
+        const availability = state.providerAvailability[providerId];
+        const statusText = availability?.status === 'available'
+            ? `✓ ${availability.detail || 'Disponible'}`
+            : (availability?.status === 'unavailable'
+                ? 'No detectado'
+                : (availability?.status === 'error' ? 'Requiere atención' : 'Sin comprobar'));
+        dom.settingsActiveAvailability.textContent = statusText;
+        dom.settingsActiveAvailability.className = `settings-active-availability is-${availability?.status || 'unknown'}`;
+    }
+    if (dom.modelContextProvider) dom.modelContextProvider.textContent = `${provider.icon} ${provider.name}`;
+    if (dom.modelContextModel) {
+        dom.modelContextModel.textContent = compactModel;
+        dom.modelContextModel.title = fullModel;
+    }
+    if (dom.modelContextMeta) dom.modelContextMeta.textContent = runtimeLabel;
+    if (dom.modelContextCount) {
+        if (state.modelCatalogState === 'loading') dom.modelContextCount.textContent = 'Cargando catálogo…';
+        else if (state.modelCatalogState === 'error') dom.modelContextCount.textContent = 'Catálogo no disponible';
+        else dom.modelContextCount.textContent = modelCount === null
+                ? 'Catálogo pendiente'
+                : `${modelCount} ${modelCount === 1 ? 'modelo' : 'modelos'}`;
+    }
+
+    const modelHeading = document.getElementById('settingsHeadingModels');
+    if (modelHeading) modelHeading.textContent = `Modelos de ${provider.name}`;
+}
+
 // ─── Indicador IA Local / Cloud ──────────────
 function isPrivateHostname(hostname) {
     if (!hostname) return false;
@@ -797,6 +950,7 @@ function updateStatusMeta() {
     if (dom.statusText) dom.statusText.title = statusText;
     if (modelSpan) modelSpan.title = state.settings.model || modelLabel;
 
+    updateSettingsActiveContext();
     updateAILocalityBadge();
 }
 
@@ -854,7 +1008,7 @@ _systemThemeMedia?.addEventListener?.('change', () => {
 });
 
 function applySettingsToUI() {
-    if (dom.providerSelect) dom.providerSelect.value = state.settings.provider || 'ollama';
+    renderProviderOptions();
     dom.ollamaUrl.value = state.settings.ollamaUrl;
     if (dom.themeSelect) dom.themeSelect.value = state.settings.theme || 'dark';
     applyTheme(state.settings.theme || 'dark');
@@ -886,4 +1040,3 @@ function applySettingsToUI() {
 
     updateProviderUI();
 }
-
