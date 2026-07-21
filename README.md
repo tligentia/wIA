@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AD)
+# wIA — Multi-Engine AI Chat Interface (v2607.AE)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,7 +292,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
-- 🩹 **Clasificador de heridas en WebGPU (v2607.AD)**: nuevo modelo de visión que reconoce el **tipo de herida** en una foto (abrasión, hematoma, quemadura, corte, laceración, herida diabética/venosa/quirúrgica, úlcera por presión o piel normal). Como no existía ningún modelo de heridas en formato ONNX/web, se **exportó a ONNX y se cuantizó** un ViT entrenado para heridas (Hemg/Wound-Image-classification), y se sirve desde el propio proyecto (`/models/`). Verificado en el navegador. Es **orientativo, no diagnóstico**.
+- 🩹 **Clasificador de heridas en WebGPU (v2607.AD/AE)**: nuevo modelo de visión que reconoce el **tipo de herida** en una foto (abrasión, hematoma, quemadura, corte, laceración, herida diabética/venosa/quirúrgica, úlcera por presión o piel normal). Como no existía ningún modelo de heridas en formato ONNX/web, se **exportó a ONNX y se cuantizó** un ViT entrenado para heridas (Hemg/Wound-Image-classification) y se publicó en Hugging Face: [`tligent-ia/wound-classifier-onnx`](https://huggingface.co/tligent-ia/wound-classifier-onnx). Se carga como cualquier otro modelo WebGPU. Verificado en el navegador. Es **orientativo, no diagnóstico**.
   > Búsqueda previa: los demás modelos de heridas/lesiones cutáneas de Hugging Face son PyTorch sin ONNX, no cargables en el navegador; por eso se convirtió uno.
 - 🌐 **Búsqueda en Internet real (v2607.AC)**: la herramienta de búsqueda ahora consulta la web de verdad —**DuckDuckGo** (respuestas instantáneas) + **Wikipedia**— cuando el modelo lo necesita. Se activa con el icono del globo 🌐 en la caja de prompt (modelos con soporte de herramientas); el estado se recuerda.
 - ⏳ **Cola de órdenes con prefijo `+`**: escribe un prompt empezando por `+` y en vez de enviarse se añade a una **lista de órdenes pendientes** sobre la caja de escritura. Puedes acumular varias, ejecutarlas una a una (▶) o toda la cola en secuencia («Ejecutar cola»), y quitarlas o vaciarlas.

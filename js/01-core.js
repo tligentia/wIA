@@ -457,8 +457,7 @@ const WEBGPU_MODELS = [
         repoUrl: 'https://huggingface.co/onnx-community/dinov2-base-xray-224-ONNX'
     },
     {
-        id: 'wound-classifier',
-        localModel: true,          // ONNX propio servido desde /models/ (no HF)
+        id: 'tligent-ia/wound-classifier-onnx',
         label: 'Clasificador de Heridas',
         size: '~83 MB',
         sizeBytes: 83,
@@ -472,7 +471,7 @@ const WEBGPU_MODELS = [
         verified: true,
         recommended: true,
         desc: 'Reconoce el tipo de herida en una foto: abrasión, hematoma, quemadura, corte, laceración, herida diabética/venosa/quirúrgica, úlcera por presión o piel normal. Orientativo, no sustituye valoración médica.',
-        repoUrl: 'https://huggingface.co/Hemg/Wound-Image-classification'
+        repoUrl: 'https://huggingface.co/tligent-ia/wound-classifier-onnx'
     },
     {
         id: 'Xenova/siglip-base-patch16-224',

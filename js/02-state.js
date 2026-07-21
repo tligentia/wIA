@@ -710,6 +710,11 @@ async function loadState() {
         if (webgpuCfg && webgpuCfg.maxTokens === 4096) {
             webgpuCfg.maxTokens = 1024;
         }
+        // Migración: el clasificador de heridas pasó de servirse en local
+        // (/models/) a Hugging Face (tligent-ia/wound-classifier-onnx).
+        if (state.settings.webgpuVisionModel === 'wound-classifier') {
+            state.settings.webgpuVisionModel = 'tligent-ia/wound-classifier-onnx';
+        }
         
         // Sync active provider config to top-level state
         syncProviderToState();

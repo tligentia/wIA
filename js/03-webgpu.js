@@ -641,20 +641,16 @@ async function runVLMAnalysis(bundle, rawImage, question) {
 // El export ONNX de DINOv2 X-Ray declara por error BlipImageProcessor, una
 // clase que no existe en Transformers.js 3.8.1. Cargamos el grafo DINO
 // directamente y aplicamos el preprocesamiento publicado por el propio repo.
-// ── Clasificador de heridas (ONNX propio, servido desde /models/) ──
+// ── Clasificador de heridas (ONNX propio en HF: tligent-ia/wound-classifier-onnx) ──
 async function loadWoundClassifier(onProgress) {
     const assist = getVisionAssistDef();
     if (webgpuState.imageAssistPipeline?.__wound && webgpuState.imageAssistModelId === assist.id) {
         return webgpuState.imageAssistPipeline;
     }
-    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
-    webgpuState.hfModule = hf;
-    const { pipeline, env } = hf;
-    // Modelo alojado en el propio origen, no en Hugging Face.
-    env.allowLocalModels = true;
-    env.localModelPath = '/models/';
-    env.useBrowserCache = true;
-    const cb = _visionProgressCb(onProgress, `${location.origin}/models/${assist.id}`);
+    // Flujo Hugging Face estándar (mismo que el resto de modelos).
+    const hf = await _prepareHfEnv();
+    const { pipeline } = hf;
+    const cb = _visionProgressCb(onProgress, buildWebGPURepoUrl(assist.id));
     // int8 corre en WASM; para un clasificador pequeño es rápido y evita
     // problemas de int8 en WebGPU.
     const pipe = await pipeline('image-classification', assist.id, { dtype: 'q8', device: 'wasm', progress_callback: cb });
