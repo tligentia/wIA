@@ -226,6 +226,17 @@
 
             <!-- Input Area -->
             <div class="input-area">
+                <!-- Cola de órdenes pendientes (prompts que empiezan por +) -->
+                <div class="order-queue hidden" id="orderQueue">
+                    <div class="order-queue-head">
+                        <span class="order-queue-title">⏳ Órdenes pendientes <span class="order-queue-count" id="orderQueueCount">0</span></span>
+                        <div class="order-queue-actions">
+                            <button class="btn-secondary order-queue-run" id="orderQueueRun" title="Ejecuta todas las órdenes pendientes en orden">▶ Ejecutar cola</button>
+                            <button class="btn-icon order-queue-clear" id="orderQueueClear" title="Vaciar la cola">✕</button>
+                        </div>
+                    </div>
+                    <div class="order-queue-list" id="orderQueueList"></div>
+                </div>
                 <div class="input-wrapper">
                     <!-- Preview para imágenes y archivos subidos -->
                     <div class="attachment-preview hidden" id="attachmentPreview"></div>
@@ -288,7 +299,7 @@
                             </button>
 
                             <button class="btn-icon toolbar-btn feature-toggle hidden" id="toolInternet"
-                                title="Activa el uso de Tool Calling (búsqueda web simulada) en modelos que soporten esta capacidad sintáctica de forma nativa.">
+                                title="Búsqueda en Internet: cuando lo necesite, el modelo consultará la web (DuckDuckGo + Wikipedia) para responder con datos actuales. Disponible en modelos con soporte de herramientas.">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round">
                                     <circle cx="12" cy="12" r="10" />

@@ -1818,28 +1818,17 @@ async function sendMessage(content, autoSendBody = null) {
         if (pendingToolCall && pendingToolCall.length > 0) {
             state.isStreaming = false;
             
-            assistantMsg.content = "*(Buscando en Internet...)*\n\n";
+            const tool = pendingToolCall[0];
+            const searchQuery = tool.function.arguments?.query || '';
+            assistantMsg.content = `*(🌐 Buscando en Internet: "${searchQuery}"...)*\n\n`;
             assistantMsg.tool_calls = pendingToolCall;
             updateStreamingMessage(msgIdx, assistantMsg);
-            
-            const tool = pendingToolCall[0];
+
             let searchResult = "No results.";
-            
-            if (tool.function.name === 'search_wikipedia') {
-                try {
-                    const q = encodeURIComponent(tool.function.arguments.query);
-                    const wpRes = await fetch(`https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&utf8=&format=json&origin=*`);
-                    const wpData = await wpRes.json();
-                    if (wpData.query && wpData.query.search.length > 0) {
-                        searchResult = wpData.query.search.slice(0, 3).map(s => s.snippet.replace(/<[^>]+>/g, '')).join('\\n\\n');
-                    } else {
-                        searchResult = "Empty results.";
-                    }
-                } catch(e) {
-                    searchResult = "Error connecting to Wikipedia.";
-                }
+            if (tool.function.name === 'search_web' || tool.function.name === 'search_wikipedia') {
+                searchResult = await runWebSearch(searchQuery);
             }
-            
+
             const toolMsg = { role: 'tool', content: searchResult };
             chat.messages.push(toolMsg);
             
@@ -1930,15 +1919,49 @@ function buildWikipediaTool() {
     return {
         type: "function",
         function: {
-            name: "search_wikipedia",
-            description: "Busca información y artículos reales recientes en Wikipedia.",
+            name: "search_web",
+            description: "Busca información actual en Internet (web y Wikipedia). Úsala cuando necesites datos recientes, hechos verificables o información que no conoces.",
             parameters: {
                 type: "object",
-                properties: { query: { type: "string", description: "El término o pregunta exacta a buscar." } },
+                properties: { query: { type: "string", description: "El término o pregunta exacta a buscar en Internet." } },
                 required: ["query"]
             }
         }
     };
+}
+
+/**
+ * runWebSearch — búsqueda web real desde el navegador combinando dos fuentes
+ * con CORS abierto: la respuesta instantánea de DuckDuckGo (definiciones,
+ * abstracts, temas relacionados) y el buscador de Wikipedia. Devuelve un
+ * texto con los mejores fragmentos para que el modelo los cite.
+ */
+async function runWebSearch(query) {
+    const q = encodeURIComponent(query);
+    const parts = [];
+
+    // 1) DuckDuckGo Instant Answer (web general)
+    try {
+        const r = await fetch(`https://api.duckduckgo.com/?q=${q}&format=json&no_html=1&skip_disambig=1`, { signal: AbortSignal.timeout(8000) });
+        const d = await r.json();
+        if (d.AbstractText) parts.push(`${d.Heading ? d.Heading + ': ' : ''}${d.AbstractText}${d.AbstractURL ? ` (${d.AbstractURL})` : ''}`);
+        else if (d.Answer) parts.push(String(d.Answer));
+        else if (d.Definition) parts.push(`${d.Definition}${d.DefinitionURL ? ` (${d.DefinitionURL})` : ''}`);
+        const related = (d.RelatedTopics || []).filter(t => t.Text).slice(0, 3).map(t => `• ${t.Text}`);
+        if (related.length) parts.push(related.join('\n'));
+    } catch (e) { /* DDG puede fallar/CORS; seguimos con Wikipedia */ }
+
+    // 2) Wikipedia (fuente enciclopédica fiable con CORS abierto)
+    try {
+        const wpRes = await fetch(`https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&utf8=&format=json&origin=*`, { signal: AbortSignal.timeout(8000) });
+        const wpData = await wpRes.json();
+        const hits = wpData?.query?.search || [];
+        if (hits.length) {
+            parts.push('De Wikipedia:\n' + hits.slice(0, 3).map(s => `• ${s.title}: ${s.snippet.replace(/<[^>]+>/g, '')}`).join('\n'));
+        }
+    } catch (e) { /* red bloqueada */ }
+
+    return parts.length ? parts.join('\n\n') : 'No se encontraron resultados en Internet para esa búsqueda.';
 }
 
 // ─── Message builders per provider type ─────

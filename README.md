@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AB)
+# wIA — Multi-Engine AI Chat Interface (v2607.AC)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,9 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🌐 **Búsqueda en Internet real (v2607.AC)**: la herramienta de búsqueda ahora consulta la web de verdad —**DuckDuckGo** (respuestas instantáneas) + **Wikipedia**— cuando el modelo lo necesita. Se activa con el icono del globo 🌐 en la caja de prompt (modelos con soporte de herramientas); el estado se recuerda.
+- ⏳ **Cola de órdenes con prefijo `+`**: escribe un prompt empezando por `+` y en vez de enviarse se añade a una **lista de órdenes pendientes** sobre la caja de escritura. Puedes acumular varias, ejecutarlas una a una (▶) o toda la cola en secuencia («Ejecutar cola»), y quitarlas o vaciarlas.
+- 📐 **Footer en una sola línea** también en móvil (antes se apilaba en columna).
 - 👁 **Visión WebGPU avanzada y elegible (v2607.AB)**: nuevos modelos de visión verificados uno a uno en el navegador y organizados en categorías propias del catálogo:
   - **◉ Omnimodal**: **SmolVLM-256M** — VLM que *ve la imagen y responde la pregunta directamente* (verificado; el 500M queda como no verificado).
   - **👁 Asistentes visuales**: **Florence-2** (Microsoft) — descripción detallada de la escena **+ OCR** en una pasada; el mejor asistente. Junto a ViT-GPT2, DistilViT y TrOCR.

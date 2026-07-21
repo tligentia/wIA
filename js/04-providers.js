@@ -499,9 +499,10 @@ function updateToolbarVisibility() {
         renderAttachmentPreview();
     }
     
-    // Tools
+    // Tools (búsqueda en Internet)
     if (state.capabilities.includes('tools')) {
         dom.toolInternet.classList.remove('hidden');
+        dom.toolInternet.classList.toggle('active', !!state.settings.webSearchEnabled);
     } else {
         dom.toolInternet.classList.add('hidden');
         dom.toolInternet.classList.remove('active');

@@ -20,6 +20,8 @@ const state = {
     modelFeatureFilters: [],
     modelShowFavoritesOnly: false,
     modelShowVerifiedOnly: false,
+    orderQueue: [],           // Órdenes pendientes (prompts que empiezan por +)
+    isRunningQueue: false,
     projects: [],
     incognitoSessionActive: false,
     activeProjectId: 'general',

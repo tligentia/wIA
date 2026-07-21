@@ -127,8 +127,10 @@ async function validateCurrentProviderConnection({ persist = true } = {}) {
 
 // ─── Event Bindings ─────────────────────────
 function bindEvents() {
-    // Send message
+    // Send message. Un prompt que empieza por "+" no se envía: se encola como
+    // orden pendiente para lanzarla luego (individual o toda la cola).
     dom.sendBtn.addEventListener('click', () => {
+        if (tryQueueOrder(dom.messageInput.value)) return;
         sendMessage(dom.messageInput.value);
     });
 
@@ -137,6 +139,7 @@ function bindEvents() {
         if (e.key === 'Enter' && !e.shiftKey && !(typeof slashState !== 'undefined' && slashState.active)) {
             e.preventDefault();
             if (!dom.sendBtn.disabled) {
+                if (tryQueueOrder(dom.messageInput.value)) return;
                 sendMessage(dom.messageInput.value);
             }
         }
@@ -567,6 +570,18 @@ Cuando generes código:
 
     dom.toolInternet.addEventListener('click', () => {
         dom.toolInternet.classList.toggle('active');
+        state.settings.webSearchEnabled = dom.toolInternet.classList.contains('active');
+        saveState();
+    });
+
+    // Cola de órdenes (prefijo +)
+    document.getElementById('orderQueueRun')?.addEventListener('click', () => runOrderQueue());
+    document.getElementById('orderQueueClear')?.addEventListener('click', () => clearOrderQueue());
+    document.getElementById('orderQueueList')?.addEventListener('click', (e) => {
+        const runId = e.target.closest('[data-order-run]')?.dataset.orderRun;
+        if (runId) { runSingleOrder(runId); return; }
+        const delId = e.target.closest('[data-order-del]')?.dataset.orderDel;
+        if (delId) removeOrder(delId);
     });
 
     dom.toolThinking.addEventListener('click', () => {

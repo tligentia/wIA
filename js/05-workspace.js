@@ -776,3 +776,86 @@ function renderChatList() {
         });
     });
 }
+
+// ─── Cola de órdenes (prompts con prefijo +) ─────────────────
+/**
+ * tryQueueOrder — si el texto empieza por "+", lo añade a la cola de órdenes
+ * pendientes en vez de enviarlo, y limpia el input. Devuelve true si encoló.
+ */
+function tryQueueOrder(text) {
+    const raw = (text || '').trim();
+    if (!raw.startsWith('+')) return false;
+    const order = raw.slice(1).trim();
+    if (!order) return false;
+    state.orderQueue.push({ id: crypto.randomUUID(), text: order });
+    dom.messageInput.value = '';
+    autoResizeTextarea();
+    updateSendButton();
+    renderOrderQueue();
+    return true;
+}
+
+function renderOrderQueue() {
+    const wrap = document.getElementById('orderQueue');
+    const list = document.getElementById('orderQueueList');
+    const count = document.getElementById('orderQueueCount');
+    if (!wrap || !list) return;
+    const q = state.orderQueue || [];
+    wrap.classList.toggle('hidden', q.length === 0);
+    if (count) count.textContent = q.length;
+    list.innerHTML = q.map((o, i) => `
+        <div class="order-item">
+            <span class="order-item-idx">${i + 1}</span>
+            <span class="order-item-text" title="${escapeHtml(o.text)}">${escapeHtml(o.text)}</span>
+            <button class="order-item-run" data-order-run="${o.id}" title="Ejecutar solo esta orden">▶</button>
+            <button class="order-item-del" data-order-del="${o.id}" title="Quitar de la cola">✕</button>
+        </div>
+    `).join('');
+    const runBtn = document.getElementById('orderQueueRun');
+    if (runBtn) runBtn.disabled = state.isRunningQueue || q.length === 0;
+}
+
+function removeOrder(id) {
+    state.orderQueue = (state.orderQueue || []).filter(o => o.id !== id);
+    renderOrderQueue();
+}
+
+function clearOrderQueue() {
+    state.orderQueue = [];
+    renderOrderQueue();
+}
+
+/**
+ * runSingleOrder — saca una orden de la cola y la envía como mensaje normal,
+ * esperando a que termine el streaming.
+ */
+async function runSingleOrder(id) {
+    if (state.isStreaming) return;
+    const order = (state.orderQueue || []).find(o => o.id === id);
+    if (!order) return;
+    removeOrder(id);
+    await sendMessage(order.text);
+}
+
+/**
+ * runOrderQueue — ejecuta todas las órdenes pendientes en secuencia, esperando
+ * a que cada respuesta termine antes de lanzar la siguiente.
+ */
+async function runOrderQueue() {
+    if (state.isRunningQueue || state.isStreaming) return;
+    state.isRunningQueue = true;
+    renderOrderQueue();
+    try {
+        while ((state.orderQueue || []).length > 0) {
+            const order = state.orderQueue.shift();
+            renderOrderQueue();
+            await sendMessage(order.text);
+            // Espera de seguridad hasta que el streaming realmente termine
+            let guard = 0;
+            while (state.isStreaming && guard < 6000) { await new Promise(r => setTimeout(r, 100)); guard++; }
+        }
+    } finally {
+        state.isRunningQueue = false;
+        renderOrderQueue();
+    }
+}
