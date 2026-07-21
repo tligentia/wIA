@@ -5049,3 +5049,37 @@ option {
     color: var(--text-tertiary);
     font-style: italic;
 }
+
+/* Botón flotante «Volver al índice» dentro de la documentación */
+.docs-backtop {
+    position: sticky;
+    bottom: 16px;
+    left: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    margin-top: -40px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent-primary);
+    border: none;
+    border-radius: 999px;
+    box-shadow: 0 6px 18px rgba(var(--accent-primary-rgb), 0.4);
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s;
+    z-index: 6;
+}
+.docs-backtop.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+.docs-backtop:hover {
+    background: var(--accent-secondary);
+}

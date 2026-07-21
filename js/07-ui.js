@@ -86,6 +86,23 @@ function bindDocsEvents() {
     if (dom.downloadDocsPdfBtn) {
         dom.downloadDocsPdfBtn.addEventListener('click', downloadDocsPDF);
     }
+
+    // Botón flotante «↑ Índice»: vuelve al principio (donde está el índice).
+    if (dom.docsBackTop && dom.settingsContent) {
+        dom.docsBackTop.addEventListener('click', () => {
+            const el = dom.settingsContent;
+            try { el.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { el.scrollTop = 0; }
+            // Garantía: si el navegador ignora el desplazamiento suave, salta arriba.
+            setTimeout(() => { if (el.scrollTop > 0) el.scrollTop = 0; }, 500);
+        });
+        // Aparece solo al desplazarse hacia abajo dentro de la documentación.
+        const toggleBackTop = () => {
+            const onDocs = activeSettingsSection === 'docs';
+            const scrolled = dom.settingsContent.scrollTop > 240;
+            dom.docsBackTop.classList.toggle('visible', onDocs && scrolled);
+        };
+        dom.settingsContent.addEventListener('scroll', toggleBackTop, { passive: true });
+    }
 }
 
 // Genera un PDF de la documentación abriendo el diálogo de impresión sobre un

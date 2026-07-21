@@ -210,6 +210,8 @@ const dom = {
     docsToc: $('#docsToc'),
     docsBody: $('#docsBody'),
     docsVersionTag: $('#docsVersionTag'),
+    docsBackTop: $('#docsBackTop'),
+    settingsContent: $('#settingsContent'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
     modelManagerModal: $('#modelManagerModal'),
