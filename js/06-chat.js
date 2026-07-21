@@ -605,6 +605,13 @@ async function analyzeImagesForWebGPUInline(imageMetaList = [], onProgress, user
             const output = await runDinoMedicalEmbedding(bundle, rawImages[i]);
             results.push({ name: normalized[i].name, caption: formatMedicalEmbedding(output) });
         }
+    } else if (engine === 'wound-classify') {
+        const bundle = await loadWoundClassifier(onProgress);
+        for (let i = 0; i < rawImages.length; i++) {
+            emitProgress(i);
+            const output = await runWoundClassify(bundle, rawImages[i]);
+            results.push({ name: normalized[i].name, caption: formatWoundResult(output) });
+        }
     } else {
         const pipe = await loadWebGPUImageAssistPipeline(onProgress);
         for (let i = 0; i < rawImages.length; i++) {

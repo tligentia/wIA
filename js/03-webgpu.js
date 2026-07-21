@@ -641,6 +641,50 @@ async function runVLMAnalysis(bundle, rawImage, question) {
 // El export ONNX de DINOv2 X-Ray declara por error BlipImageProcessor, una
 // clase que no existe en Transformers.js 3.8.1. Cargamos el grafo DINO
 // directamente y aplicamos el preprocesamiento publicado por el propio repo.
+// ── Clasificador de heridas (ONNX propio, servido desde /models/) ──
+async function loadWoundClassifier(onProgress) {
+    const assist = getVisionAssistDef();
+    if (webgpuState.imageAssistPipeline?.__wound && webgpuState.imageAssistModelId === assist.id) {
+        return webgpuState.imageAssistPipeline;
+    }
+    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    webgpuState.hfModule = hf;
+    const { pipeline, env } = hf;
+    // Modelo alojado en el propio origen, no en Hugging Face.
+    env.allowLocalModels = true;
+    env.localModelPath = '/models/';
+    env.useBrowserCache = true;
+    const cb = _visionProgressCb(onProgress, `${location.origin}/models/${assist.id}`);
+    // int8 corre en WASM; para un clasificador pequeño es rápido y evita
+    // problemas de int8 en WebGPU.
+    const pipe = await pipeline('image-classification', assist.id, { dtype: 'q8', device: 'wasm', progress_callback: cb });
+    const bundle = { __wound: true, pipe, async dispose() { try { await pipe.dispose?.(); } catch (e) {} } };
+    webgpuState.imageAssistPipeline = bundle;
+    webgpuState.imageAssistModelId = assist.id;
+    return bundle;
+}
+
+async function runWoundClassify({ pipe }, rawImage) {
+    const res = await pipe(rawImage, { top_k: 5 });
+    return res;
+}
+
+function formatWoundResult(output = []) {
+    const es = {
+        'Abrasions': 'Abrasión / rozadura', 'Bruises': 'Hematoma / contusión', 'Burns': 'Quemadura',
+        'Cut': 'Corte', 'Diabetic Wounds': 'Herida diabética', 'Laseration': 'Laceración',
+        'Normal': 'Piel normal (sin herida aparente)', 'Pressure Wounds': 'Úlcera por presión',
+        'Surgical Wounds': 'Herida quirúrgica', 'Venous Wounds': 'Herida venosa'
+    };
+    const rows = (Array.isArray(output) ? output : [])
+        .filter(r => r?.label && Number.isFinite(Number(r.score)))
+        .slice(0, 4)
+        .map(r => `${es[r.label] || r.label}: ${(Number(r.score) * 100).toFixed(1)}%`);
+    if (rows.length === 0) return 'No se pudo clasificar la herida en la imagen.';
+    const top = output[0];
+    return `Reconocimiento de herida (orientativo): la imagen se parece sobre todo a «${es[top.label] || top.label}» (${(Number(top.score) * 100).toFixed(1)}%). Distribución: ${rows.join(' · ')}. Es una estimación automática, no un diagnóstico: ante cualquier duda, consulta a un profesional sanitario.`;
+}
+
 async function loadDinoMedicalVisionModel(onProgress) {
     const assist = getVisionAssistDef();
     if (webgpuState.imageAssistPipeline?.__medicalEmbedding && webgpuState.imageAssistModelId === assist.id) {
