@@ -24,6 +24,8 @@ const PROXY_ALLOWED_HOSTS = [
     'ollama.com',
     'huggingface.co',
     'hf.co',
+    'duckduckgo.com',
+    'wikipedia.org',
     ...(process.env.CORS_PROXY_ALLOW || '').split(',').map(h => h.trim()).filter(Boolean),
 ];
 
@@ -41,6 +43,18 @@ function isProxyTargetAllowed(targetUrl) {
         hostname === allowed || hostname.endsWith(`.${allowed}`)
     );
 }
+
+// Cabeceras de seguridad + aislamiento de origen cruzado. COOP+COEP habilitan
+// crossOriginIsolated → SharedArrayBuffer → WASM multihilo (onnxruntime-web más
+// rápido). credentialless no exige CORP a terceros (fuentes/CDN cargan igual).
+const SECURITY_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=()',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'credentialless',
+};
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -165,7 +179,12 @@ const server = http.createServer((req, res) => {
         const ext = path.extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-        res.writeHead(200, { 'Content-Type': contentType });
+        const headers = { 'Content-Type': contentType, ...SECURITY_HEADERS };
+        // El service worker no debe cachearse en el navegador o los despliegues
+        // nuevos tardarían en propagarse.
+        if (filePath.endsWith('sw.js')) headers['Cache-Control'] = 'no-cache';
+
+        res.writeHead(200, headers);
         fs.createReadStream(filePath).pipe(res);
     });
 });

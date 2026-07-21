@@ -203,6 +203,9 @@ const dom = {
     exportSettingsBtn: $('#exportSettingsBtn'),
     importSettingsBtn: $('#importSettingsBtn'),
     importSettingsFile: $('#importSettingsFile'),
+    exportAllBtn: $('#exportAllBtn'),
+    importAllBtn: $('#importAllBtn'),
+    importAllFile: $('#importAllFile'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
     modelManagerModal: $('#modelManagerModal'),
@@ -284,6 +287,11 @@ async function init() {
     }
 
     await loadState();
+    // Pide almacenamiento persistente: reduce el riesgo de que el navegador
+    // purgue chats/proyectos por presión de espacio (best-effort, silencioso).
+    if (navigator.storage?.persist) {
+        navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist().catch(() => {}); }).catch(() => {});
+    }
     const localDetection = typeof detectLocalProviderAvailability === 'function'
         ? detectLocalProviderAvailability({ selectDefault: !state.hasSavedSettings })
         : Promise.resolve();
@@ -612,6 +620,119 @@ const idbStore = {
     }
 };
 
+// ─── Bóveda de secretos ──────────────────────
+// Las API keys NO se guardan en texto plano. Se cifran con AES-GCM usando una
+// clave que se genera una vez y vive en IndexedDB como CryptoKey NO exportable:
+// su material nunca sale del subsistema criptográfico del navegador (ni por
+// consola ni por un backup de localStorage). En localStorage solo queda el
+// texto cifrado. Sin WebCrypto (contexto no seguro) se degrada a texto plano.
+const secretVault = {
+    _keyPromise: null,
+    available() {
+        return typeof crypto !== 'undefined' && !!crypto.subtle;
+    },
+    async _getKey() {
+        if (!this._keyPromise) {
+            this._keyPromise = (async () => {
+                let key = null;
+                try { key = await idbStore.get('wia-secret-key'); } catch (_) {}
+                if (!key) {
+                    key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+                    await idbStore.set('wia-secret-key', key);
+                }
+                return key;
+            })();
+        }
+        return this._keyPromise;
+    },
+    async encrypt(plaintext) {
+        if (!plaintext) return '';
+        if (!this.available()) return plaintext; // sin subtle: se guarda tal cual
+        try {
+            const key = await this._getKey();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext));
+            const combined = new Uint8Array(iv.length + ct.byteLength);
+            combined.set(iv, 0);
+            combined.set(new Uint8Array(ct), iv.length);
+            return 'enc:v1:' + btoa(String.fromCharCode(...combined));
+        } catch (e) {
+            console.warn('No se pudo cifrar un secreto:', e);
+            return plaintext;
+        }
+    },
+    async decrypt(payload) {
+        if (!payload || typeof payload !== 'string') return '';
+        if (!payload.startsWith('enc:v1:')) return payload; // texto plano heredado
+        if (!this.available()) return '';
+        try {
+            const key = await this._getKey();
+            const combined = Uint8Array.from(atob(payload.slice(7)), c => c.charCodeAt(0));
+            const iv = combined.slice(0, 12);
+            const ct = combined.slice(12);
+            const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+            return new TextDecoder().decode(pt);
+        } catch (e) {
+            console.warn('No se pudo descifrar un secreto:', e);
+            return '';
+        }
+    }
+};
+
+// Todos los sitios donde vive una API key dentro de state.settings.
+function forEachSecretSlot(settings, fn) {
+    if (!settings) return;
+    if ('apiKey' in settings) fn(settings, 'apiKey');
+    const pcs = settings.providerConfigs || {};
+    for (const prov of Object.keys(pcs)) {
+        if (pcs[prov] && 'apiKey' in pcs[prov]) fn(pcs[prov], prov);
+    }
+}
+
+// Copia de settings con las API keys en blanco (lo que va a localStorage).
+function settingsWithoutSecrets(settings) {
+    const clone = JSON.parse(JSON.stringify(settings));
+    forEachSecretSlot(clone, (obj) => { obj.apiKey = ''; });
+    return clone;
+}
+
+// Persiste las keys cifradas en IndexedDB (coalescido, fire-and-forget).
+let _pendingSecretSave = null;
+function scheduleSecretPersist() {
+    if (_pendingSecretSave) return;
+    _pendingSecretSave = setTimeout(async () => {
+        _pendingSecretSave = null;
+        try {
+            const secrets = {};
+            forEachSecretSlot(state.settings, (obj, slot) => { secrets[slot] = obj.apiKey || ''; });
+            for (const slot of Object.keys(secrets)) {
+                secrets[slot] = await secretVault.encrypt(secrets[slot]);
+            }
+            await idbStore.set('wia-secrets', secrets);
+        } catch (e) {
+            console.warn('No se pudieron guardar las claves cifradas:', e);
+        }
+    }, 200);
+}
+
+// Restaura las keys descifradas desde IndexedDB a state.settings.
+async function hydrateSecrets() {
+    let secrets = null;
+    try { secrets = await idbStore.get('wia-secrets'); } catch (_) {}
+    if (!secrets) {
+        // Sin bóveda aún: si venimos de localStorage con keys en claro (legado),
+        // se migran cifrándolas en la próxima escritura.
+        forEachSecretSlot(state.settings, (obj) => { if (obj.apiKey) scheduleSecretPersist(); });
+        return;
+    }
+    const top = state.settings;
+    if (secrets.apiKey !== undefined && 'apiKey' in top) top.apiKey = await secretVault.decrypt(secrets.apiKey);
+    const pcs = top.providerConfigs || {};
+    for (const prov of Object.keys(pcs)) {
+        if (secrets[prov] !== undefined && pcs[prov]) pcs[prov].apiKey = await secretVault.decrypt(secrets[prov]);
+    }
+}
+
 async function loadState() {
     try {
         // 1º IndexedDB; si no hay datos, migra desde localStorage
@@ -715,7 +836,20 @@ async function loadState() {
         if (state.settings.webgpuVisionModel === 'wound-classifier') {
             state.settings.webgpuVisionModel = 'tligent-ia/wound-classifier-onnx';
         }
-        
+
+        // Restaura las API keys descifradas desde la bóveda (IndexedDB) antes de
+        // sincronizar el proveedor activo, que copia pc.apiKey a state.settings.
+        await hydrateSecrets();
+
+        // Migración: si el localStorage traía claves en texto plano (versiones
+        // anteriores al cifrado), reescríbelo ya saneado y cífralas en la bóveda.
+        if (state.hasSavedSettings) {
+            try {
+                localStorage.setItem('antigravity_settings', JSON.stringify(settingsWithoutSecrets(state.settings)));
+                scheduleSecretPersist();
+            } catch (_) {}
+        }
+
         // Sync active provider config to top-level state
         syncProviderToState();
         
@@ -745,7 +879,9 @@ function saveState(options = {}) {
                 }, 150);
             }
         }
-        localStorage.setItem('antigravity_settings', JSON.stringify(state.settings));
+        // Las API keys se cifran aparte en IndexedDB; en localStorage van en blanco.
+        localStorage.setItem('antigravity_settings', JSON.stringify(settingsWithoutSecrets(state.settings)));
+        scheduleSecretPersist();
         return true;
     } catch (e) {
         console.warn('Failed to save state:', e);

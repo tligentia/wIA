@@ -292,6 +292,81 @@ function bindEvents() {
         });
     }
 
+    // ─── Copia de seguridad COMPLETA (proyectos, agentes, chats, ajustes) ───
+    if (dom.exportAllBtn) {
+        dom.exportAllBtn.addEventListener('click', () => {
+            const backup = {
+                _type: 'wia-backup',
+                _version: window.APP_VERSION || '',
+                _exportedAt: new Date().toISOString(),
+                _note: 'API keys excluidas por seguridad; vuelve a introducirlas tras importar.',
+                projects: state.projects,
+                chats: state.chats,
+                activeProjectId: state.activeProjectId,
+                // Ajustes sin las claves API (los agentes viven dentro de projects).
+                settings: settingsWithoutSecrets(state.settings),
+            };
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `wIA_backup_${stamp}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    if (dom.importAllBtn) {
+        dom.importAllBtn.addEventListener('click', () => dom.importAllFile.click());
+        dom.importAllFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (!data || data._type !== 'wia-backup' || !Array.isArray(data.projects) || !Array.isArray(data.chats)) {
+                        alert('El archivo no parece una copia de seguridad completa de wIA.');
+                        return;
+                    }
+                    const n = data.projects.length + data.chats.length;
+                    if (!confirm(`Esto REEMPLAZARÁ tus proyectos, agentes y chats actuales por los del archivo (${data.projects.length} proyectos, ${data.chats.length} chats). Tus API keys se conservan. ¿Continuar?`)) return;
+                    state.projects = data.projects;
+                    state.chats = data.chats;
+                    state.chats.forEach(c => { if (!c.projectId) c.projectId = 'general'; });
+                    if (data.settings) {
+                        // Conserva las API keys actuales (el backup no las incluye).
+                        const keptSecrets = {};
+                        forEachSecretSlot(state.settings, (obj, slot) => { keptSecrets[slot] = obj.apiKey; });
+                        const merged = { ...state.settings, ...data.settings };
+                        if (data.settings.providerConfigs) {
+                            merged.providerConfigs = { ...state.settings.providerConfigs, ...data.settings.providerConfigs };
+                        }
+                        state.settings = merged;
+                        forEachSecretSlot(state.settings, (obj, slot) => { if (keptSecrets[slot]) obj.apiKey = keptSecrets[slot]; });
+                    }
+                    if (data.activeProjectId && state.projects.find(p => p.id === data.activeProjectId)) {
+                        state.activeProjectId = data.activeProjectId;
+                    } else if (!state.projects.find(p => p.id === state.activeProjectId)) {
+                        state.activeProjectId = state.projects[0]?.id || 'general';
+                    }
+                    syncProviderToState();
+                    await saveStateNow();
+                    applySettingsToUI();
+                    renderProjectSelect();
+                    renderChatList();
+                    if (typeof renderMessages === 'function') renderMessages();
+                    alert(`Copia de seguridad restaurada: ${n} elementos. Recuerda revisar tus API keys en Ajustes.`);
+                } catch (err) {
+                    alert('Error al leer la copia de seguridad: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            dom.importAllFile.value = '';
+        });
+    }
+
     if (dom.refreshModels) {
         dom.refreshModels.addEventListener('click', () => {
             const originalText = dom.refreshModels.textContent;

@@ -1938,16 +1938,36 @@ function buildWikipediaTool() {
 }
 
 /**
- * runWebSearch — búsqueda web real desde el navegador combinando dos fuentes
- * con CORS abierto: la respuesta instantánea de DuckDuckGo (definiciones,
- * abstracts, temas relacionados) y el buscador de Wikipedia. Devuelve un
- * texto con los mejores fragmentos para que el modelo los cite.
+ * runWebSearch — búsqueda web real desde el navegador con degradación por
+ * capas para que devuelva algo útil en el mayor número de casos:
+ *   1) Resultados web reales de DuckDuckGo Lite (títulos + extractos + enlaces).
+ *      Necesita el proxy CORS (server.js/Plesk); el fetch global lo enruta solo.
+ *   2) DuckDuckGo Instant Answer (definiciones, respuestas directas, abstracts).
+ *   3) Wikipedia en español y, si no hay resultados, en inglés.
+ * Combina lo que consiga cada capa para que el modelo lo cite.
  */
 async function runWebSearch(query) {
     const q = encodeURIComponent(query);
     const parts = [];
 
-    // 1) DuckDuckGo Instant Answer (web general)
+    // 1) Resultados web reales vía DuckDuckGo Lite (solo con proxy disponible).
+    try {
+        const res = await fetch(`https://lite.duckduckgo.com/lite/?q=${q}`, {
+            signal: AbortSignal.timeout(9000),
+            headers: { 'Accept': 'text/html' }
+        });
+        if (res.ok) {
+            const html = await res.text();
+            const results = parseDuckDuckGoLite(html).slice(0, 5);
+            if (results.length) {
+                parts.push('Resultados web:\n' + results.map(r =>
+                    `• ${r.title}${r.snippet ? ` — ${r.snippet}` : ''}${r.url ? `\n  ${r.url}` : ''}`
+                ).join('\n'));
+            }
+        }
+    } catch (e) { /* sin proxy o bloqueado: seguimos con las otras capas */ }
+
+    // 2) DuckDuckGo Instant Answer (hechos, definiciones, respuestas directas).
     try {
         const r = await fetch(`https://api.duckduckgo.com/?q=${q}&format=json&no_html=1&skip_disambig=1`, { signal: AbortSignal.timeout(8000) });
         const d = await r.json();
@@ -1958,17 +1978,45 @@ async function runWebSearch(query) {
         if (related.length) parts.push(related.join('\n'));
     } catch (e) { /* DDG puede fallar/CORS; seguimos con Wikipedia */ }
 
-    // 2) Wikipedia (fuente enciclopédica fiable con CORS abierto)
-    try {
-        const wpRes = await fetch(`https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&utf8=&format=json&origin=*`, { signal: AbortSignal.timeout(8000) });
-        const wpData = await wpRes.json();
-        const hits = wpData?.query?.search || [];
-        if (hits.length) {
-            parts.push('De Wikipedia:\n' + hits.slice(0, 3).map(s => `• ${s.title}: ${s.snippet.replace(/<[^>]+>/g, '')}`).join('\n'));
-        }
-    } catch (e) { /* red bloqueada */ }
+    // 3) Wikipedia (fuente enciclopédica con CORS abierto): español y, si no
+    //    devuelve nada, inglés. Funciona incluso en hosting estático sin proxy.
+    for (const lang of ['es', 'en']) {
+        try {
+            const wpRes = await fetch(`https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&srlimit=3&utf8=&format=json&origin=*`, { signal: AbortSignal.timeout(8000) });
+            const wpData = await wpRes.json();
+            const hits = wpData?.query?.search || [];
+            if (hits.length) {
+                parts.push(`De Wikipedia${lang === 'en' ? ' (EN)' : ''}:\n` + hits.map(s => `• ${s.title}: ${s.snippet.replace(/<[^>]+>/g, '')}`).join('\n'));
+                break; // basta con el primer idioma que responda
+            }
+        } catch (e) { /* red bloqueada; probamos el siguiente idioma */ }
+    }
 
     return parts.length ? parts.join('\n\n') : 'No se encontraron resultados en Internet para esa búsqueda.';
+}
+
+/**
+ * parseDuckDuckGoLite — extrae {title, url, snippet} del HTML de la versión
+ * Lite de DuckDuckGo. Los enlaces reales van envueltos en un redirector
+ * (/l/?uddg=<url-codificada>), del que se recupera la URL de destino.
+ */
+function parseDuckDuckGoLite(html) {
+    const out = [];
+    try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const links = doc.querySelectorAll('a.result-link');
+        const snippets = doc.querySelectorAll('.result-snippet');
+        links.forEach((a, i) => {
+            let url = a.getAttribute('href') || '';
+            const m = url.match(/[?&]uddg=([^&]+)/);
+            if (m) { try { url = decodeURIComponent(m[1]); } catch (_) {} }
+            else if (url.startsWith('//')) url = 'https:' + url;
+            const title = (a.textContent || '').trim();
+            const snippet = (snippets[i]?.textContent || '').trim().replace(/\s+/g, ' ');
+            if (title) out.push({ title, url, snippet });
+        });
+    } catch (e) { /* HTML inesperado: devolvemos lo que haya */ }
+    return out;
 }
 
 // ─── Message builders per provider type ─────

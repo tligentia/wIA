@@ -7,6 +7,13 @@
     <title>wIA — Local AI Chat</title>
     <link rel="icon" type="image/png" href="favicon.png?v=2">
     <meta name="description" content="wIA: Premium local AI chat interface powered by Ollama and Gemma 4">
+    <!-- PWA: instalable y con arranque offline -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="wIA">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,22 +22,12 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
 
-    <!-- Marked.js for Markdown (versión fijada + SRI: un cambio de API en el
-         CDN no puede romper el render del chat ni inyectar código) -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"
-        integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+"
-        crossorigin="anonymous"></script>
-
-    <!-- Highlight.js for code -->
-    <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css"
-        integrity="sha384-wH75j6z1lH97ZOpMOInqhgKzFkAInZPPSPlZpYKYTOqsaizPvhQZmAtLcPKXpLyH"
-        crossorigin="anonymous">
-    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"
-        integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp"
-        crossorigin="anonymous"></script>
-
-    <!-- PDF.js for local PDF parsing -->
+    <!-- Marked.js, Highlight.js y PDF.js auto-alojados en lib/ (mismo origen):
+         sin dependencia de CDN, compatibles con COEP/aislamiento de origen y
+         disponibles offline (PWA). Versiones fijadas por el propio fichero. -->
+    <script src="lib/marked.min.js"></script>
+    <link rel="stylesheet" href="lib/highlight-github-dark.min.css">
+    <script src="lib/highlight.min.js"></script>
     <script src="lib/pdf.min.js"></script>
 
     <link rel="stylesheet" href="styles.css">
@@ -689,6 +686,14 @@
                         <button class="btn-secondary" id="importSettingsBtn" style="flex: 1;" title="Restaurar ajustes desde un archivo JSON">Importar Ajustes</button>
                         <input type="file" id="importSettingsFile" accept=".json" class="hidden">
                     </div>
+                    <label class="setting-label" style="margin-top: 18px;">🗄️ Copia de Seguridad Completa</label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 12px; line-height: 1.4;">
+                        Exporta <strong>todo</strong> (proyectos, agentes, chats y ajustes) a un único archivo. Tus datos viven solo en este navegador y podrían borrarse al liberar espacio: guarda una copia de vez en cuando. Las API keys se excluyen por seguridad.</p>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-secondary" id="exportAllBtn" style="flex: 1;" title="Descargar un JSON con todos tus datos de wIA">Exportar Todo</button>
+                        <button class="btn-secondary" id="importAllBtn" style="flex: 1;" title="Restaurar todos tus datos desde un archivo de copia de seguridad">Importar Todo</button>
+                        <input type="file" id="importAllFile" accept=".json" class="hidden">
+                    </div>
                 </div>
                 <div class="setting-group settings-data-card danger-card"
                     style="padding-top: 20px; border-top: 1px solid var(--border-subtle); margin-top: 10px;">
@@ -1154,6 +1159,15 @@
     <script src="js/05-workspace.js"></script>
     <script src="js/06-chat.js"></script>
     <script src="js/07-ui.js"></script>
+    <!-- PWA: registra el service worker (arranque offline). Ruta relativa para
+         funcionar tanto en la raíz como bajo un subpath del portal. -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW no registrado:', e));
+            });
+        }
+    </script>
 </body>
 
 </html>

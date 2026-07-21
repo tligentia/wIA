@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AE)
+# wIA — Multi-Engine AI Chat Interface (v2607.AF)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,12 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🛡️ **Cinco mejoras de robustez y privacidad (v2607.AF)**:
+  - 🔐 **API keys cifradas en reposo**: las claves ya no se guardan en texto plano. Se cifran con AES-GCM usando una clave no exportable guardada en IndexedDB (su material nunca sale del navegador). En localStorage solo queda texto cifrado. Migración automática de las claves antiguas.
+  - 🗄️ **Copia de seguridad completa**: nuevo *Exportar Todo* / *Importar Todo* (proyectos, agentes, chats y ajustes en un único JSON; las API keys se excluyen por seguridad). Además se solicita almacenamiento persistente (`navigator.storage.persist`) para reducir el riesgo de purga del navegador.
+  - 🌐 **Búsqueda web más potente**: cadena de fuentes con degradación — resultados web reales vía DuckDuckGo Lite (cuando hay proxy), respuestas directas de DuckDuckGo y Wikipedia en español/inglés.
+  - 📲 **PWA instalable y offline**: manifest + service worker que precachea el shell; wIA se instala como app y arranca sin conexión. `marked`, `highlight.js` y `pdf.js` se auto-alojan en `lib/` (sin CDN externo).
+  - ⚡ **Aislamiento de origen + cabeceras de seguridad**: COOP/COEP habilitan `crossOriginIsolated` → WASM multihilo (onnxruntime-web más rápido), junto con `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` y `Permissions-Policy` (en `vercel.json` y `server.js`).
 - 🩹 **Clasificador de heridas en WebGPU (v2607.AD/AE)**: nuevo modelo de visión que reconoce el **tipo de herida** en una foto (abrasión, hematoma, quemadura, corte, laceración, herida diabética/venosa/quirúrgica, úlcera por presión o piel normal). Como no existía ningún modelo de heridas en formato ONNX/web, se **exportó a ONNX y se cuantizó** un ViT entrenado para heridas (Hemg/Wound-Image-classification) y se publicó en Hugging Face: [`tligent-ia/wound-classifier-onnx`](https://huggingface.co/tligent-ia/wound-classifier-onnx). Se carga como cualquier otro modelo WebGPU. Verificado en el navegador. Es **orientativo, no diagnóstico**.
   > Búsqueda previa: los demás modelos de heridas/lesiones cutáneas de Hugging Face son PyTorch sin ONNX, no cargables en el navegador; por eso se convirtió uno.
 - 🌐 **Búsqueda en Internet real (v2607.AC)**: la herramienta de búsqueda ahora consulta la web de verdad —**DuckDuckGo** (respuestas instantáneas) + **Wikipedia**— cuando el modelo lo necesita. Se activa con el icono del globo 🌐 en la caja de prompt (modelos con soporte de herramientas); el estado se recuerda.
