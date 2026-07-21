@@ -68,6 +68,85 @@ function initSettingsNavigation() {
     activateSettingsSection(activeSettingsSection);
 }
 
+// ─── Documentación ──────────────────────────
+function bindDocsEvents() {
+    if (dom.docsVersionTag && window.APP_VERSION) dom.docsVersionTag.textContent = window.APP_VERSION;
+
+    // Índice: desplazamiento suave dentro del contenedor de ajustes.
+    if (dom.docsToc) {
+        dom.docsToc.addEventListener('click', (event) => {
+            const link = event.target.closest('[data-doc-target]');
+            if (!link) return;
+            event.preventDefault();
+            const target = document.getElementById(link.dataset.docTarget);
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
+    if (dom.downloadDocsPdfBtn) {
+        dom.downloadDocsPdfBtn.addEventListener('click', downloadDocsPDF);
+    }
+}
+
+// Genera un PDF de la documentación abriendo el diálogo de impresión sobre un
+// documento aislado (iframe): texto seleccionable, sin dependencias externas y
+// con estilos propios independientes del tema de la app.
+function downloadDocsPDF() {
+    if (!dom.docsBody) return;
+    const version = window.APP_VERSION || '';
+    const printCss = `
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.55; margin: 0; padding: 32px 40px; font-size: 12px; }
+        .doc-cover { text-align: center; padding: 60px 0 40px; border-bottom: 2px solid #6d28d9; margin-bottom: 8px; page-break-after: always; }
+        .doc-cover h1 { font-size: 56px; color: #6d28d9; margin: 0; letter-spacing: 1px; }
+        .doc-cover p { margin: 8px 0 0; color: #555; font-size: 15px; }
+        .doc-cover .v { margin-top: 24px; font-size: 12px; color: #888; }
+        h2 { font-size: 16px; color: #6d28d9; margin: 22px 0 10px; page-break-after: avoid; }
+        p { margin: 0 0 9px; }
+        ul, ol { margin: 0 0 11px; padding-left: 22px; }
+        li { margin-bottom: 4px; }
+        code, kbd { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.86em; background: #f0f0f4; padding: 1px 5px; border-radius: 3px; }
+        kbd { border: 1px solid #ccc; }
+        a { color: #6d28d9; text-decoration: none; }
+        .doc-block { page-break-inside: auto; }
+        .doc-tip { background: #f3f0fc; border-left: 3px solid #6d28d9; padding: 8px 12px; border-radius: 6px; }
+        .doc-q { font-weight: 600; margin-top: 12px; }
+        table.doc-table { width: 100%; border-collapse: collapse; margin: 4px 0 14px; font-size: 11px; page-break-inside: avoid; }
+        table.doc-table th, table.doc-table td { text-align: left; padding: 6px 9px; border: 1px solid #ccc; }
+        table.doc-table th { background: #f4f2fb; }
+        .doc-footer-note { margin-top: 20px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 10px; color: #888; font-style: italic; }
+    `;
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Documentación wIA ${version}</title><style>${printCss}</style></head>`
+        + `<body><div class="doc-cover"><h1>wIA</h1><p>Documentación completa</p><p class="v">Versión ${version}</p></div>`
+        + dom.docsBody.innerHTML + `</body></html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let printed = false;
+    const doPrint = () => {
+        if (printed) return;
+        printed = true;
+        try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } catch (e) {
+            console.warn('No se pudo abrir el diálogo de impresión:', e);
+        }
+        setTimeout(() => iframe.remove(), 1500);
+    };
+
+    iframe.onload = doPrint;
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    // Respaldo por si onload no dispara tras document.write en algún navegador.
+    setTimeout(doPrint, 600);
+}
+
 let connectionValidationRun = 0;
 
 function syncConnectionDraftToState({ persist = false } = {}) {
@@ -366,6 +445,8 @@ function bindEvents() {
             dom.importAllFile.value = '';
         });
     }
+
+    bindDocsEvents();
 
     if (dom.refreshModels) {
         dom.refreshModels.addEventListener('click', () => {

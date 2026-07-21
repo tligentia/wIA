@@ -418,6 +418,10 @@
                         <span class="settings-nav-icon" aria-hidden="true">⇅</span>
                         <span class="settings-nav-copy"><strong>Datos</strong><small>Copias y limpieza</small></span>
                     </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="docs" aria-controls="settingsPanelDocs" aria-selected="false" title="Documentación">
+                        <span class="settings-nav-icon" aria-hidden="true">📖</span>
+                        <span class="settings-nav-copy"><strong>Documentación</strong><small>Guía y manual (PDF)</small></span>
+                    </button>
                 </nav>
 
                 <div class="settings-content" id="settingsContent">
@@ -707,6 +711,211 @@
                             style="width: 100%;" title="Borra historial, proyectos y también todos los ajustes guardados, restaurando wIA a valores por defecto">Reset de fábrica</button>
                     </div>
                 </div>
+                        </div>
+                    </section>
+
+                    <section class="settings-section" id="settingsPanelDocs" data-settings-panel="docs" aria-labelledby="settingsHeadingDocs" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">07 · AYUDA</span><h3 id="settingsHeadingDocs">Documentación</h3></div>
+                            <p>Guía completa de wIA. Usa el índice para navegar o descárgala en PDF.</p>
+                        </div>
+                        <div class="docs-toolbar">
+                            <button class="btn-primary" id="downloadDocsPdfBtn" title="Genera un PDF con toda la documentación">⬇️ Descargar PDF</button>
+                            <span class="docs-version">Versión <span id="docsVersionTag">—</span></span>
+                        </div>
+
+                        <nav class="docs-toc" id="docsToc" aria-label="Índice de la documentación">
+                            <a href="#doc-intro" data-doc-target="doc-intro">1 · Introducción</a>
+                            <a href="#doc-inicio" data-doc-target="doc-inicio">2 · Primeros pasos</a>
+                            <a href="#doc-motores" data-doc-target="doc-motores">3 · Motores de IA</a>
+                            <a href="#doc-webgpu" data-doc-target="doc-webgpu">4 · Modelos en el navegador (WebGPU)</a>
+                            <a href="#doc-vision" data-doc-target="doc-vision">5 · Visión e imágenes</a>
+                            <a href="#doc-agentes" data-doc-target="doc-agentes">6 · Agentes</a>
+                            <a href="#doc-proyectos" data-doc-target="doc-proyectos">7 · Proyectos y documentos</a>
+                            <a href="#doc-chat" data-doc-target="doc-chat">8 · El chat</a>
+                            <a href="#doc-web" data-doc-target="doc-web">9 · Búsqueda en Internet</a>
+                            <a href="#doc-cola" data-doc-target="doc-cola">10 · Cola de órdenes</a>
+                            <a href="#doc-prompts" data-doc-target="doc-prompts">11 · Biblioteca de prompts</a>
+                            <a href="#doc-privacidad" data-doc-target="doc-privacidad">12 · Privacidad y seguridad</a>
+                            <a href="#doc-backup" data-doc-target="doc-backup">13 · Copias de seguridad</a>
+                            <a href="#doc-pwa" data-doc-target="doc-pwa">14 · Instalación y uso offline</a>
+                            <a href="#doc-atajos" data-doc-target="doc-atajos">15 · Atajos de teclado</a>
+                            <a href="#doc-faq" data-doc-target="doc-faq">16 · Problemas frecuentes</a>
+                        </nav>
+
+                        <div class="docs-body" id="docsBody">
+                            <article class="doc-block" id="doc-intro">
+                                <h2>1 · Introducción</h2>
+                                <p><strong>wIA</strong> es un hub de inteligencia artificial multimotor: una única interfaz de chat que conecta con <strong>modelos locales</strong> (en tu propio ordenador o dentro del navegador) y con los principales <strong>proveedores en la nube</strong>. Es una aplicación web estática (HTML, CSS y JavaScript, sin framework ni servidor propio), pensada para ser rápida, privada y portable.</p>
+                                <p>Principios de diseño:</p>
+                                <ul>
+                                    <li><strong>Privacidad primero:</strong> tus chats, proyectos y ajustes viven solo en tu navegador. No hay backend que almacene tus datos.</li>
+                                    <li><strong>Multi-motor:</strong> cambia entre motores locales y en la nube sin salir de la conversación.</li>
+                                    <li><strong>Sin instalación obligatoria:</strong> funciona abriendo una web; opcionalmente se instala como app (PWA) y funciona sin conexión.</li>
+                                </ul>
+                            </article>
+
+                            <article class="doc-block" id="doc-inicio">
+                                <h2>2 · Primeros pasos</h2>
+                                <ol>
+                                    <li>Abre wIA en tu navegador (Chrome, Edge o similar recientes recomendados).</li>
+                                    <li>Pulsa el icono ⚙️ (arriba a la derecha) para abrir <strong>Ajustes</strong> y, en <em>Conexión</em>, elige el <strong>motor de IA</strong> que quieras usar.</li>
+                                    <li>Si el motor lo requiere, introduce su <strong>API Key</strong> o la <strong>URL</strong> del servidor. wIA valida la conexión automáticamente.</li>
+                                    <li>Cierra Ajustes, escribe tu mensaje en la caja inferior y pulsa <strong>Enter</strong> para enviarlo.</li>
+                                </ol>
+                                <p class="doc-tip">Consejo: si no quieres configurar nada, elige <strong>WebGPU (Browser)</strong> y un modelo pequeño; se ejecuta 100 % dentro de tu navegador, sin claves ni servidores.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-motores">
+                                <h2>3 · Motores de IA</h2>
+                                <p>wIA agrupa los motores en tres familias:</p>
+                                <table class="doc-table">
+                                    <thead><tr><th>Motor</th><th>Tipo</th><th>Acceso</th></tr></thead>
+                                    <tbody>
+                                        <tr><td>Ollama (Local)</td><td>Local en tu equipo</td><td>Sin credenciales</td></tr>
+                                        <tr><td>Ollama (Remoto)</td><td>Servidor Ollama propio</td><td>Bearer opcional</td></tr>
+                                        <tr><td>Ollama Cloud</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>LM Studio</td><td>Local en tu equipo</td><td>Sin credenciales</td></tr>
+                                        <tr><td>Groq</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>OpenRouter</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>Google Gemini</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>Claude (Anthropic)</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>OpenAI</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>Nvidia Integrate</td><td>Nube</td><td>API Key</td></tr>
+                                        <tr><td>WebGPU (Browser)</td><td>Dentro del navegador</td><td>Sin credenciales</td></tr>
+                                    </tbody>
+                                </table>
+                                <p>Cada motor recuerda su propia configuración (modelo, URL, clave y parámetros), así que puedes alternar entre ellos sin reconfigurar. La conexión se valida al seleccionar el motor y al guardar cambios; verás un indicador de estado en Ajustes.</p>
+                                <p><strong>Proxy CORS:</strong> cuando wIA se sirve con su servidor Node incluido (o bajo Plesk), un proxy interno permite alcanzar motores que no admiten llamadas directas desde el navegador. En hosting estático, wIA lo detecta y va directo a los proveedores que sí soportan CORS.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-webgpu">
+                                <h2>4 · Modelos en el navegador (WebGPU)</h2>
+                                <p>El motor <strong>WebGPU (Browser)</strong> ejecuta modelos de lenguaje directamente en la GPU/CPU de tu dispositivo mediante Transformers.js, sin enviar nada a ningún servidor.</p>
+                                <ul>
+                                    <li><strong>Requisitos:</strong> un navegador con soporte WebGPU (Chrome/Edge recientes; Safari Tech Preview). Si no hay WebGPU, wIA recurre a WASM (más lento).</li>
+                                    <li><strong>Descarga y caché:</strong> la primera vez que usas un modelo se descarga desde Hugging Face y queda <strong>cacheado</strong> en el navegador. Las siguientes veces carga al instante y funciona sin conexión.</li>
+                                    <li><strong>Cuantización adaptativa:</strong> wIA elige automáticamente la precisión (por ejemplo q4/q8/fp16) según las capacidades detectadas de tu equipo, equilibrando velocidad y calidad.</li>
+                                    <li><strong>Web Worker:</strong> la inferencia corre en un hilo aparte para no bloquear la interfaz, con un mecanismo de respaldo si el worker falla.</li>
+                                    <li><strong>Streaming y cancelación:</strong> las respuestas aparecen token a token y puedes detenerlas en cualquier momento.</li>
+                                </ul>
+                                <p>Elige y gestiona los modelos WebGPU desde <em>Ajustes → Modelos</em>. Puedes marcar favoritos, filtrar por verificados y ver el tamaño aproximado de cada uno antes de descargarlo.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-vision">
+                                <h2>5 · Visión e imágenes</h2>
+                                <p>wIA puede analizar imágenes que adjuntes con el icono de clip 📎. Según el motor y el modelo, dispones de:</p>
+                                <ul>
+                                    <li><strong>Modelos multimodales</strong> (en la nube o WebGPU) que entienden imagen y texto juntos.</li>
+                                    <li><strong>Asistentes de visión</strong> en WebGPU: descripción de imágenes, lectura de texto (OCR) y análisis avanzado.</li>
+                                    <li><strong>Modelos médicos orientativos:</strong> clasificación visual zero-shot y análisis de imagen. Incluyen un <strong>clasificador de heridas</strong> que reconoce el tipo (abrasión, hematoma, quemadura, corte, laceración, herida diabética/venosa/quirúrgica, úlcera por presión o piel normal). <strong>Son orientativos, no diagnósticos:</strong> ante cualquier duda, consulta a un profesional sanitario.</li>
+                                </ul>
+                                <p><strong>Cadena visión → chat:</strong> puedes combinar un modelo de visión con un modelo de chat, de modo que la descripción de la imagen alimente la conversación. Cuando hay un modelo con visión activo, aparece el icono 👁 junto al resto de herramientas en la caja de mensaje.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-agentes">
+                                <h2>6 · Agentes</h2>
+                                <p>Los <strong>agentes</strong> son asistentes preconfigurados (al estilo de los GPTs): combinan un nombre, un icono, una descripción, un prompt de sistema propio, opcionalmente un motor/modelo concreto y unos <em>iniciadores</em> (sugerencias de arranque).</p>
+                                <ul>
+                                    <li>Abre la <strong>galería de agentes</strong> para explorar una selección curada y activarlos con un clic.</li>
+                                    <li>Crea los tuyos con su personalidad y su base de conocimiento.</li>
+                                    <li><strong>Exporta e importa</strong> agentes como JSON para compartirlos o respaldarlos.</li>
+                                </ul>
+                            </article>
+
+                            <article class="doc-block" id="doc-proyectos">
+                                <h2>7 · Proyectos y documentos</h2>
+                                <p>Los <strong>proyectos</strong> agrupan chats bajo un contexto común. Cada proyecto puede tener:</p>
+                                <ul>
+                                    <li>Un <strong>prompt de sistema</strong> propio que orienta todas sus conversaciones.</li>
+                                    <li>Una <strong>base de conocimiento</strong> de documentos (incluye lectura de PDF): su contenido se pone a disposición del modelo como material de referencia permanente.</li>
+                                </ul>
+                                <p>Cambia de proyecto desde el selector superior. El proyecto «General» existe siempre por defecto.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-chat">
+                                <h2>8 · El chat</h2>
+                                <ul>
+                                    <li><strong>Enviar:</strong> Enter. <strong>Salto de línea:</strong> Shift + Enter.</li>
+                                    <li><strong>Streaming:</strong> la respuesta se escribe en directo; puedes cancelarla.</li>
+                                    <li><strong>Razonamiento:</strong> con modelos que lo admiten, wIA puede mostrar su proceso de «pensamiento» separado de la respuesta final.</li>
+                                    <li><strong>Markdown y código:</strong> las respuestas se formatean con Markdown y resaltado de sintaxis; los bloques de código incluyen botón de copiar.</li>
+                                    <li><strong>Adjuntos:</strong> imágenes y documentos mediante el icono 📎.</li>
+                                    <li>Cada chat puede exportarse por separado (texto/JSON) desde su menú.</li>
+                                </ul>
+                            </article>
+
+                            <article class="doc-block" id="doc-web">
+                                <h2>9 · Búsqueda en Internet</h2>
+                                <p>wIA puede consultar Internet para responder con información actual. Cuando la herramienta está disponible, el modelo la usa automáticamente si detecta que necesita datos recientes, y verás el icono correspondiente en la caja de mensaje.</p>
+                                <p>La búsqueda combina varias fuentes con degradación por capas: resultados web reales (vía DuckDuckGo Lite cuando hay proxy), respuestas directas de DuckDuckGo y Wikipedia en español e inglés. Así devuelve algo útil tanto en despliegue con servidor como en hosting estático.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-cola">
+                                <h2>10 · Cola de órdenes</h2>
+                                <p>Si empiezas un mensaje con el prefijo <strong><code>+</code></strong>, en lugar de enviarse de inmediato se añade a una <strong>cola de órdenes pendientes</strong>. Puedes encolar varias y wIA las ejecuta de forma secuencial, una tras otra. Es útil para preparar una tanda de tareas y dejar que se procesen solas.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-prompts">
+                                <h2>11 · Biblioteca de prompts</h2>
+                                <p>Escribe <strong><code>/</code></strong> al principio de la caja de mensaje para abrir la <strong>biblioteca de prompts</strong>. Navega con las flechas ↑ ↓, confirma con Enter e inserta plantillas reutilizables para tareas habituales. Borra la barra con Retroceso para cerrarla.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-privacidad">
+                                <h2>12 · Privacidad y seguridad</h2>
+                                <ul>
+                                    <li><strong>Inferencia local:</strong> con WebGPU, LM Studio u Ollama local, tus mensajes no salen de tu equipo.</li>
+                                    <li><strong>API keys cifradas:</strong> las claves no se guardan en texto plano. Se cifran (AES-GCM) con una clave no exportable que vive en el navegador; en el almacenamiento solo queda texto cifrado.</li>
+                                    <li><strong>Bloqueo con PIN:</strong> puedes proteger la interfaz en dispositivos compartidos con un bloqueo local por PIN.</li>
+                                    <li><strong>Modo incógnito:</strong> desactiva el guardado de la conversación en curso para no dejar rastro persistente.</li>
+                                </ul>
+                                <p>Ten presente que los motores <em>en la nube</em> reciben tus mensajes en sus servidores según sus propias políticas; para máxima privacidad, usa motores locales.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-backup">
+                                <h2>13 · Copias de seguridad</h2>
+                                <p>Tus datos viven en el navegador (IndexedDB para chats/proyectos, almacenamiento local para ajustes) y podrían borrarse si el navegador libera espacio. Desde <em>Ajustes → Datos</em>:</p>
+                                <ul>
+                                    <li><strong>Exportar / Importar Ajustes:</strong> copia solo tus preferencias y configuración de motores.</li>
+                                    <li><strong>Exportar / Importar Todo:</strong> copia integral (proyectos, agentes, chats y ajustes) en un único archivo JSON. Las API keys se excluyen por seguridad: reintrodúcelas tras importar.</li>
+                                </ul>
+                                <p>wIA solicita además <em>almacenamiento persistente</em> al navegador para reducir el riesgo de purga automática. Aun así, se recomienda exportar una copia de vez en cuando.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-pwa">
+                                <h2>14 · Instalación y uso offline</h2>
+                                <p>wIA es una <strong>PWA</strong>: desde un navegador compatible puedes <strong>instalarla</strong> como aplicación (icono en el escritorio o el móvil). Gracias a su service worker, el «esqueleto» de la app se guarda para <strong>arrancar sin conexión</strong>. Combinado con los modelos WebGPU ya cacheados, puedes chatear con IA <strong>en modo avión</strong>, sin Internet ni servidores.</p>
+                            </article>
+
+                            <article class="doc-block" id="doc-atajos">
+                                <h2>15 · Atajos de teclado</h2>
+                                <table class="doc-table">
+                                    <thead><tr><th>Atajo</th><th>Acción</th></tr></thead>
+                                    <tbody>
+                                        <tr><td><kbd>Enter</kbd></td><td>Enviar el mensaje</td></tr>
+                                        <tr><td><kbd>Shift</kbd> + <kbd>Enter</kbd></td><td>Salto de línea</td></tr>
+                                        <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>N</kbd></td><td>Nuevo chat</td></tr>
+                                        <tr><td><kbd>/</kbd> (al inicio)</td><td>Abrir biblioteca de prompts</td></tr>
+                                        <tr><td><kbd>+</kbd> (al inicio)</td><td>Encolar la orden en vez de enviarla</td></tr>
+                                        <tr><td><kbd>Esc</kbd></td><td>Cerrar ventanas/paneles</td></tr>
+                                        <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Navegar el índice o la biblioteca de prompts</td></tr>
+                                    </tbody>
+                                </table>
+                            </article>
+
+                            <article class="doc-block" id="doc-faq">
+                                <h2>16 · Problemas frecuentes</h2>
+                                <p class="doc-q">No conecta con un motor en la nube.</p>
+                                <p>Revisa que la API Key sea válida y esté vigente, y que la URL del proveedor sea correcta. wIA muestra el motivo (credenciales, URL, red o tiempo de espera).</p>
+                                <p class="doc-q">Un modelo WebGPU no carga o va muy lento.</p>
+                                <p>Comprueba que tu navegador tenga WebGPU activo. Sin él, wIA usa WASM, más lento. Los modelos grandes tardan en la primera descarga; después quedan cacheados.</p>
+                                <p class="doc-q">He perdido mis chats.</p>
+                                <p>El navegador puede haber liberado el almacenamiento. Restaura desde una copia <em>Importar Todo</em> si la tienes, y en adelante exporta copias periódicas.</p>
+                                <p class="doc-q">Los resultados de imagen médica, ¿son un diagnóstico?</p>
+                                <p>No. Son estimaciones automáticas orientativas. Cualquier decisión clínica debe tomarla un profesional sanitario.</p>
+                            </article>
+
+                            <p class="doc-footer-note">wIA — hub de IA multimotor · Documentación generada desde la propia aplicación.</p>
                         </div>
                     </section>
                 </div>

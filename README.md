@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AF)
+# wIA — Multi-Engine AI Chat Interface (v2607.AG)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 📖 **Documentación integrada (v2607.AG)**: nueva sección **Documentación** en Ajustes (tras *Datos*) con una guía completa y navegable de la app (16 apartados: motores, WebGPU, visión/médicos, agentes, proyectos, búsqueda web, cola de órdenes, privacidad, copias, PWA, atajos y FAQ), índice con desplazamiento suave y botón **Descargar PDF** (impresión a PDF con texto seleccionable, sin dependencias externas).
 - 🛡️ **Cinco mejoras de robustez y privacidad (v2607.AF)**:
   - 🔐 **API keys cifradas en reposo**: las claves ya no se guardan en texto plano. Se cifran con AES-GCM usando una clave no exportable guardada en IndexedDB (su material nunca sale del navegador). En localStorage solo queda texto cifrado. Migración automática de las claves antiguas.
   - 🗄️ **Copia de seguridad completa**: nuevo *Exportar Todo* / *Importar Todo* (proyectos, agentes, chats y ajustes en un único JSON; las API keys se excluyen por seguridad). Además se solicita almacenamiento persistente (`navigator.storage.persist`) para reducir el riesgo de purga del navegador.

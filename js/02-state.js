@@ -206,6 +206,10 @@ const dom = {
     exportAllBtn: $('#exportAllBtn'),
     importAllBtn: $('#importAllBtn'),
     importAllFile: $('#importAllFile'),
+    downloadDocsPdfBtn: $('#downloadDocsPdfBtn'),
+    docsToc: $('#docsToc'),
+    docsBody: $('#docsBody'),
+    docsVersionTag: $('#docsVersionTag'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
     modelManagerModal: $('#modelManagerModal'),
