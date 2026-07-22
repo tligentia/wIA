@@ -3,6 +3,13 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- Desactiva mod_pagespeed / ngx_pagespeed en esta página. Su filtro
+         combine_javascript convierte el código en cadenas y lo ejecuta con
+         eval(), lo que rompe el ámbito global compartido por los módulos
+         (los `const` como PROVIDERS/WEBGPU_MODELS/state dejan de ser globales).
+         wIA ya sirve sus recursos minificados y cacheados por su service worker. -->
+    <meta http-equiv="PageSpeed" content="off">
+    <meta http-equiv="PageSpeedFilters" content="-combine_javascript,-rewrite_javascript,-defer_javascript,-inline_javascript">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>wIA — Local AI Chat</title>
     <link rel="icon" type="image/png" href="favicon.png?v=2">
