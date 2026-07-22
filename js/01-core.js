@@ -167,7 +167,7 @@ const PROVIDERS = {
     claude:        { name: 'Claude (Anthropic)',  type: 'anthropic',  auth: 'apikey',           defaultUrl: 'https://api.anthropic.com/v1',                            defaultModel: 'claude-sonnet-5',           icon: '🟣' },
     openai:        { name: 'OpenAI',              type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.openai.com/v1',                               defaultModel: 'gpt-4.1',                   icon: '🤖' },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
-    webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Qwen2.5-0.5B-Instruct', icon: '🧠' },
+    webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', icon: '🧠' },
 };
 
 // ─── Model Function Metadata ────────────────
@@ -237,8 +237,7 @@ const WEBGPU_MODELS = [
         context: 32768,
         capabilities: ['fast', 'multilingual'],
         verified: true,
-        recommended: true,
-        desc: 'Modelo por defecto recomendado: el mejor equilibrio entre ligereza de carga (~400 MB) y calidad. Compacto, multilingüe y con contexto amplio (32K).',
+        desc: 'Muy ligero (~400 MB) y multilingüe, con contexto amplio (32K). Buena opción si buscas la carga más rápida.',
         repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct'
     },
     {
@@ -318,7 +317,8 @@ const WEBGPU_MODELS = [
         context: 131072,
         capabilities: ['fast'],
         verified: true,
-        desc: 'Contexto amplio y muy buen comportamiento para instrucciones sencillas.',
+        recommended: true,
+        desc: 'Modelo por defecto recomendado: muy buen comportamiento para instrucciones y contexto amplio (128K). Algo más pesado (~700 MB) pero de mayor calidad.',
         repoUrl: 'https://huggingface.co/onnx-community/Llama-3.2-1B-Instruct-ONNX'
     },
     {

@@ -91,7 +91,7 @@ Cuando generes código:
             // maxTokens contenido por defecto: los modelos pequeños de navegador
             // tienden a divagar sin emitir fin-de-secuencia, y 4096 tokens de
             // bucle parecen un cuelgue de minutos.
-            webgpu:        { url: '', model: 'onnx-community/Qwen2.5-0.5B-Instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 1024 },
+            webgpu:        { url: '', model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 1024 },
         },
     },
 };
