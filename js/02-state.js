@@ -38,6 +38,7 @@ const state = {
         favoriteModels: [],   // IDs de modelos marcados como favoritos por el usuario
         favoriteProviders: [],// Motores fijados al principio de sus listas
         providerUsageHistory: [], // IDs de motores, del uso más reciente al más antiguo
+        modelSuccessHistory: [],  // [{provider, model}] usados con éxito, recientes primero (para fallback rápido)
         webgpuVisionModel: '',// Asistente visual elegido (tier 'vision'); vacío = el por defecto
         visionChainEnabled: true, // Conmutador de la cadena de análisis de imagen (WebGPU)
         systemPrompt: `# System Prompt: Asistente IA Experto

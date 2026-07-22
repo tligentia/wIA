@@ -98,6 +98,25 @@ function renderMessage(msg, idx) {
     const isError = !isUser && displayContent.includes('⚠️');
     
     if (isError) {
+        // Fallback rápido: alternativas basadas en éxitos recientes + favoritos.
+        const _fbCands = (typeof getFallbackCandidates === 'function')
+            ? getFallbackCandidates(msg.provider, msg.model, 4) : [];
+        let fallbackHtml = '';
+        if (_fbCands.length) {
+            const btns = _fbCands.map(c => {
+                const provLabel = getCompactProviderLabel(c.provider);
+                const modelLabel = getCompactModelLabel(c.model, c.provider);
+                const icon = getProviderDef(c.provider)?.icon || '⚡';
+                const p = c.provider.replace(/'/g, "\\'");
+                const m = c.model.replace(/'/g, "\\'");
+                return `<button class="error-fallback-btn" onclick="fallbackToModel(${idx}, '${p}', '${m}')" title="Reintentar con ${escapeHtml(provLabel)} · ${escapeHtml(modelLabel)}"><span class="efb-icon">${icon}</span> ${escapeHtml(modelLabel)}<span class="efb-prov">${escapeHtml(provLabel)}</span></button>`;
+            }).join('');
+            fallbackHtml = `
+                <div class="error-fallback">
+                    <span class="error-fallback-label">⚡ Continuar con otro modelo (favoritos / usados con éxito):</span>
+                    <div class="error-fallback-btns">${btns}</div>
+                </div>`;
+        }
         contentHtml += `
             <div class="error-message-card">
                 <div class="error-header">
@@ -107,6 +126,7 @@ function renderMessage(msg, idx) {
                 <div class="error-body">
                     ${renderMarkdown(displayContent)}
                 </div>
+                ${fallbackHtml}
                 <div class="error-footer" style="display: flex; justify-content: flex-end; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
                     <button class="btn-retry" onclick="retryMessage(${idx})">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
@@ -263,17 +283,87 @@ function showMetricsModal(idx) {
 
 window.showMetricsModal = showMetricsModal;
 
+// ─── Fallback rápido: registrar éxitos y ofrecer alternativas ────
+// Registra un motor+modelo que ha respondido con éxito (recientes primero,
+// deduplicado, máx. 10). Alimenta el fallback rápido de la tarjeta de error.
+function recordModelSuccess(provider, model) {
+    if (!provider || !model) return;
+    const hist = Array.isArray(state.settings.modelSuccessHistory) ? state.settings.modelSuccessHistory : [];
+    const filtered = hist.filter(e => !(e.provider === provider && e.model === model));
+    state.settings.modelSuccessHistory = [{ provider, model }, ...filtered].slice(0, 10);
+}
+
+// Llamar al terminar una generación: si fue bien, la anota como éxito.
+function noteGenerationOutcome(msg) {
+    if (!msg || msg.role !== 'assistant') return;
+    const c = msg.content || '';
+    const ok = c.trim() && !c.includes('⚠️') && !c.includes('[Generación detenida]') && !c.includes('[Operación detenida');
+    if (ok) recordModelSuccess(msg.provider || state.settings.provider, msg.model || state.settings.model);
+}
+
+// Construye alternativas para reintentar: éxitos recientes + favoritos, y
+// siempre WebGPU local (gratis, sin créditos) como red de seguridad. Excluye el
+// que acaba de fallar y los motores cloud sin API key configurada.
+function getFallbackCandidates(excludeProvider, excludeModel, limit = 4) {
+    const seen = new Set();
+    const out = [];
+    const usable = (provider) => {
+        const def = getProviderDef(provider);
+        if (!def) return false;
+        if (def.auth === 'apikey') {
+            const pc = state.settings.providerConfigs?.[provider];
+            return !!(pc && pc.apiKey); // sin clave no sirve como fallback inmediato
+        }
+        return true; // webgpu / ollama / lmstudio no requieren clave
+    };
+    const add = (provider, model) => {
+        if (!provider || !model) return;
+        if (provider === excludeProvider && model === excludeModel) return;
+        const key = `${provider}:${model}`;
+        if (seen.has(key)) return;
+        if (!usable(provider)) return;
+        seen.add(key);
+        out.push({ provider, model });
+    };
+    (state.settings.modelSuccessHistory || []).forEach(e => add(e.provider, e.model));
+    (state.settings.favoriteModels || []).forEach(fav => {
+        const i = fav.indexOf(':');
+        if (i > 0) add(fav.slice(0, i), fav.slice(i + 1));
+    });
+    // Red de seguridad: WebGPU local siempre disponible (salvo que sea el que falló).
+    add('webgpu', 'onnx-community/Qwen2.5-0.5B-Instruct');
+    return out.slice(0, limit);
+}
+
+// Cambia a otro motor+modelo y reintenta el mensaje fallido.
+window.fallbackToModel = (idx, provider, model) => {
+    const chat = getActiveChat();
+    if (!chat || state.isStreaming) return;
+    if (!(chat.messages[idx] && chat.messages[idx].role === 'assistant')) return;
+    state.settings.provider = provider;
+    syncProviderToState();
+    state.settings.model = model;
+    saveCurrentProviderConfig();
+    saveState();
+    if (typeof applySettingsToUI === 'function') applySettingsToUI();
+    if (typeof checkProviderStatus === 'function') checkProviderStatus();
+    chat.messages.splice(idx, 1);
+    saveState();
+    renderMessages();
+    sendMessage(null, 'RETRY_LAST');
+};
+
 window.retryMessage = (idx) => {
     const chat = getActiveChat();
     if (!chat) return;
-    
+
     // Solo reintentar si es un mensaje del asistente (el error)
     if (chat.messages[idx] && chat.messages[idx].role === 'assistant') {
         // Eliminar el mensaje fallido
         chat.messages.splice(idx, 1);
         saveState();
         renderMessages();
-        
+
         // Reintentar sin añadir nuevo mensaje de usuario
         sendMessage(null, 'RETRY_LAST');
     }
@@ -1504,6 +1594,7 @@ async function sendMessage(content, autoSendBody = null) {
             state.abortController = null;
             dom.stopBtn.classList.add('hidden');
             dom.sendBtn.classList.remove('hidden');
+            noteGenerationOutcome(assistantMsg);
             chat.updatedAt = Date.now();
             saveState();
             renderChatList();
@@ -1877,11 +1968,12 @@ async function sendMessage(content, autoSendBody = null) {
         state.abortController = null;
         dom.stopBtn.classList.add('hidden');
         dom.sendBtn.classList.remove('hidden');
+        noteGenerationOutcome(assistantMsg);
         chat.updatedAt = Date.now();
         saveState();
         renderChatList();
         renderMessages();
-        
+
         // Auto-generate title after first successful exchange
         if (chat.messages.length >= 2 && !chat.autoTitled && typeof autoTitleChat === 'function') {
             autoTitleChat(chat.id);

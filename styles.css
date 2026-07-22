@@ -5265,3 +5265,46 @@ option {
 .webgpu-monitor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .webgpu-prepare-btn { white-space: nowrap; }
 .webgpu-prepare-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ─── Fallback rápido en la tarjeta de error ─────────────────── */
+.error-fallback {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.error-fallback-label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+.error-fallback-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.error-fallback-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.error-fallback-btn:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+.error-fallback-btn .efb-icon { font-size: 0.9rem; }
+.error-fallback-btn .efb-prov {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    padding-left: 6px;
+    margin-left: 2px;
+    border-left: 1px solid var(--border-subtle);
+}
