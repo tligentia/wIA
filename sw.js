@@ -16,8 +16,9 @@ const CACHE = 'wia-shell-v1';
 const CORE = [
     './', './index.html', './styles.css',
     './js/01-core.js', './js/02-state.js', './js/03-webgpu.js', './js/04-providers.js',
-    './js/05-workspace.js', './js/06-chat.js', './js/07-ui.js',
+    './js/05-workspace.js', './js/06-chat.js', './js/07-ui.js', './js/08-anon.js',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
+    './lib/anonimae-engine.js', './lib/anonimae-rules.json',
     './lib/pdf.min.js', './Plantilla/Version.js',
     './secure-gate.js', './webgpu-worker.js', './agents.json',
     './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png',

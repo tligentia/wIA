@@ -39,6 +39,7 @@ const state = {
         favoriteProviders: [],// Motores fijados al principio de sus listas
         providerUsageHistory: [], // IDs de motores, del uso más reciente al más antiguo
         webgpuVisionModel: '',// Asistente visual elegido (tier 'vision'); vacío = el por defecto
+        visionChainEnabled: true, // Conmutador de la cadena de análisis de imagen (WebGPU)
         systemPrompt: `# System Prompt: Asistente IA Experto
 
 ## Rol y Personalidad
@@ -73,6 +74,7 @@ Cuando generes código:
         thinkingMode: true,
         incognitoMode: false,
         privacyLockEnabled: false,
+        anonymizeOutgoing: false, // 🕶️ DLP local: anonimizar antes de enviar a la IA
         // Per-provider configs — memorized independently
         providerConfigs: {
             ollama:        { url: 'http://localhost:11434', model: 'gemma4:e4b', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
@@ -212,6 +214,7 @@ const dom = {
     docsVersionTag: $('#docsVersionTag'),
     docsBackTop: $('#docsBackTop'),
     settingsContent: $('#settingsContent'),
+    anonymizeToggle: $('#anonymizeToggle'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
     modelManagerModal: $('#modelManagerModal'),
@@ -1158,6 +1161,7 @@ _systemThemeMedia?.addEventListener?.('change', () => {
 
 function applySettingsToUI() {
     renderProviderOptions();
+    if (typeof updateAnonButtonUI === 'function') updateAnonButtonUI();
     dom.ollamaUrl.value = state.settings.ollamaUrl;
     if (dom.themeSelect) dom.themeSelect.value = state.settings.theme || 'dark';
     applyTheme(state.settings.theme || 'dark');

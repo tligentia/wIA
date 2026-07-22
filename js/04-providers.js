@@ -861,13 +861,17 @@ function updateVisionIndicator() {
 
     if (provType === 'webgpu' && typeof getVisionAssistDef === 'function') {
         const chatDef = WEBGPU_MODELS.find(m => m.id === state.settings.model);
-        active = true;
+        const chainOn = state.settings.visionChainEnabled !== false;
         const chatLabel = chatDef?.label || state.settings.model;
         if (chatDef?.omnimodal) {
+            active = true;
             tip = `Visión omnimodal activa · ${chatLabel} recibe la imagen y responde directamente.`;
-        } else {
+        } else if (chainOn) {
+            active = true;
             const assist = getVisionAssistDef();
             tip = `Cadena visual activa · ${assist.label} analiza tus imágenes → ${chatLabel} responde.`;
+        } else {
+            active = false; // cadena desactivada y modelo no omnimodal → sin visión
         }
     } else if (state.capabilities.includes('vision') || getModelFunctionKeys({ name: state.settings.model }).includes('vision')) {
         active = true;

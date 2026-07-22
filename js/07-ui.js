@@ -533,6 +533,14 @@ function bindEvents() {
         dom.webgpuAddModelBtn?.click();
     });
 
+    // Cadena de visión: conmutador de activación
+    document.getElementById('visionChainToggle')?.addEventListener('change', (e) => {
+        state.settings.visionChainEnabled = e.target.checked;
+        saveState();
+        renderVisionChain();
+        updateVisionIndicator();
+    });
+
     // Cadena de visión: elegir modelo de visión y modelo de chat
     document.getElementById('visionModelSelect')?.addEventListener('change', (e) => {
         const id = e.target.value;

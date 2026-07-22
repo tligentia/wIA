@@ -29,6 +29,8 @@
     <link rel="stylesheet" href="lib/highlight-github-dark.min.css">
     <script src="lib/highlight.min.js"></script>
     <script src="lib/pdf.min.js"></script>
+    <!-- Motor de anonimización DLP local (AnonimAE, autónomo y sin dependencias) -->
+    <script src="lib/anonimae-engine.js"></script>
 
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -146,7 +148,7 @@
             <!-- Mobile header -->
             <div class="mobile-header">
                 <div class="mobile-header-left">
-                    <button class="btn-icon" id="menuBtn">
+                    <button class="btn-icon" id="menuBtn" title="Abrir o cerrar el menú lateral (chats y proyectos)" aria-label="Menú">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round">
                             <path d="M3 12h18M3 6h18M3 18h18" />
@@ -286,6 +288,17 @@
                                     <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
                                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                                     <line x1="12" x2="12" y1="19" y2="22"/>
+                                </svg>
+                            </button>
+
+                            <button class="btn-icon toolbar-btn" id="anonToggleBtn"
+                                title="Anonimizar datos sensibles antes de enviar a la IA (DLP local). Clic para activar.">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="6" cy="15" r="4"/>
+                                    <circle cx="18" cy="15" r="4"/>
+                                    <path d="M10 15h4"/>
+                                    <path d="M2.5 13 5 7c.7-1.3 1.4-2 3-2"/>
+                                    <path d="M21.5 13 19 7c-.7-1.3-1.4-2-3-2"/>
                                 </svg>
                             </button>
 
@@ -529,23 +542,6 @@
                             </div>
                         </div>
 
-                        <!-- Cadena de visión: modelo de imagen + modelo de chat -->
-                        <div class="vision-chain hidden" id="visionChain">
-                            <div class="vision-chain-title">👁 Cadena de análisis de imagen</div>
-                            <p class="vision-chain-desc" id="visionChainDesc">Cuando adjuntas una imagen, primero la analiza el <b>modelo de visión</b> y su resultado pasa al <b>modelo de chat</b> que responde. Elige la combinación:</p>
-                            <div class="vision-chain-row">
-                                <div class="vision-chain-step">
-                                    <label>👁 Modelo de visión</label>
-                                    <select class="setting-input" id="visionModelSelect"></select>
-                                </div>
-                                <span class="vision-chain-arrow">→</span>
-                                <div class="vision-chain-step">
-                                    <label>💬 Modelo de chat</label>
-                                    <select class="setting-input" id="visionChatSelect"></select>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Monitor de estado y memoria WebGPU -->
                         <div class="webgpu-monitor" id="webgpuMonitor">
                             <div class="webgpu-monitor-head">
@@ -560,6 +556,29 @@
                                 </div>
                                 <div class="webgpu-gauge-track"><div class="webgpu-gauge-fill" id="webgpuGaugeFill"></div></div>
                                 <div class="webgpu-gauge-note" id="webgpuGaugeNote"></div>
+                            </div>
+                        </div>
+
+                        <!-- Cadena de visión: modelo de imagen + modelo de chat -->
+                        <div class="vision-chain hidden" id="visionChain">
+                            <div class="vision-chain-head">
+                                <div class="vision-chain-title" title="Flujo de dos pasos: un modelo de visión describe la imagen adjunta y su resultado alimenta al modelo de chat, que redacta la respuesta.">👁 Cadena de análisis de imagen</div>
+                                <label class="wia-switch" title="Activa o desactiva el análisis automático de imágenes con el modelo de visión antes de enviarlas al chat.">
+                                    <input type="checkbox" id="visionChainToggle" checked>
+                                    <span class="wia-switch-track"><span class="wia-switch-thumb"></span></span>
+                                </label>
+                            </div>
+                            <p class="vision-chain-desc" id="visionChainDesc">Cuando adjuntas una imagen, primero la analiza el <b>modelo de visión</b> y su resultado pasa al <b>modelo de chat</b> que responde. Elige la combinación:</p>
+                            <div class="vision-chain-row">
+                                <div class="vision-chain-step">
+                                    <label title="Modelo que interpreta la imagen (descripción, OCR o análisis médico) en tu navegador.">👁 Modelo de visión</label>
+                                    <select class="setting-input" id="visionModelSelect" title="Elige el modelo que analiza las imágenes adjuntas."></select>
+                                </div>
+                                <span class="vision-chain-arrow" title="El resultado del modelo de visión se pasa al modelo de chat.">→</span>
+                                <div class="vision-chain-step">
+                                    <label title="Modelo de lenguaje que redacta la respuesta a partir del análisis de la imagen.">💬 Modelo de chat</label>
+                                    <select class="setting-input" id="visionChatSelect" title="Elige el modelo de chat que responde usando el análisis de la imagen."></select>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -669,6 +688,18 @@
                     <input type="password" class="setting-input" id="privacyLockPin" placeholder="PIN local de 4-12 dígitos" autocomplete="new-password" inputmode="numeric">
                     <p class="setting-help-text">
                         Este bloqueo protege la interfaz en este navegador, pero no sustituye autenticación de servidor.
+                    </p>
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label" style="display:flex; align-items:center;">
+                        <input type="checkbox" id="anonymizeToggle" style="margin-right: 8px;">
+                        🕶️ Anonimizar datos sensibles al enviar (DLP local)
+                    </label>
+                    <p class="setting-help-text">
+                        Sustituye DNI/NIE, emails, teléfonos, IBAN, tarjetas, nombres, expedientes… por placeholders
+                        (<code>[Nombre_001]</code>) antes de enviar el prompt a la IA. El mapa reversible se guarda
+                        cifrado por chat y la respuesta se restaura solo en tu pantalla: los datos reales nunca salen
+                        del navegador. También puedes activarlo con el icono 🕶️ de la caja de mensaje.
                     </p>
                 </div>
                         </div>
@@ -868,6 +899,7 @@
                                     <li><strong>API keys cifradas:</strong> las claves no se guardan en texto plano. Se cifran (AES-GCM) con una clave no exportable que vive en el navegador; en el almacenamiento solo queda texto cifrado.</li>
                                     <li><strong>Bloqueo con PIN:</strong> puedes proteger la interfaz en dispositivos compartidos con un bloqueo local por PIN.</li>
                                     <li><strong>Modo incógnito:</strong> desactiva el guardado de la conversación en curso para no dejar rastro persistente.</li>
+                                    <li><strong>Anonimización DLP 🕶️:</strong> activa el icono de gafas en la caja de mensaje (o el ajuste en <em>Privacidad</em>) y wIA sustituirá DNI/NIE, emails, teléfonos, IBAN, tarjetas, nombres, direcciones o expedientes por placeholders (<code>[Nombre_001]</code>) <em>antes</em> de enviar el texto a la IA. El mapa reversible se guarda cifrado por chat, y las respuestas se restauran solo en tu pantalla: los datos reales nunca salen de tu navegador. Una insignia bajo tu mensaje indica cuántos datos se protegieron.</li>
                                 </ul>
                                 <p>Ten presente que los motores <em>en la nube</em> reciben tus mensajes en sus servidores según sus propias políticas; para máxima privacidad, usa motores locales.</p>
                             </article>
@@ -936,7 +968,7 @@
         <div class="modal modal-small">
             <div class="modal-header">
                 <h2>Eliminar conversación</h2>
-                <button class="btn-icon close-delete-modal">
+                <button class="btn-icon close-delete-modal" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -958,7 +990,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2 id="projectModalTitle">Configuración de Proyecto</h2>
-                <button class="btn-icon" id="closeProjectModal">
+                <button class="btn-icon" id="closeProjectModal" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1046,7 +1078,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>🤖 Mis Agentes</h2>
-                <button class="btn-icon" id="closeAgentsModal">
+                <button class="btn-icon" id="closeAgentsModal" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1081,7 +1113,7 @@
         <div class="modal modal-small">
             <div class="modal-header">
                 <h2>Rendimiento (Geek Info)</h2>
-                <button class="btn-icon" onclick="document.getElementById('metricsModal').classList.add('hidden')">
+                <button class="btn-icon" onclick="document.getElementById('metricsModal').classList.add('hidden')" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1099,7 +1131,7 @@
         <div class="modal modal-small">
             <div class="modal-header">
                 <h2>Mover Chat a...</h2>
-                <button class="btn-icon close-move-modal">
+                <button class="btn-icon close-move-modal" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1122,7 +1154,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>Gestión de Modelos Locales</h2>
-                <button class="btn-icon" id="closeModelManager">
+                <button class="btn-icon" id="closeModelManager" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1181,7 +1213,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2 id="corsHelpTitle">🛡️ Diagnóstico de conexión</h2>
-                <button class="btn-icon" id="closeCorsModal">
+                <button class="btn-icon" id="closeCorsModal" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1206,7 +1238,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h2>Cookies y Privacidad</h2>
-                <button class="btn-icon" id="closePrivacy">
+                <button class="btn-icon" id="closePrivacy" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
                         <path d="M18 6 6 18M6 6l12 12" />
@@ -1257,7 +1289,7 @@
         <div class="modal modal-small">
             <div class="modal-header">
                 <h2>⌨️ Atajos de Teclado</h2>
-                <button class="btn-icon" id="closeShortcuts">
+                <button class="btn-icon" id="closeShortcuts" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
             </div>
@@ -1283,7 +1315,7 @@
         <div class="modal" style="max-width: 550px;">
             <div class="modal-header">
                 <h2>⚠️ Hardware WebGPU Desactivado o No Soportado</h2>
-                <button class="btn-icon" onclick="document.getElementById('webgpuSupportModal').classList.add('hidden')">
+                <button class="btn-icon" onclick="document.getElementById('webgpuSupportModal').classList.add('hidden')" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
             </div>
@@ -1313,7 +1345,7 @@
                 <h2>Gestor de Prompts</h2>
                 <div style="display:flex;gap:8px;align-items:center;">
                     <button class="btn-primary btn-sm" id="newPromptBtn">+ Nuevo</button>
-                    <button class="btn-icon" id="closePromptManager">
+                    <button class="btn-icon" id="closePromptManager" title="Cerrar" aria-label="Cerrar">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     </button>
                 </div>
@@ -1332,7 +1364,7 @@
         <div class="modal modal-small">
             <div class="modal-header">
                 <h2>Guardar Prompt</h2>
-                <button class="btn-icon" id="closeSavePrompt">
+                <button class="btn-icon" id="closeSavePrompt" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
             </div>
@@ -1369,6 +1401,7 @@
     <script src="js/05-workspace.js"></script>
     <script src="js/06-chat.js"></script>
     <script src="js/07-ui.js"></script>
+    <script src="js/08-anon.js"></script>
     <!-- PWA: registra el service worker (arranque offline). Ruta relativa para
          funcionar tanto en la raíz como bajo un subpath del portal. -->
     <script>

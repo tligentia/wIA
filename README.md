@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AH)
+# wIA — Multi-Engine AI Chat Interface (v2607.AI)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,9 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🕶️ **Anonimización DLP local + panel de visión (v2607.AI)**:
+  - **Anonimización de datos sensibles** (motor AnonimAE embebido, sin dependencias): con el icono 🕶️ de la caja de mensaje (o el ajuste en *Privacidad*), wIA sustituye DNI/NIE, emails, teléfonos, IBAN, tarjetas, nombres, direcciones o expedientes por placeholders (`[Nombre_001]`) **antes** de enviar el prompt a la IA. El mapa reversible se guarda **cifrado por chat** (AES-GCM) y la respuesta se restaura solo en tu pantalla: los datos reales nunca salen del navegador. Una insignia indica cuántos datos se protegieron.
+  - **Panel de visión mejorado**: la *Cadena de análisis de imagen* se reubica bajo el monitor de WebGPU y gana un **conmutador** para activarla/desactivarla; con más tooltips en los iconos de la interfaz.
 - 🧭 **Volver al índice en Documentación (v2607.AH)**: botón flotante «↑ Índice» que aparece al desplazarse por la documentación y devuelve al principio (donde está el índice), con garantía de funcionamiento aunque el navegador ignore el desplazamiento suave.
 - 📖 **Documentación integrada (v2607.AG)**: nueva sección **Documentación** en Ajustes (tras *Datos*) con una guía completa y navegable de la app (16 apartados: motores, WebGPU, visión/médicos, agentes, proyectos, búsqueda web, cola de órdenes, privacidad, copias, PWA, atajos y FAQ), índice con desplazamiento suave y botón **Descargar PDF** (impresión a PDF con texto seleccionable, sin dependencias externas).
 - 🛡️ **Cinco mejoras de robustez y privacidad (v2607.AF)**:

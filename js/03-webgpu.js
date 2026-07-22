@@ -180,20 +180,27 @@ function renderVisionChain() {
     const vSel = document.getElementById('visionModelSelect');
     const cSel = document.getElementById('visionChatSelect');
     const desc = document.getElementById('visionChainDesc');
+    const toggle = document.getElementById('visionChainToggle');
+    const enabled = state.settings.visionChainEnabled !== false;
+    if (toggle) toggle.checked = enabled;
+    wrap.classList.toggle('vision-chain-off', !enabled);
     wrap.classList.toggle('omnimodal-active', isOmnimodal);
-    if (desc) desc.innerHTML = isOmnimodal
-        ? `<b>${escapeHtml(selectedChat.label)}</b> ve la imagen y responde directamente. El asistente visual queda en espera y solo se usará si cambias a un modelo de texto o si se activa el fallback.`
-        : 'La imagen se analiza localmente y su resultado pasa al <b>modelo de chat</b> que redacta la respuesta. Elige la combinación:';
+    if (desc) desc.innerHTML = !enabled
+        ? 'Cadena de análisis <b>desactivada</b>: las imágenes que adjuntes no se analizarán con el modelo de visión antes de responder. Actívala con el conmutador.'
+        : (isOmnimodal
+            ? `<b>${escapeHtml(selectedChat.label)}</b> ve la imagen y responde directamente. El asistente visual queda en espera y solo se usará si cambias a un modelo de texto o si se activa el fallback.`
+            : 'La imagen se analiza localmente y su resultado pasa al <b>modelo de chat</b> que redacta la respuesta. Elige la combinación:');
     if (vSel) {
         vSel.innerHTML = visionModels.map(m =>
             `<option value="${escapeHtml(m.id)}" ${m.id === activeVision ? 'selected' : ''}>${escapeHtml(m.label)}${m.recommended ? ' ⭐' : ''}</option>`
         ).join('');
-        vSel.disabled = isOmnimodal;
+        vSel.disabled = isOmnimodal || !enabled;
     }
     if (cSel) {
         cSel.innerHTML = chatModels.map(m =>
             `<option value="${escapeHtml(m.id)}" ${m.id === state.settings.model ? 'selected' : ''}>${escapeHtml(m.label)}</option>`
         ).join('');
+        cSel.disabled = !enabled;
     }
 }
 window.renderVisionChain = renderVisionChain;

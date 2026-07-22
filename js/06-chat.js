@@ -116,6 +116,12 @@ function renderMessage(msg, idx) {
             </div>
         `;
     } else {
+        if (isUser && typeof deanonymizeForDisplay === 'function') {
+            displayContent = deanonymizeForDisplay(displayContent);
+        }
+        if (isUser && msg.anonCount > 0) {
+            contentHtml += `<div class="anon-badge" title="Estos datos se enviaron a la IA como placeholders anónimos; aquí los ves restaurados. Los valores reales nunca salieron de tu navegador.">🕶️ ${msg.anonCount} dato${msg.anonCount === 1 ? '' : 's'} sensible${msg.anonCount === 1 ? '' : 's'} protegido${msg.anonCount === 1 ? '' : 's'}</div>`;
+        }
         contentHtml += isUser ? `<p style="white-space: pre-wrap;">${escapeHtml(displayContent)}</p>` : renderMarkdown(displayContent);
     }
 
@@ -275,6 +281,8 @@ window.retryMessage = (idx) => {
 
 function renderMarkdown(text) {
     if (!text) return '';
+    // 🕶️ Restaura los valores reales solo para la visualización local.
+    if (typeof deanonymizeForDisplay === 'function') text = deanonymizeForDisplay(text);
     try {
         return sanitizeRenderedHtml(marked.parse(text));
     } catch (e) {
@@ -503,7 +511,8 @@ function normalizeImageMeta(imageMetaList = [], fallbackImages = []) {
 }
 
 function supportsWebGPUImageAssist(providerId = state.settings.provider) {
-    return providerId === 'webgpu';
+    // La cadena de análisis de imagen se puede desactivar con su conmutador.
+    return providerId === 'webgpu' && state.settings.visionChainEnabled !== false;
 }
 
 function formatWebGPUImageAssistContext(imageCaptions = []) {
@@ -1128,7 +1137,18 @@ async function sendMessage(content, autoSendBody = null) {
             renderChatList();
         }
 
+        // 🕶️ DLP local: con la anonimización activa, los datos sensibles se
+        // sustituyen por placeholders ANTES de guardarse y enviarse; el mapa
+        // reversible queda cifrado en el chat y solo se restaura en pantalla.
+        let anonCount = 0;
+        if (state.settings.anonymizeOutgoing && content.trim() && typeof anonymizeOutgoingText === 'function') {
+            const anonRes = await anonymizeOutgoingText(content, chat);
+            content = anonRes.text;
+            anonCount = anonRes.count;
+        }
+
         const userMsg = { role: 'user', content: content.trim() };
+        if (anonCount > 0) userMsg.anonCount = anonCount;
         if (reqImages.length > 0) {
             userMsg.images = reqImages.map(img => img.data);
             userMsg.imageMeta = reqImages;

@@ -68,7 +68,6 @@ htmlcov/
 .env*
 
 # Proyecto de referencia externo, no forma parte de wIA
-AnonimAE REF/
 
 # Modelos ONNX pesados: ahora se cargan desde Hugging Face (tligent-ia)
 models/
