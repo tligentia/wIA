@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AJ)
+# wIA — Multi-Engine AI Chat Interface (v2607.AK)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,6 +292,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🎨 **Tema Tligent + ajustes de UI (v2607.AK)**: nuevo tema **Tligent (Corporativo)** — fondo blanco, texto negro y acentos rojo/gris de marca. El tema por defecto pasa a **Sistema (Automático)** para instalaciones sin datos previos (sigue el modo claro/oscuro del SO). Además, la *Cadena de análisis de imagen* se reubica **debajo del selector de modelos**.
 - ⚡ **Nuevo modelo WebGPU por defecto + persistencia total (v2607.AJ)**: el default de WebGPU pasa a **Qwen 2.5 0.5B** (~400 MB, verificado en vivo), el mejor equilibrio entre ligereza de carga y calidad (multilingüe, contexto 32K), un 43% más ligero que el anterior Llama 3.2 1B. Solo aplica a instalaciones **sin datos previos**; quien ya tenga un modelo elegido lo conserva. Además, **todos los parámetros persisten y se exportan**: se añadió la persistencia de la **cola de órdenes** (prefijo +) entre sesiones y en la copia de seguridad completa (el resto de ajustes y parámetros por motor ya persistían).
 - 🕶️ **Anonimización DLP local + panel de visión (v2607.AI)**:
   - **Anonimización de datos sensibles** (motor AnonimAE embebido, sin dependencias): con el icono 🕶️ de la caja de mensaje (o el ajuste en *Privacidad*), wIA sustituye DNI/NIE, emails, teléfonos, IBAN, tarjetas, nombres, direcciones o expedientes por placeholders (`[Nombre_001]`) **antes** de enviar el prompt a la IA. El mapa reversible se guarda **cifrado por chat** (AES-GCM) y la respuesta se restaura solo en tu pantalla: los datos reales nunca salen del navegador. Una insignia indica cuántos datos se protegieron.

@@ -30,7 +30,7 @@ const state = {
         ollamaUrl: 'http://localhost:11434',
         model: 'gemma4:e4b',
         apiKey: '',
-        theme: 'light',
+        theme: 'system',
         temperature: 0.8,
         topP: 0.9,
         topK: 40,
@@ -1176,15 +1176,15 @@ function applyTheme(themeSetting) {
 }
 
 _systemThemeMedia?.addEventListener?.('change', () => {
-    if ((state.settings.theme || 'dark') === 'system') applyTheme('system');
+    if ((state.settings.theme || 'system') === 'system') applyTheme('system');
 });
 
 function applySettingsToUI() {
     renderProviderOptions();
     if (typeof updateAnonButtonUI === 'function') updateAnonButtonUI();
     dom.ollamaUrl.value = state.settings.ollamaUrl;
-    if (dom.themeSelect) dom.themeSelect.value = state.settings.theme || 'dark';
-    applyTheme(state.settings.theme || 'dark');
+    if (dom.themeSelect) dom.themeSelect.value = state.settings.theme || 'system';
+    applyTheme(state.settings.theme || 'system');
     dom.modelSelect.value = state.settings.model;
     dom.temperature.value = state.settings.temperature;
     dom.tempValue.textContent = state.settings.temperature;

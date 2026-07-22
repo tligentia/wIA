@@ -559,28 +559,6 @@
                             </div>
                         </div>
 
-                        <!-- Cadena de visión: modelo de imagen + modelo de chat -->
-                        <div class="vision-chain hidden" id="visionChain">
-                            <div class="vision-chain-head">
-                                <div class="vision-chain-title" title="Flujo de dos pasos: un modelo de visión describe la imagen adjunta y su resultado alimenta al modelo de chat, que redacta la respuesta.">👁 Cadena de análisis de imagen</div>
-                                <label class="wia-switch" title="Activa o desactiva el análisis automático de imágenes con el modelo de visión antes de enviarlas al chat.">
-                                    <input type="checkbox" id="visionChainToggle" checked>
-                                    <span class="wia-switch-track"><span class="wia-switch-thumb"></span></span>
-                                </label>
-                            </div>
-                            <p class="vision-chain-desc" id="visionChainDesc">Cuando adjuntas una imagen, primero la analiza el <b>modelo de visión</b> y su resultado pasa al <b>modelo de chat</b> que responde. Elige la combinación:</p>
-                            <div class="vision-chain-row">
-                                <div class="vision-chain-step">
-                                    <label title="Modelo que interpreta la imagen (descripción, OCR o análisis médico) en tu navegador.">👁 Modelo de visión</label>
-                                    <select class="setting-input" id="visionModelSelect" title="Elige el modelo que analiza las imágenes adjuntas."></select>
-                                </div>
-                                <span class="vision-chain-arrow" title="El resultado del modelo de visión se pasa al modelo de chat.">→</span>
-                                <div class="vision-chain-step">
-                                    <label title="Modelo de lenguaje que redacta la respuesta a partir del análisis de la imagen.">💬 Modelo de chat</label>
-                                    <select class="setting-input" id="visionChatSelect" title="Elige el modelo de chat que responde usando el análisis de la imagen."></select>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <div class="smart-model-container">
@@ -601,6 +579,29 @@
                         <select class="setting-input-premium hidden-model-select" id="modelSelect" style="display:none;">
                             <option value="">Cargando catálogo...</option>
                         </select>
+                    </div>
+
+                    <!-- Cadena de visión: modelo de imagen + modelo de chat (bajo el selector) -->
+                    <div class="vision-chain hidden" id="visionChain">
+                        <div class="vision-chain-head">
+                            <div class="vision-chain-title" title="Flujo de dos pasos: un modelo de visión describe la imagen adjunta y su resultado alimenta al modelo de chat, que redacta la respuesta.">👁 Cadena de análisis de imagen</div>
+                            <label class="wia-switch" title="Activa o desactiva el análisis automático de imágenes con el modelo de visión antes de enviarlas al chat.">
+                                <input type="checkbox" id="visionChainToggle" checked>
+                                <span class="wia-switch-track"><span class="wia-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                        <p class="vision-chain-desc" id="visionChainDesc">Cuando adjuntas una imagen, primero la analiza el <b>modelo de visión</b> y su resultado pasa al <b>modelo de chat</b> que responde. Elige la combinación:</p>
+                        <div class="vision-chain-row">
+                            <div class="vision-chain-step">
+                                <label title="Modelo que interpreta la imagen (descripción, OCR o análisis médico) en tu navegador.">👁 Modelo de visión</label>
+                                <select class="setting-input" id="visionModelSelect" title="Elige el modelo que analiza las imágenes adjuntas."></select>
+                            </div>
+                            <span class="vision-chain-arrow" title="El resultado del modelo de visión se pasa al modelo de chat.">→</span>
+                            <div class="vision-chain-step">
+                                <label title="Modelo de lenguaje que redacta la respuesta a partir del análisis de la imagen.">💬 Modelo de chat</label>
+                                <select class="setting-input" id="visionChatSelect" title="Elige el modelo de chat que responde usando el análisis de la imagen."></select>
+                            </div>
+                        </div>
                     </div>
                 </div>
                     </section>
@@ -644,9 +645,10 @@
                 <div class="setting-group">
                     <label class="setting-label" title="Renderiza todo el DOM aplicando tokens de paleta de colores diferentes">Tema Visual</label>
                     <select class="setting-input" id="themeSelect">
-                        <option value="system">Sistema (Automático) 🖥️</option>
+                        <option value="system" selected>Sistema (Automático) 🖥️</option>
+                        <option value="tligent">Tligent (Corporativo) 🔴</option>
                         <option value="dark">Oscuro (Premium) 🌙</option>
-                        <option value="light" selected>Claro (Premium) ☀️</option>
+                        <option value="light">Claro (Premium) ☀️</option>
                         <option value="vanilla">Vanilla (Minimalista) 🍦</option>
                     </select>
                 </div>
