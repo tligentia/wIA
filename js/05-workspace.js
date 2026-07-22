@@ -792,6 +792,7 @@ function tryQueueOrder(text) {
     autoResizeTextarea();
     updateSendButton();
     renderOrderQueue();
+    if (typeof persistOrderQueue === 'function') persistOrderQueue();
     return true;
 }
 
@@ -818,11 +819,13 @@ function renderOrderQueue() {
 function removeOrder(id) {
     state.orderQueue = (state.orderQueue || []).filter(o => o.id !== id);
     renderOrderQueue();
+    if (typeof persistOrderQueue === 'function') persistOrderQueue();
 }
 
 function clearOrderQueue() {
     state.orderQueue = [];
     renderOrderQueue();
+    if (typeof persistOrderQueue === 'function') persistOrderQueue();
 }
 
 /**
@@ -849,6 +852,7 @@ async function runOrderQueue() {
         while ((state.orderQueue || []).length > 0) {
             const order = state.orderQueue.shift();
             renderOrderQueue();
+            if (typeof persistOrderQueue === 'function') persistOrderQueue();
             await sendMessage(order.text);
             // Espera de seguridad hasta que el streaming realmente termine
             let guard = 0;

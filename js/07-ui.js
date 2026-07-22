@@ -399,6 +399,7 @@ function bindEvents() {
                 projects: state.projects,
                 chats: state.chats,
                 activeProjectId: state.activeProjectId,
+                orderQueue: state.orderQueue || [],
                 // Ajustes sin las claves API (los agentes viven dentro de projects).
                 settings: settingsWithoutSecrets(state.settings),
             };
@@ -447,11 +448,13 @@ function bindEvents() {
                     } else if (!state.projects.find(p => p.id === state.activeProjectId)) {
                         state.activeProjectId = state.projects[0]?.id || 'general';
                     }
+                    if (Array.isArray(data.orderQueue)) state.orderQueue = data.orderQueue;
                     syncProviderToState();
                     await saveStateNow();
                     applySettingsToUI();
                     renderProjectSelect();
                     renderChatList();
+                    if (typeof renderOrderQueue === 'function') renderOrderQueue();
                     if (typeof renderMessages === 'function') renderMessages();
                     alert(`Copia de seguridad restaurada: ${n} elementos. Recuerda revisar tus API keys en Ajustes.`);
                 } catch (err) {

@@ -167,7 +167,7 @@ const PROVIDERS = {
     claude:        { name: 'Claude (Anthropic)',  type: 'anthropic',  auth: 'apikey',           defaultUrl: 'https://api.anthropic.com/v1',                            defaultModel: 'claude-sonnet-5',           icon: '🟣' },
     openai:        { name: 'OpenAI',              type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.openai.com/v1',                               defaultModel: 'gpt-4.1',                   icon: '🤖' },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
-    webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', icon: '🧠' },
+    webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Qwen2.5-0.5B-Instruct', icon: '🧠' },
 };
 
 // ─── Model Function Metadata ────────────────
@@ -237,7 +237,8 @@ const WEBGPU_MODELS = [
         context: 32768,
         capabilities: ['fast', 'multilingual'],
         verified: true,
-        desc: 'Compacto y multilingüe. Muy útil para tareas simples y prompts cortos.',
+        recommended: true,
+        desc: 'Modelo por defecto recomendado: el mejor equilibrio entre ligereza de carga (~400 MB) y calidad. Compacto, multilingüe y con contexto amplio (32K).',
         repoUrl: 'https://huggingface.co/onnx-community/Qwen2.5-0.5B-Instruct'
     },
     {

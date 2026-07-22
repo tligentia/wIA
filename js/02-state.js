@@ -90,7 +90,7 @@ Cuando generes código:
             // maxTokens contenido por defecto: los modelos pequeños de navegador
             // tienden a divagar sin emitir fin-de-secuencia, y 4096 tokens de
             // bucle parecen un cuelgue de minutos.
-            webgpu:        { url: '', model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 1024 },
+            webgpu:        { url: '', model: 'onnx-community/Qwen2.5-0.5B-Instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 1024 },
         },
     },
 };
@@ -308,6 +308,7 @@ async function init() {
     renderProjectSelect();
     renderWelcomeStarters();
     renderChatList();
+    if (typeof renderOrderQueue === 'function') renderOrderQueue();
     bindEvents();
     bindSlashCommandEvents();
     await localDetection;
@@ -789,6 +790,15 @@ async function loadState() {
             }
         }
 
+        // Restaura la cola de órdenes pendientes (prefijo +) de la sesión previa.
+        try {
+            const savedQueue = localStorage.getItem('wia_order_queue');
+            if (savedQueue) {
+                const parsed = JSON.parse(savedQueue);
+                if (Array.isArray(parsed)) state.orderQueue = parsed;
+            }
+        } catch (_) {}
+
         const settings = localStorage.getItem('antigravity_settings');
         state.hasSavedSettings = !!settings;
         if (settings) {
@@ -891,6 +901,7 @@ function saveState(options = {}) {
         // Las API keys se cifran aparte en IndexedDB; en localStorage van en blanco.
         localStorage.setItem('antigravity_settings', JSON.stringify(settingsWithoutSecrets(state.settings)));
         scheduleSecretPersist();
+        persistOrderQueue();
         return true;
     } catch (e) {
         console.warn('Failed to save state:', e);
@@ -899,6 +910,15 @@ function saveState(options = {}) {
         }
         return false;
     }
+}
+
+// Persiste la cola de órdenes pendientes (prefijo +) entre sesiones. Respeta
+// el modo incógnito (no deja rastro). Guarda en localStorage por ser pequeña.
+function persistOrderQueue() {
+    try {
+        if (isConversationPersistenceDisabled()) { localStorage.removeItem('wia_order_queue'); return; }
+        localStorage.setItem('wia_order_queue', JSON.stringify(state.orderQueue || []));
+    } catch (e) { /* cuota / almacenamiento no disponible */ }
 }
 
 async function persistConversationsToIdb(options = {}) {
