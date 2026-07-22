@@ -2172,12 +2172,17 @@ select.setting-input {
     align-items: center;
     justify-content: space-between;
     gap: 18px;
+    flex-wrap: wrap;
     background: color-mix(in srgb, var(--accent-primary) 5%, var(--bg-elevated)) !important;
     border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-subtle)) !important;
 }
 
+/* La copia crece para ocupar el espacio disponible y NUNCA se colapsa por
+   debajo de un mínimo legible: si no cabe junto a las acciones, estas envuelven
+   a la línea de abajo (flex-wrap) en vez de aplastar el texto palabra a palabra. */
 .connection-validation-copy {
-    min-width: 0;
+    flex: 1 1 240px;
+    min-width: 220px;
 }
 
 .connection-validation-copy .setting-label {
