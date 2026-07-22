@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  wIA — Hub de IA multimotor
+  Creado por Jesús de Pablos · https://jesus.depablos.es
+  © 2026 Jesús de Pablos · Proyecto gratuito y de código abierto (Licencia MIT).
+  Al reutilizar o modificar, conserva el reconocimiento de autoría.
+-->
 <html lang="es">
 
 <head>
@@ -14,6 +20,33 @@
     <title>wIA — Local AI Chat</title>
     <link rel="icon" type="image/png" href="favicon.png?v=2">
     <meta name="description" content="wIA: Premium local AI chat interface powered by Ollama and Gemma 4">
+    <!-- Autoría — wIA es una creación de Jesús de Pablos (https://jesus.depablos.es) -->
+    <meta name="author" content="Jesús de Pablos">
+    <link rel="author" href="https://jesus.depablos.es">
+    <meta name="copyright" content="© 2026 Jesús de Pablos — https://jesus.depablos.es">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "wIA",
+      "description": "Hub de IA multimotor: chat con modelos locales (WebGPU), Ollama y APIs cloud, privado y de código abierto.",
+      "applicationCategory": "AI Chat Application",
+      "operatingSystem": "Web",
+      "url": "https://wia.tligent.com",
+      "license": "https://opensource.org/licenses/MIT",
+      "isAccessibleForFree": true,
+      "author": {
+        "@type": "Person",
+        "name": "Jesús de Pablos",
+        "url": "https://jesus.depablos.es"
+      },
+      "creator": {
+        "@type": "Person",
+        "name": "Jesús de Pablos",
+        "url": "https://jesus.depablos.es"
+      }
+    }
+    </script>
     <!-- PWA: instalable y con arranque offline -->
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -379,6 +412,10 @@
                         </span>
                     </a>
                     <div class="footer-center">
+                        <a href="https://jesus.depablos.es" class="footer-author-link" target="_blank" rel="author noopener"
+                            title="wIA es una creación de Jesús de Pablos — visita su web">
+                            Creado por <strong>Jesús de Pablos</strong>
+                        </a>
                         <a href="mailto:info@tligent.com?subject=Quiero%20mas%20información"
                             class="footer-contact-link">SOLICITAR INFORMACIÓN</a>
                     </div>
@@ -781,6 +818,7 @@
                             <a href="#doc-pwa" data-doc-target="doc-pwa">14 · Instalación y uso offline</a>
                             <a href="#doc-atajos" data-doc-target="doc-atajos">15 · Atajos de teclado</a>
                             <a href="#doc-faq" data-doc-target="doc-faq">16 · Problemas frecuentes</a>
+                            <a href="#doc-autoria" data-doc-target="doc-autoria">17 · Autoría y licencia</a>
                         </nav>
 
                         <div class="docs-body" id="docsBody">
@@ -956,7 +994,22 @@
                                 <p>No. Son estimaciones automáticas orientativas. Cualquier decisión clínica debe tomarla un profesional sanitario.</p>
                             </article>
 
-                            <p class="doc-footer-note">wIA — hub de IA multimotor · Documentación generada desde la propia aplicación.</p>
+                            <article class="doc-block doc-author-block" id="doc-autoria">
+                                <h2>17 · Autoría y licencia</h2>
+                                <div class="doc-author-card">
+                                    <div class="doc-author-avatar" aria-hidden="true">JdP</div>
+                                    <div class="doc-author-info">
+                                        <p class="doc-author-name">Creado por <a href="https://jesus.depablos.es" target="_blank" rel="author noopener">Jesús de Pablos</a></p>
+                                        <p class="doc-author-role">Autor, diseño y desarrollo de wIA</p>
+                                        <p><a class="doc-author-web" href="https://jesus.depablos.es" target="_blank" rel="author noopener">🌐 jesus.depablos.es</a></p>
+                                    </div>
+                                </div>
+                                <p><strong>wIA</strong> es un proyecto <strong>gratuito y de código abierto</strong> ideado, diseñado y desarrollado por <strong>Jesús de Pablos</strong>. Puedes usarlo, estudiarlo, modificarlo y compartirlo libremente bajo licencia <strong>MIT</strong>.</p>
+                                <p>La única condición es <strong>mantener el reconocimiento de autoría</strong>: conserva el aviso de copyright y el crédito a Jesús de Pablos (<a href="https://jesus.depablos.es" target="_blank" rel="author noopener">jesus.depablos.es</a>) en cualquier copia, distribución u obra derivada. Si wIA te resulta útil, un enlace a su web es la mejor forma de agradecerlo.</p>
+                                <p class="doc-license-note">© 2026 Jesús de Pablos · Licencia MIT · <a href="https://jesus.depablos.es" target="_blank" rel="author noopener">jesus.depablos.es</a></p>
+                            </article>
+
+                            <p class="doc-footer-note">wIA — hub de IA multimotor · Creado por <a href="https://jesus.depablos.es" target="_blank" rel="author noopener">Jesús de Pablos</a> · © 2026 · Licencia MIT.</p>
                         </div>
                         <button type="button" class="docs-backtop" id="docsBackTop" title="Volver al índice" aria-label="Volver al índice">↑ Índice</button>
                     </section>
