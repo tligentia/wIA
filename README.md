@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AL)
+# wIA — Multi-Engine AI Chat Interface (v2607.AM)
 
 **wIA** es un hub de Inteligencia Artificial multimotor — una interfaz de chat avanzada, privada y de alto rendimiento que conecta con **11 proveedores de IA** diferentes. Diseñada como aplicación web estática (HTML/JS/CSS puro, sin framework), puede ejecutarse tanto localmente como desplegada en cualquier servidor web.
 
@@ -292,7 +292,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
-- 🐛 **Fix: app rota bajo PageSpeed en wia.tligent.com (v2607.AL)**: el servidor Plesk/nginx tiene **ngx_pagespeed** con `combine_javascript`, que convertía el código JS en cadenas ejecutadas con `eval()`, rompiendo el ámbito global compartido (`const PROVIDERS`, `WEBGPU_MODELS`, `state`… dejaban de ser globales) y dejando la app inservible. Se añaden meta-etiquetas `PageSpeed: off` / desactivación de filtros JS en el `<head>`. Fix definitivo recomendado: `pagespeed off;` en las directivas nginx del dominio en Plesk.
+- 🐛 **Fix: app rota bajo mod_pagespeed en wia.tligent.com (v2607.AL/AM)**: el servidor (Plesk: nginx como proxy + **Apache mod_pagespeed** detrás) aplicaba `combine_javascript`, que convertía el código JS en cadenas ejecutadas con `eval()`, rompiendo el ámbito global compartido (`const PROVIDERS`, `WEBGPU_MODELS`, `state`… dejaban de ser globales) y dejando la app inservible (`ReferenceError: PROVIDERS is not defined`). Fix en el repo: **`.htaccess`** (que Apache mod_pagespeed sí lee) desactivando los filtros JS que alteran el ámbito, más meta-etiquetas `PageSpeed: off` en el `<head>`. El `.htaccess` incluye también los MIME de `.onnx`/`.wasm`. (La directiva `pagespeed` NO va en nginx: es un módulo de Apache.)
 - 🎨 **Tema Tligent + ajustes de UI (v2607.AK)**: nuevo tema **Tligent (Corporativo)** — fondo blanco, texto negro y acentos rojo/gris de marca. El tema por defecto pasa a **Sistema (Automático)** para instalaciones sin datos previos (sigue el modo claro/oscuro del SO). Además, la *Cadena de análisis de imagen* se reubica **debajo del selector de modelos**.
 - ⚡ **Nuevo modelo WebGPU por defecto + persistencia total (v2607.AJ)**: el default de WebGPU pasa a **Qwen 2.5 0.5B** (~400 MB, verificado en vivo), el mejor equilibrio entre ligereza de carga y calidad (multilingüe, contexto 32K), un 43% más ligero que el anterior Llama 3.2 1B. Solo aplica a instalaciones **sin datos previos**; quien ya tenga un modelo elegido lo conserva. Además, **todos los parámetros persisten y se exportan**: se añadió la persistencia de la **cola de órdenes** (prefijo +) entre sesiones y en la copia de seguridad completa (el resto de ajustes y parámetros por motor ya persistían).
 - 🕶️ **Anonimización DLP local + panel de visión (v2607.AI)**:

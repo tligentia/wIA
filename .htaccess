@@ -1,0 +1,29 @@
+# ============================================================
+# wIA — Apache (mod_pagespeed) configuración
+# ============================================================
+# En el servidor de producción (Plesk: nginx como proxy + Apache detrás),
+# Apache mod_pagespeed aplicaba el filtro combine_javascript, que guarda el
+# código JS en variables de texto y lo ejecuta con eval(). eval() NO expone al
+# ámbito global los `const`/`let` de nivel superior, por lo que PROVIDERS,
+# WEBGPU_MODELS, state y demás desaparecían y la app quedaba inservible
+# (ReferenceError: PROVIDERS is not defined). wIA reparte su estado por
+# variables globales entre módulos (scripts clásicos), así que cualquier
+# reescritura que los envuelva en eval/closure la rompe.
+#
+# Se desactivan SOLO los filtros de JavaScript que alteran la ejecución/ámbito;
+# se conservan las optimizaciones de imágenes y CSS. El guard <IfModule> evita
+# errores en servidores que no tengan el módulo.
+<IfModule pagespeed_module>
+    ModPagespeedDisableFilters combine_javascript,defer_javascript,inline_javascript,canonicalize_javascript_libraries
+</IfModule>
+# Variante de nombre alternativa del módulo (algunas builds lo registran así):
+<IfModule mod_pagespeed.c>
+    ModPagespeedDisableFilters combine_javascript,defer_javascript,inline_javascript,canonicalize_javascript_libraries
+</IfModule>
+
+# Tipos MIME correctos para los modelos ONNX y el WASM de WebGPU, por si el
+# servidor no los reconoce (sirve modelos locales sin avisos de MIME).
+<IfModule mod_mime.c>
+    AddType application/wasm .wasm
+    AddType application/octet-stream .onnx
+</IfModule>
