@@ -459,15 +459,34 @@ body {
     margin-top: 2px;
 }
 
+/* Los iconos de acción flotan sobre el borde derecho (posición absoluta) para
+   NO reservar espacio: así el título usa todo el ancho y se ve más texto.
+   Aparecen solo al pasar el ratón, sobre un degradado que difumina el título. */
 .chat-item-actions {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     gap: 2px;
     opacity: 0;
+    pointer-events: none;
+    padding-left: 26px;
+    background: linear-gradient(to right, transparent, var(--bg-hover) 42%);
     transition: opacity var(--transition-fast);
 }
 
 .chat-item:hover .chat-item-actions {
     opacity: 1;
+    pointer-events: auto;
+}
+
+/* El degradado de fondo se adapta al color de la fila (activa / destacada). */
+.chat-item.active .chat-item-actions {
+    background: linear-gradient(to right, transparent, var(--bg-active) 42%);
+}
+.chat-item.starred .chat-item-actions {
+    background: linear-gradient(to right, transparent, color-mix(in srgb, var(--star-bg) 55%, var(--bg-hover)) 42%);
 }
 
 .chat-item-actions .btn-icon {
