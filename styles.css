@@ -5313,3 +5313,21 @@ option {
     margin-left: 2px;
     border-left: 1px solid var(--border-subtle);
 }
+
+/* Cabecera y marcador "actual" de los selectores rápidos // y /// */
+.slash-dropdown-heading {
+    padding: 8px 14px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky;
+    top: 0;
+    background: var(--bg-elevated);
+    z-index: 1;
+}
+.slash-current {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+}

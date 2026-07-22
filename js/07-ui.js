@@ -1742,11 +1742,11 @@ const slashState = {
     items: []
 };
 
-// Model Slash Command State
+// Estado del selector rápido: // = modelos del motor actual, /// = elegir motor
 const modelSlashState = {
     active: false,
     selectedIndex: 0,
-    level: 'providers',    // 'providers' | 'models'
+    mode: 'models',        // 'models' (//) | 'engines' (///)
     selectedProviderId: null,
     items: []
 };
@@ -1755,14 +1755,18 @@ function handleSlashInput() {
     const val = dom.messageInput.value;
     if (state.isStreaming) return;
 
-    if (val.startsWith('//')) {
-        hideSlashDropdown(); // Hide prompt dropdown if they type second /
+    if (val.startsWith('///')) {
+        hideSlashDropdown();
+        const query = val.slice(3).toLowerCase().trim();
+        showEngineSlashDropdown(query);      // /// → elegir el motor
+    } else if (val.startsWith('//')) {
+        hideSlashDropdown();                 // oculta el de prompts
         const query = val.slice(2).toLowerCase().trim();
-        showModelSlashDropdown(query);
+        showModelSlashDropdown(query);       // // → modelos del motor actual
     } else if (val.startsWith('/')) {
-        hideModelSlashDropdown(); // Hide model dropdown if they delete second /
+        hideModelSlashDropdown();            // oculta el de modelos/motores
         const query = val.slice(1).toLowerCase().trim();
-        showSlashDropdown(query);
+        showSlashDropdown(query);            // / → biblioteca de prompts
     } else {
         hideSlashDropdown();
         hideModelSlashDropdown();
@@ -1791,26 +1795,43 @@ function hideSlashDropdown() {
     dom.slashDropdown.classList.add('hidden');
 }
 
-// Model Dropdown (//)
+// Dropdown de MODELOS del motor actual (//)
 function showModelSlashDropdown(query) {
     modelSlashState.active = true;
+    modelSlashState.mode = 'models';
     modelSlashState.selectedIndex = 0;
+    renderCurrentProviderModels(query);
+    dom.modelSlashDropdown.classList.remove('hidden');
+}
 
-    if (modelSlashState.level === 'models' && modelSlashState.selectedProviderId) {
-        renderModelSlashModels(modelSlashState.selectedProviderId, query);
-    } else {
-        modelSlashState.level = 'providers';
-        renderModelSlashProviders(query);
-    }
+// Dropdown para ELEGIR EL MOTOR de IA (///)
+function showEngineSlashDropdown(query) {
+    modelSlashState.active = true;
+    modelSlashState.mode = 'engines';
+    modelSlashState.selectedIndex = 0;
+    renderEngineSlashProviders(query);
     dom.modelSlashDropdown.classList.remove('hidden');
 }
 
 function hideModelSlashDropdown() {
     modelSlashState.active = false;
-    modelSlashState.level = 'providers';
+    modelSlashState.mode = 'models';
     modelSlashState.selectedProviderId = null;
     modelSlashState.items = [];
     dom.modelSlashDropdown.classList.add('hidden');
+}
+
+// Devuelve la lista de modelos disponibles para un motor concreto.
+function getModelsForProvider(providerId) {
+    if (providerId === 'webgpu') {
+        return (typeof WEBGPU_MODELS !== 'undefined' ? WEBGPU_MODELS : [])
+            .map(m => ({ name: m.id, label: m.label || m.name || m.id }));
+    }
+    if (state.settings.provider === providerId && Array.isArray(state.rawModels) && state.rawModels.length) {
+        return state.rawModels.map(m => ({ name: m.name || m.id, label: m.label || m.name || m.id }));
+    }
+    const def = PROVIDERS[providerId];
+    return def?.defaultModel ? [{ name: def.defaultModel, label: `${def.defaultModel} (por defecto)` }] : [];
 }
 
 function renderSlashCategories(query) {
@@ -1880,86 +1901,61 @@ function renderSlashPrompts(categoryId, query) {
     bindSlashItemClicks();
 }
 
-function renderModelSlashProviders(query) {
+// // → modelos del MOTOR ACTUALMENTE SELECCIONADO (un solo nivel).
+function renderCurrentProviderModels(query) {
+    const providerId = state.settings.provider;
+    const def = getProviderDef(providerId);
+    let models = getModelsForProvider(providerId);
+    if (query) {
+        models = models.filter(m => (m.label || m.name).toLowerCase().includes(query));
+    }
+    modelSlashState.items = models.map(m => ({ type: 'model', id: m.name, label: m.label || m.name, providerId }));
+
+    let html = `<div class="slash-dropdown-heading">${def.icon || '◇'} Modelos de ${escapeHtml(def.name)} · escribe /// para cambiar de motor</div>`;
+    if (models.length === 0) {
+        html += `<div class="slash-empty">No hay modelos disponibles para ${escapeHtml(def.name)}. Prueba a validar la conexión o usa /// para cambiar de motor.</div>`;
+    } else {
+        html += modelSlashState.items.map((item, i) => {
+            const isCurrent = item.id === state.settings.model;
+            return `<button class="slash-item ${i === modelSlashState.selectedIndex ? 'active' : ''}" data-idx="${i}">
+                <span class="slash-item-icon">🤖</span>
+                <div class="slash-item-info">
+                    <div class="slash-item-title">${escapeHtml(item.label)}${isCurrent ? ' <span class="slash-current">· actual</span>' : ''}</div>
+                </div>
+            </button>`;
+        }).join('');
+    }
+    dom.modelSlashDropdownList.innerHTML = html;
+    bindModelSlashItemClicks();
+}
+
+// /// → elegir el MOTOR de IA (un solo nivel).
+function renderEngineSlashProviders(query) {
     const favorites = Array.isArray(state.settings.favoriteProviders) ? state.settings.favoriteProviders : [];
     let providers = getOrderedProviderEntries().map(([id, def]) => ({
-        id,
-        ...def,
-        favorite: favorites.includes(id),
+        id, name: def.name, icon: def.icon, favorite: favorites.includes(id),
     }));
     if (query) {
         providers = providers.filter(p => p.name.toLowerCase().includes(query) || p.id.toLowerCase().includes(query));
     }
-
-    modelSlashState.items = providers.map(p => ({ type: 'provider', ...p }));
+    // OJO: construir sin propagar la def del motor, que trae su propio `type`
+    // (p. ej. 'openai') y sobrescribiría el discriminador 'provider'.
+    modelSlashState.items = providers.map(p => ({ type: 'provider', id: p.id, name: p.name, icon: p.icon, favorite: p.favorite }));
 
     if (modelSlashState.items.length === 0) {
-        dom.modelSlashDropdownList.innerHTML = `<div class="slash-empty">No se encontraron plataformas para "//${query}"</div>`;
+        dom.modelSlashDropdownList.innerHTML = `<div class="slash-empty">No se encontraron motores para "///${query}"</div>`;
         return;
     }
-
-    dom.modelSlashDropdownList.innerHTML = modelSlashState.items.map((item, i) => {
+    let html = `<div class="slash-dropdown-heading">⚙️ Elegir motor de IA · luego // para elegir modelo</div>`;
+    html += modelSlashState.items.map((item, i) => {
+        const isCurrent = item.id === state.settings.provider;
         return `<button class="slash-item ${i === modelSlashState.selectedIndex ? 'active' : ''}" data-idx="${i}">
             <span class="slash-item-icon">${item.icon}</span>
             <div class="slash-item-info">
-                <div class="slash-item-title">${item.favorite ? '★ ' : ''}${escapeHtml(item.name)}</div>
+                <div class="slash-item-title">${item.favorite ? '★ ' : ''}${escapeHtml(item.name)}${isCurrent ? ' <span class="slash-current">· actual</span>' : ''}</div>
             </div>
         </button>`;
     }).join('');
-
-    bindModelSlashItemClicks();
-}
-
-async function renderModelSlashModels(providerId, query) {
-    // We need to fetch/get models for this specific provider
-    // This part might take a moment if we need to checkProviderStatus
-    const def = PROVIDERS[providerId];
-    let models = [];
-    
-    // If it's the current provider, we already have them in rawModels
-    if (state.settings.provider === providerId) {
-        models = state.rawModels || [];
-    } else {
-        // We'll show a "loading" or similar if we can't easily get them without switching
-        // For simplicity, let's just trigger a switch or suggest switching
-        // OR better: use the defaultModel as one option, and show "Cargar más..."
-        models = [
-            { name: def.defaultModel, label: `${def.defaultModel} (Predeterminado)` }
-        ];
-        // If it's WebGPU, we have constants
-        if (providerId === 'webgpu') {
-            models = WEBGPU_MODELS.map(m => ({ name: m.id, label: m.name }));
-        }
-    }
-
-    if (query) {
-        models = models.filter(m => (m.label || m.name).toLowerCase().includes(query));
-    }
-
-    const backItem = { type: 'back', id: '__back__' };
-    modelSlashState.items = [backItem, ...models.map(m => ({ type: 'model', id: m.name, label: m.label || m.name, providerId }))];
-
-    let html = `<button class="slash-item slash-item-back ${modelSlashState.selectedIndex === 0 ? 'active' : ''}" data-idx="0">
-        <span class="slash-item-icon">←</span>
-        <div class="slash-item-info">
-            <div class="slash-item-title">Volver a plataformas</div>
-        </div>
-    </button>`;
-
-    if (models.length === 0) {
-        html += `<div class="slash-empty">No se encontraron modelos.</div>`;
-    } else {
-        modelSlashState.items.slice(1).forEach((item, pi) => {
-            const idx = pi + 1;
-            html += `<button class="slash-item ${idx === modelSlashState.selectedIndex ? 'active' : ''}" data-idx="${idx}">
-                <span class="slash-item-icon">🤖</span>
-                <div class="slash-item-info">
-                    <div class="slash-item-title">${escapeHtml(item.label)}</div>
-                </div>
-            </button>`;
-        });
-    }
-
     dom.modelSlashDropdownList.innerHTML = html;
     bindModelSlashItemClicks();
 }
@@ -2011,46 +2007,45 @@ async function selectModelSlashItem(idx) {
     const item = modelSlashState.items[idx];
     if (!item) return;
 
-    if (item.type === 'provider') {
-        modelSlashState.level = 'models';
-        modelSlashState.selectedProviderId = item.id;
-        modelSlashState.selectedIndex = 0;
-        dom.messageInput.value = '//';
-        renderModelSlashModels(item.id, '');
-    } else if (item.type === 'back') {
-        modelSlashState.level = 'providers';
-        modelSlashState.selectedProviderId = null;
-        modelSlashState.selectedIndex = 0;
-        dom.messageInput.value = '//';
-        renderModelSlashProviders('');
-    } else if (item.type === 'model') {
-        markProviderUsed(item.providerId);
-        // Switch provider if needed
-        if (state.settings.provider !== item.providerId) {
+    if (item.type === 'model') {
+        // Fija el modelo (en su motor; cambia de motor si el ítem trae otro).
+        const providerId = item.providerId || state.settings.provider;
+        markProviderUsed(providerId);
+        if (state.settings.provider !== providerId) {
             saveCurrentProviderConfig();
-            state.settings.provider = item.providerId;
+            state.settings.provider = providerId;
             syncProviderToState();
             updateProviderUI();
         }
-        
-        // Select model
         state.settings.model = item.id;
         getActiveProviderConfig().model = item.id;
-        
-        // Finalize
         saveState();
         applySettingsToUI();
         checkProviderStatus();
-        
-        // UI Cleanup
         dom.messageInput.value = '';
         autoResizeTextarea();
         updateSendButton();
         hideModelSlashDropdown();
         dom.messageInput.focus();
-        
-        // Feedback
-        showStatusMeta && showStatusMeta(`IA cambiada a: ${item.label}`);
+        showStatusMeta && showStatusMeta(`Modelo: ${item.label}`);
+    } else if (item.type === 'provider') {
+        // Cambia el motor de IA (/// ).
+        markProviderUsed(item.id);
+        if (state.settings.provider !== item.id) {
+            saveCurrentProviderConfig();
+            state.settings.provider = item.id;
+            syncProviderToState();
+            updateProviderUI();
+        }
+        saveState();
+        applySettingsToUI();
+        checkProviderStatus();
+        dom.messageInput.value = '';
+        autoResizeTextarea();
+        updateSendButton();
+        hideModelSlashDropdown();
+        dom.messageInput.focus();
+        showStatusMeta && showStatusMeta(`Motor: ${getProviderDef(item.id).name}`);
     }
 }
 
