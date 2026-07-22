@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AO)
+# wIA — Multi-Engine AI Chat Interface (v2607.AP)
 
 > **Creado por [Jesús de Pablos](https://jesus.depablos.es)** · Proyecto gratuito y de código abierto · Licencia MIT
 
@@ -296,6 +296,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🚀 **Carga WebGPU más rápida (v2607.AP)**: dos aceleraciones. **(1) Hilos WASM multinúcleo**: onnxruntime-web usa ahora hasta 8 hilos (aprovechando el aislamiento de origen ya activo) + SIMD, acelerando la inicialización del grafo y las operaciones en CPU/WASM. **(2) Precarga en segundo plano**: el modelo empieza a descargarse e inicializarse en cuanto escribes en la caja de mensaje, de modo que al enviar ya está (casi) listo; con coalescencia para no duplicar la descarga, más un botón **⚡ Preparar modelo** en el monitor para descargarlo bajo demanda. La descarga sigue siendo única (queda en caché del navegador).
 - 👤 **Autoría y licencia MIT (v2607.AN)**: wIA se declara **gratuito y de código abierto** con **licencia MIT**, reconociendo la autoría de **Jesús de Pablos** ([jesus.depablos.es](https://jesus.depablos.es)) de forma destacada: crédito enlazado en el pie de página, nueva sección *17 · Autoría y licencia* en la Documentación (con tarjeta de autor, también en el PDF), fichero `LICENSE`, metadatos `author`/`copyright` y datos estructurados JSON-LD (schema.org) para buscadores, y cabecera de copyright en el código.
 - 🐛 **Fix: app rota bajo mod_pagespeed en wia.tligent.com (v2607.AL/AM)**: el servidor (Plesk: nginx como proxy + **Apache mod_pagespeed** detrás) aplicaba `combine_javascript`, que convertía el código JS en cadenas ejecutadas con `eval()`, rompiendo el ámbito global compartido (`const PROVIDERS`, `WEBGPU_MODELS`, `state`… dejaban de ser globales) y dejando la app inservible (`ReferenceError: PROVIDERS is not defined`). Fix en el repo: **`.htaccess`** (que Apache mod_pagespeed sí lee) desactivando los filtros JS que alteran el ámbito, más meta-etiquetas `PageSpeed: off` en el `<head>`. El `.htaccess` incluye también los MIME de `.onnx`/`.wasm`. (La directiva `pagespeed` NO va en nginx: es un módulo de Apache.)
 - 🎨 **Tema Tligent + ajustes de UI (v2607.AK)**: nuevo tema **Tligent (Corporativo)** — fondo blanco, texto negro y acentos rojo/gris de marca. El tema por defecto pasa a **Sistema (Automático)** para instalaciones sin datos previos (sigue el modo claro/oscuro del SO). Además, la *Cadena de análisis de imagen* se reubica **debajo del selector de modelos**.

@@ -37,6 +37,16 @@ async function getHF() {
         env.useBrowserCache = true;
         env.remoteHost = 'https://huggingface.co';
         env.remotePathTemplate = '{model}/resolve/{revision}';
+        // Acelera onnxruntime: máximo de hilos WASM si hay aislamiento de origen
+        // (SharedArrayBuffer), y SIMD. Mejora init y ops en CPU.
+        try {
+            const wasm = env?.backends?.onnx?.wasm;
+            if (wasm) {
+                const isolated = typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
+                wasm.numThreads = isolated ? Math.max(1, Math.min(self.navigator?.hardwareConcurrency || 4, 8)) : 1;
+                wasm.simd = true;
+            }
+        } catch (e) { /* best-effort */ }
         workerState.hf = hf;
     }
     return workerState.hf;

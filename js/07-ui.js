@@ -244,6 +244,12 @@ function bindEvents() {
     dom.messageInput.addEventListener('input', () => {
         autoResizeTextarea();
         updateSendButton();
+        // Precarga el modelo WebGPU en segundo plano en cuanto el usuario empieza
+        // a escribir: la descarga/inicialización avanza mientras redacta, así el
+        // envío es (casi) instantáneo. Silencioso e idempotente.
+        if (dom.messageInput.value.trim() && typeof warmUpActiveWebGPUModel === 'function') {
+            warmUpActiveWebGPUModel();
+        }
     });
 
     // Stop streaming
@@ -573,6 +579,27 @@ function bindEvents() {
         const loaded = webgpuState.loadedModelId || webgpuWorker.loadedModelId;
         if (!loaded && !webgpuState.isLoading) { alert('No hay ningún modelo cargado en memoria ahora mismo.'); return; }
         releaseWebGPUMemory();
+    });
+
+    document.getElementById('webgpuPrepareBtn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const modelId = state.settings.model;
+        const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
+        if (!modelDef) { alert('Selecciona primero un modelo WebGPU.'); return; }
+        if (webgpuState.loadedModelId === modelId) { alert('El modelo ya está cargado y listo.'); return; }
+        if (webgpuState.isLoading) { alert('Ya hay una carga en curso.'); return; }
+        const original = btn.textContent;
+        btn.disabled = true; btn.textContent = '⏳ Preparando…';
+        try {
+            const task = modelDef.task || 'text-generation';
+            await loadWebGPUModel(modelId, () => { try { renderWebGPUMonitor(); } catch (err) {} }, task);
+            renderWebGPUMonitor();
+        } catch (err) {
+            console.warn('[WebGPU] preparar modelo falló:', err);
+            alert('No se pudo preparar el modelo: ' + (err?.message || err));
+        } finally {
+            btn.disabled = false; btn.textContent = original;
+        }
     });
 
     $('#saveSettings').addEventListener('click', async () => {

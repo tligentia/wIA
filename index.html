@@ -588,7 +588,10 @@
                         <div class="webgpu-monitor" id="webgpuMonitor">
                             <div class="webgpu-monitor-head">
                                 <span class="webgpu-monitor-title">📊 Estado de WebGPU</span>
-                                <button type="button" class="btn-secondary webgpu-release-btn" id="webgpuReleaseBtn" title="Descarga de la memoria el modelo cargado (no borra la caché del navegador)">🧹 Liberar memoria</button>
+                                <div class="webgpu-monitor-actions">
+                                    <button type="button" class="btn-secondary webgpu-prepare-btn" id="webgpuPrepareBtn" title="Descarga e inicializa ahora el modelo seleccionado para que el primer mensaje sea instantáneo. Solo se descarga una vez (queda en caché).">⚡ Preparar modelo</button>
+                                    <button type="button" class="btn-secondary webgpu-release-btn" id="webgpuReleaseBtn" title="Descarga de la memoria el modelo cargado (no borra la caché del navegador)">🧹 Liberar memoria</button>
+                                </div>
                             </div>
                             <div class="webgpu-monitor-grid" id="webgpuMonitorGrid"></div>
                             <div class="webgpu-gauge-wrap">

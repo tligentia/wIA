@@ -5260,3 +5260,8 @@ option {
     color: var(--text-tertiary);
 }
 .doc-license-note a { color: var(--accent-primary); }
+
+/* Acciones del monitor WebGPU (Preparar / Liberar) */
+.webgpu-monitor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.webgpu-prepare-btn { white-space: nowrap; }
+.webgpu-prepare-btn:disabled { opacity: 0.6; cursor: default; }

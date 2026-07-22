@@ -304,6 +304,23 @@ function adaptDtypesToDevice(dtypeCandidates, device, fp16Supported) {
 }
 
 /**
+ * configureOnnxRuntime — acelera onnxruntime-web: activa el máximo de hilos
+ * WASM (solo si la página tiene aislamiento de origen → SharedArrayBuffer) y
+ * SIMD. Multiplica la velocidad de inicialización del grafo y de las ops que
+ * caen a WASM (y toda la ruta de respaldo sin WebGPU). Silencioso si algo falta.
+ */
+function configureOnnxRuntime(env) {
+    try {
+        const wasm = env?.backends?.onnx?.wasm;
+        if (!wasm) return;
+        const isolated = typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
+        // Sin aislamiento no hay SharedArrayBuffer: forzar >1 hilo rompería la carga.
+        wasm.numThreads = isolated ? Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8)) : 1;
+        wasm.simd = true;
+    } catch (e) { /* configuración best-effort */ }
+}
+
+/**
  * loadWebGPUModelInline — loads a Transformers.js pipeline in the main thread.
  * Ruta de respaldo cuando el Web Worker no está disponible (p. ej. file://).
  * Shows progress in the status bar and returns the pipeline instance.
@@ -343,6 +360,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
         // Keeping only the repo/revision prefix avoids malformed URLs like
         // ".../resolve/main/{file}/config.json" on some model loads.
         env.remotePathTemplate = '{model}/resolve/{revision}';
+        configureOnnxRuntime(env);
 
         const deviceSupport = await checkWebGPUSupport();
         const device = deviceSupport === 'webgpu' ? 'webgpu' : 'wasm';
@@ -555,6 +573,7 @@ async function _prepareHfEnv() {
     const { env } = hf;
     env.allowLocalModels = false; env.allowRemoteModels = true; env.useBrowserCache = true;
     env.remoteHost = 'https://huggingface.co'; env.remotePathTemplate = '{model}/resolve/{revision}';
+    configureOnnxRuntime(env);
     return hf;
 }
 
@@ -1311,7 +1330,28 @@ async function analyzeImagesForWebGPUViaWorker(imageMetaList = [], onProgress) {
 }
 
 // ─── WebGPU dispatchers (worker si es posible, inline si no) ─
+// Coalescencia de carga: si la precarga en 2º plano y el envío piden el mismo
+// modelo a la vez, comparten UNA sola descarga en lugar de competir (lo que
+// antes hacía que la segunda recibiera null por la guarda isLoading).
+let _webgpuLoadPromise = null;
+let _webgpuLoadKey = null;
+
 async function loadWebGPUModel(modelId, onProgress, task = 'text-generation') {
+    const key = `${modelId}|${task}`;
+    if (_webgpuLoadPromise && _webgpuLoadKey === key) {
+        return _webgpuLoadPromise;
+    }
+    const p = _loadWebGPUModelUncoalesced(modelId, onProgress, task);
+    _webgpuLoadPromise = p;
+    _webgpuLoadKey = key;
+    try {
+        return await p;
+    } finally {
+        if (_webgpuLoadPromise === p) { _webgpuLoadPromise = null; _webgpuLoadKey = null; }
+    }
+}
+
+async function _loadWebGPUModelUncoalesced(modelId, onProgress, task = 'text-generation') {
     const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
     if (modelDef?.omnimodal) return loadWebGPUOmnimodalModel(modelId, onProgress);
     const mode = await decideWebGPUExecutionMode();
@@ -1330,6 +1370,33 @@ async function loadWebGPUModel(modelId, onProgress, task = 'text-generation') {
     }
     return loadWebGPUModelInline(modelId, onProgress, task);
 }
+
+/**
+ * warmUpActiveWebGPUModel — precarga en segundo plano el modelo WebGPU activo
+ * (descarga + inicialización) para que, cuando el usuario envíe, ya esté listo.
+ * Silencioso: los errores se ignoran (el envío reintentará). No hace nada si el
+ * proveedor no es WebGPU, si ya está cargado/cargando, o si es omnimodal.
+ */
+let _webgpuWarmedFor = null;
+async function warmUpActiveWebGPUModel() {
+    try {
+        if (state.settings.provider !== 'webgpu') return;
+        const modelId = state.settings.model;
+        if (!modelId) return;
+        if (webgpuState.loadedModelId === modelId) return;   // ya cargado
+        if (webgpuState.isLoading || _webgpuLoadPromise) return; // ya en curso
+        if (_webgpuWarmedFor === modelId) return;            // ya intentado en esta sesión
+        const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
+        if (!modelDef) return;
+        _webgpuWarmedFor = modelId;
+        const task = modelDef.task || 'text-generation';
+        await loadWebGPUModel(modelId, () => { try { renderWebGPUMonitor(); } catch (e) {} }, task);
+    } catch (e) {
+        console.warn('[WebGPU] precarga en segundo plano fallida (se cargará al enviar):', e);
+        _webgpuWarmedFor = null; // permite reintentar
+    }
+}
+window.warmUpActiveWebGPUModel = warmUpActiveWebGPUModel;
 
 async function runWebGPUGeneration(pipe, promptInput, assistantMsg, msgIdx) {
     if (pipe?.__omnimodal) {
