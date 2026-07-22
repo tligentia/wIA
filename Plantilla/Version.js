@@ -1,7 +1,7 @@
 // wIA Version Definition
 const VERSION_YEAR = 26;
 const VERSION_MONTH = 7;
-const VERSION_SEQUENCE = 'AT';
+const VERSION_SEQUENCE = 'AU';
 
 const APP_VERSION = `v${VERSION_YEAR}${String(VERSION_MONTH).padStart(2, '0')}.${VERSION_SEQUENCE}`;
 

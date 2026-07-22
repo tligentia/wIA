@@ -812,17 +812,20 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;               /* permite envolver dentro del flex, sin desbordar */
 }
 
 .welcome-card-text strong {
     font-size: 0.8rem;
     font-weight: 600;
+    overflow-wrap: anywhere;    /* que nunca se salga de la cajita */
 }
 
 .welcome-card-text span {
     font-size: 0.72rem;
     color: var(--text-tertiary);
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 /* ============================================

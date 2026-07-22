@@ -173,10 +173,10 @@ function renderAttachmentPreview() {
 // temperatura) e iniciadores de conversación para la pantalla de bienvenida.
 
 const DEFAULT_WELCOME_STARTERS = [
-    { icon: '🚀', title: 'Explorar capacidades', prompt: 'Explícame qué puedes hacer y cuáles son tus capacidades' },
-    { icon: '💻', title: 'Escribir código', prompt: 'Ayúdame a escribir código Python para un web scraper con asyncio' },
-    { icon: '🧠', title: 'Analizar ideas', prompt: 'Ayúdame a analizar los pros y contras de una decisión importante' },
-    { icon: '✍️', title: 'Redacción y traducción', prompt: 'Ayúdame a redactar un texto profesional multiidioma' },
+    { icon: '🚀', title: 'Explorar capacidades', desc: 'Descubre todo lo que puedo hacer por ti', prompt: 'Explícame qué puedes hacer y cuáles son tus capacidades' },
+    { icon: '✨', title: 'Mejora este Prompt', desc: 'Optimizo tu prompt: más claro y efectivo', prompt: 'Mejora y reescribe este prompt para obtener mejores resultados de una IA, haciéndolo más claro, específico y estructurado:\n\n' },
+    { icon: '🧠', title: 'Analizar ideas', desc: 'Pros, contras y enfoque de una decisión', prompt: 'Ayúdame a analizar los pros y contras de una decisión importante' },
+    { icon: '✍️', title: 'Redacción y traducción', desc: 'Textos profesionales en varios idiomas', prompt: 'Ayúdame a redactar un texto profesional multiidioma' },
 ];
 
 function renderProjectSelect() {
@@ -246,15 +246,27 @@ function renderWelcomeStarters() {
             : 'Tu hub de IA multimotor — <strong>Local y Cloud</strong>';
     }
 
-    container.innerHTML = starters.map(s => `
+    // Trunca por límite de palabra (no a media palabra) y añade … si sobra texto.
+    const wordTruncate = (text, max) => {
+        const t = (text || '').replace(/\s+/g, ' ').trim();
+        if (t.length <= max) return t;
+        const cut = t.slice(0, max);
+        const lastSpace = cut.lastIndexOf(' ');
+        return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trim() + '…';
+    };
+
+    container.innerHTML = starters.map(s => {
+        const title = s.title || wordTruncate(s.prompt, 32);
+        const subtitle = s.desc || (s.title ? wordTruncate(s.prompt, 72) : '');
+        return `
         <button class="welcome-card" data-prompt="${escapeHtml(s.prompt)}">
             <div class="welcome-card-icon">${escapeHtml(s.icon || '💬')}</div>
             <div class="welcome-card-text">
-                <strong>${escapeHtml(s.title || s.prompt.slice(0, 40))}</strong>
-                <span>${escapeHtml(s.title ? s.prompt.slice(0, 60) : '')}</span>
+                <strong>${escapeHtml(title)}</strong>
+                <span>${escapeHtml(subtitle)}</span>
             </div>
-        </button>
-    `).join('');
+        </button>`;
+    }).join('');
 }
 
 function getAgentEngineLabel(proj) {
