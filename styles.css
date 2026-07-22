@@ -465,8 +465,7 @@ body {
 .chat-item-actions {
     position: absolute;
     right: 6px;
-    top: 50%;
-    transform: translateY(-50%);
+    bottom: 4px;                /* abajo de la cajita: no tapa el título */
     display: flex;
     gap: 2px;
     opacity: 0;
