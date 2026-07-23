@@ -170,6 +170,32 @@ const PROVIDERS = {
     webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', icon: '🧠' },
 };
 
+// ─── Salvaguarda WebGPU en móvil ─────────────
+// En teléfonos la RAM/VRAM y (sobre todo en iOS) el límite de memoria por
+// pestaña son estrictos: los modelos grandes pueden agotar la memoria y cerrar
+// la pestaña. Detectamos móvil y recomendamos/forzamos un modelo ligero.
+function isMobileDevice() {
+    try {
+        const ua = navigator.userAgent || '';
+        const uaMobile = /Android|iPhone|iPod|Windows Phone|BlackBerry|Opera Mini|Mobile/i.test(ua);
+        // iPadOS moderno se identifica como Mac; se detecta por pantalla táctil.
+        const iPadOS = navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
+        const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        const smallScreen = Math.min(window.screen?.width || 9999, window.screen?.height || 9999) <= 820;
+        return uaMobile || iPadOS || (coarse && smallScreen);
+    } catch (e) { return false; }
+}
+
+// Umbral (MB) por encima del cual un modelo WebGPU se considera arriesgado en
+// móvil, y el modelo ligero recomendado como alternativa segura.
+const MOBILE_WEBGPU_MAX_MB = 500;
+const MOBILE_SAFE_WEBGPU_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct';
+
+function isHeavyForMobile(modelId) {
+    const def = (typeof WEBGPU_MODELS !== 'undefined' ? WEBGPU_MODELS : []).find(m => m.id === modelId);
+    return !!def && Number(def.sizeBytes) > MOBILE_WEBGPU_MAX_MB;
+}
+
 // ─── Model Function Metadata ────────────────
 const MODEL_FUNCTION_DEFS = {
     omnimodal:    { label: '◉ Omnimodal', shortLabel: 'Omnimodal', cls: 'tag-omnimodal' },

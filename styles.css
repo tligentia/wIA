@@ -5352,3 +5352,17 @@ option {
     font-weight: 600;
     color: var(--accent-primary);
 }
+
+/* Aviso de móvil en el panel WebGPU: solo visible en dispositivos móviles */
+.webgpu-mobile-note { display: none; }
+body.mobile-device .webgpu-mobile-note {
+    display: block;
+    margin-top: 8px;
+    padding: 8px 10px;
+    font-size: 0.74rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    background: rgba(var(--accent-primary-rgb), 0.08);
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.25);
+    border-radius: 8px;
+}

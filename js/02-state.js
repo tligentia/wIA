@@ -297,6 +297,10 @@ async function init() {
     }
 
     await loadState();
+    // Marca el dispositivo como móvil para adaptar avisos/estilos (WebGPU pesado).
+    if (typeof isMobileDevice === 'function') {
+        document.body.classList.toggle('mobile-device', isMobileDevice());
+    }
     // Pide almacenamiento persistente: reduce el riesgo de que el navegador
     // purgue chats/proyectos por presión de espacio (best-effort, silencioso).
     if (navigator.storage?.persist) {
@@ -855,6 +859,16 @@ async function loadState() {
         // (/models/) a Hugging Face (tligent-ia/wound-classifier-onnx).
         if (state.settings.webgpuVisionModel === 'wound-classifier') {
             state.settings.webgpuVisionModel = 'tligent-ia/wound-classifier-onnx';
+        }
+
+        // En móvil y sin datos previos, arranca con un modelo WebGPU ligero por
+        // defecto (los grandes pueden agotar la memoria del teléfono).
+        if (!state.hasSavedSettings && typeof isMobileDevice === 'function' && isMobileDevice()) {
+            const wc = state.settings.providerConfigs?.webgpu;
+            if (wc && typeof isHeavyForMobile === 'function' && isHeavyForMobile(wc.model)) {
+                wc.model = MOBILE_SAFE_WEBGPU_MODEL;
+                if (state.settings.provider === 'webgpu') state.settings.model = MOBILE_SAFE_WEBGPU_MODEL;
+            }
         }
 
         // Restaura las API keys descifradas desde la bóveda (IndexedDB) antes de

@@ -1284,6 +1284,28 @@ async function sendMessage(content, autoSendBody = null) {
 
     // ── WebGPU Branch ────────────────────────────────────────────────────────
     if (provType === 'webgpu') {
+        // Salvaguarda móvil: antes de cargar un modelo grande que podría agotar
+        // la memoria del teléfono, ofrece cambiar a un ligero. Una vez por sesión.
+        if (typeof isMobileDevice === 'function' && isMobileDevice()
+            && typeof isHeavyForMobile === 'function' && isHeavyForMobile(state.settings.model)
+            && !state._mobileHeavyAck) {
+            const heavyDef = WEBGPU_MODELS.find(m => m.id === state.settings.model);
+            const lightDef = WEBGPU_MODELS.find(m => m.id === MOBILE_SAFE_WEBGPU_MODEL);
+            const useLight = confirm(
+                `⚠️ En el móvil, «${heavyDef?.label || state.settings.model}» (${heavyDef?.size || 'grande'}) puede agotar la memoria y cerrar la pestaña.\n\n` +
+                `¿Usar en su lugar un modelo ligero recomendado (${lightDef?.label || 'Qwen 2.5 0.5B'})?\n\n` +
+                `Aceptar = usar el ligero · Cancelar = continuar con el grande.`
+            );
+            if (useLight) {
+                state.settings.model = MOBILE_SAFE_WEBGPU_MODEL;
+                getActiveProviderConfig().model = MOBILE_SAFE_WEBGPU_MODEL;
+                assistantMsg.model = MOBILE_SAFE_WEBGPU_MODEL;
+                saveState();
+                if (typeof applySettingsToUI === 'function') applySettingsToUI();
+            } else {
+                state._mobileHeavyAck = true; // no volver a preguntar esta sesión
+            }
+        }
         try {
             const modelId = state.settings.model;
             const support = await checkWebGPUSupport();
