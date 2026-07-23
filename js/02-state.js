@@ -31,6 +31,7 @@ const state = {
         model: 'gemma4:e4b',
         apiKey: '',
         theme: 'system',
+        language: 'auto',   // 'auto' (detecta navegador) | 'es' | 'en'
         temperature: 0.8,
         topP: 0.9,
         topK: 40,
@@ -219,6 +220,7 @@ const dom = {
     anonymizeToggle: $('#anonymizeToggle'),
     anonSelectAll: $('#anonSelectAll'),
     anonTypesList: $('#anonTypesList'),
+    languageSelect: $('#languageSelect'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
     modelManagerModal: $('#modelManagerModal'),
@@ -304,6 +306,8 @@ async function init() {
     if (typeof isMobileDevice === 'function') {
         document.body.classList.toggle('mobile-device', isMobileDevice());
     }
+    // Idioma: aplica traducciones y genera la documentación en el idioma activo.
+    if (typeof refreshLocalizedUI === 'function') refreshLocalizedUI();
     // Pide almacenamiento persistente: reduce el riesgo de que el navegador
     // purgue chats/proyectos por presión de espacio (best-effort, silencioso).
     if (navigator.storage?.persist) {

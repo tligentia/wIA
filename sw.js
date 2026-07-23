@@ -17,6 +17,7 @@ const CORE = [
     './', './index.html', './styles.css',
     './js/01-core.js', './js/02-state.js', './js/03-webgpu.js', './js/04-providers.js',
     './js/05-workspace.js', './js/06-chat.js', './js/07-ui.js', './js/08-anon.js',
+    './js/09-i18n.js', './js/10-docs.js',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
     './lib/anonimae-engine.js', './lib/anonimae-rules.json',
     './lib/pdf.min.js', './Plantilla/Version.js',

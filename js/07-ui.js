@@ -488,6 +488,13 @@ function bindEvents() {
         });
     }
 
+    if (dom.languageSelect) {
+        dom.languageSelect.value = state.settings.language || 'auto';
+        dom.languageSelect.addEventListener('change', (e) => {
+            if (typeof setLanguage === 'function') setLanguage(e.target.value);
+        });
+    }
+
     if (dom.themeSelect) {
         dom.themeSelect.addEventListener('change', () => {
             applyTheme(dom.themeSelect.value);
