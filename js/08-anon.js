@@ -60,7 +60,7 @@ async function anonymizeOutgoingText(content, chat) {
         const rules = await loadAnonRules();
         if (!rules || typeof LocalDetectionEngine === 'undefined') return { text: content, count: 0 };
         const st = await ensureAnonState(chat);
-        const engine = new LocalDetectionEngine(rules);
+        const engine = new LocalDetectionEngine(filterRulesByEnabledTypes(rules));
         const entities = engine.detect(content);
         if (!entities.length) return { text: content, count: 0 };
         const res = LocalPlaceholderEngine.process(content, entities, st);
@@ -121,12 +121,121 @@ function toggleAnonMode(forceValue) {
     if (state.settings.anonymizeOutgoing) loadAnonRules(); // precarga
 }
 
+// ─── Tipos de datos: activar/desactivar por tipo ─────────────
+// Iconos por tipo (para la lista del panel de Anonimización).
+const ANON_TYPE_ICONS = {
+    email: '📧', telefono: '📞', dni: '🪪', iban: '🏦', tarjeta: '💳',
+    juridico: '⚖️', codigo_postal: '📮', pasaporte: '🛂', direccion: '📍',
+    organizacion: '🏢', fax: '📠', diligencias: '📋', cif: '🏭', nss: '🩺',
+    matricula: '🚗', ip: '🌐', mac: '🖧', fecha: '📅', usuario_red: '👤',
+    credencial: '🔑', coordenadas: '🗺️', poliza: '📄', nombre: '🧑',
+};
+
+// Mapea las claves de diccionario del motor a un id/nombre de tipo toggleable.
+const ANON_DICT_TYPES = {
+    nombres: { id: 'nombre', name: 'Nombres de persona' },
+    organizaciones: { id: 'organizacion', name: 'Organizaciones (diccionario)' },
+};
+
+// Lista canónica de tipos de datos a partir de las reglas cargadas.
+function getAnonEntityTypes() {
+    if (!_anonRules) return [];
+    const seen = new Set();
+    const out = [];
+    (_anonRules.entities || []).forEach(e => {
+        if (seen.has(e.id)) return;
+        seen.add(e.id);
+        out.push({ id: e.id, name: e.name });
+    });
+    for (const [dictKey, meta] of Object.entries(ANON_DICT_TYPES)) {
+        if ((_anonRules.dictionaries || {})[dictKey] && !seen.has(meta.id)) {
+            seen.add(meta.id);
+            out.push({ id: meta.id, name: meta.name });
+        }
+    }
+    return out;
+}
+
+function isAnonTypeEnabled(id) {
+    const off = Array.isArray(state.settings.anonDisabledTypes) ? state.settings.anonDisabledTypes : [];
+    return !off.includes(id);
+}
+
+// Devuelve una copia de las reglas con solo los tipos activos (entidades + dicts).
+function filterRulesByEnabledTypes(rules) {
+    const off = Array.isArray(state.settings.anonDisabledTypes) ? state.settings.anonDisabledTypes : [];
+    if (!off.length) return rules;
+    const entities = (rules.entities || []).filter(e => !off.includes(e.id));
+    const dictionaries = {};
+    for (const [dictKey, words] of Object.entries(rules.dictionaries || {})) {
+        const typeId = ANON_DICT_TYPES[dictKey]?.id || `dict_${dictKey}`;
+        if (!off.includes(typeId)) dictionaries[dictKey] = words;
+    }
+    return { entities, dictionaries };
+}
+
+function setAnonTypeEnabled(id, enabled) {
+    let off = Array.isArray(state.settings.anonDisabledTypes) ? [...state.settings.anonDisabledTypes] : [];
+    if (enabled) off = off.filter(x => x !== id);
+    else if (!off.includes(id)) off.push(id);
+    state.settings.anonDisabledTypes = off;
+    saveState();
+}
+
+// Pinta la lista de tipos en el panel de Anonimización (con estado y bindings).
+function renderAnonTypesPanel() {
+    if (!dom.anonTypesList) return;
+    const types = getAnonEntityTypes();
+    if (!types.length) {
+        dom.anonTypesList.innerHTML = '<p class="setting-help-text">Cargando tipos de datos…</p>';
+        loadAnonRules().then(() => { if (getAnonEntityTypes().length) renderAnonTypesPanel(); });
+        return;
+    }
+    dom.anonTypesList.innerHTML = types.map(t => {
+        const on = isAnonTypeEnabled(t.id);
+        return `<label class="anon-type-row" title="${escapeHtml(t.name)}">
+            <span class="anon-type-icon" aria-hidden="true">${ANON_TYPE_ICONS[t.id] || '🔒'}</span>
+            <span class="anon-type-name">${escapeHtml(t.name)}</span>
+            <input type="checkbox" class="anon-type-check" data-type-id="${escapeHtml(t.id)}" ${on ? 'checked' : ''}>
+        </label>`;
+    }).join('');
+    dom.anonTypesList.querySelectorAll('.anon-type-check').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            setAnonTypeEnabled(e.target.dataset.typeId, e.target.checked);
+            updateAnonSelectAllState();
+        });
+    });
+    updateAnonSelectAllState();
+}
+
+// Actualiza el estado del interruptor "Activar todos" (marcado si todos activos).
+function updateAnonSelectAllState() {
+    if (!dom.anonSelectAll) return;
+    const types = getAnonEntityTypes();
+    const allOn = types.length > 0 && types.every(t => isAnonTypeEnabled(t.id));
+    dom.anonSelectAll.checked = allOn;
+}
+
+function bindAnonTypeControls() {
+    if (dom.anonSelectAll) {
+        dom.anonSelectAll.addEventListener('change', (e) => {
+            const enableAll = e.target.checked;
+            state.settings.anonDisabledTypes = enableAll ? [] : getAnonEntityTypes().map(t => t.id);
+            saveState();
+            renderAnonTypesPanel();
+        });
+    }
+}
+
 (function bindAnonUI() {
     const btn = document.getElementById('anonToggleBtn');
     if (btn) btn.addEventListener('click', () => toggleAnonMode());
     if (dom.anonymizeToggle) {
         dom.anonymizeToggle.addEventListener('change', (e) => toggleAnonMode(e.target.checked));
     }
+    bindAnonTypeControls();
+    // Precarga las reglas para poder pintar los tipos, y pinta el panel.
+    loadAnonRules().then(() => renderAnonTypesPanel());
     // Estado inicial (tras loadState, que corre en init() async; este script se
     // ejecuta antes, así que sincroniza también en el próximo tick).
     updateAnonButtonUI();

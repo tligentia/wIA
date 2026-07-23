@@ -76,6 +76,7 @@ Cuando generes código:
         incognitoMode: false,
         privacyLockEnabled: false,
         anonymizeOutgoing: false, // 🕶️ DLP local: anonimizar antes de enviar a la IA
+        anonDisabledTypes: [],    // IDs de tipos de datos que NO se anonimizan (resto: activos)
         // Per-provider configs — memorized independently
         providerConfigs: {
             ollama:        { url: 'http://localhost:11434', model: 'gemma4:e4b', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
@@ -216,6 +217,8 @@ const dom = {
     docsBackTop: $('#docsBackTop'),
     settingsContent: $('#settingsContent'),
     anonymizeToggle: $('#anonymizeToggle'),
+    anonSelectAll: $('#anonSelectAll'),
+    anonTypesList: $('#anonTypesList'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
     modelManagerModal: $('#modelManagerModal'),

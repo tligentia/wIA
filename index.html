@@ -465,6 +465,10 @@
                         <span class="settings-nav-icon" aria-hidden="true">✦</span>
                         <span class="settings-nav-copy"><strong>Experiencia</strong><small>Tema y comportamiento</small></span>
                     </button>
+                    <button type="button" class="settings-nav-item" data-settings-section="anon" aria-controls="settingsPanelAnon" aria-selected="false" title="Anonimización">
+                        <span class="settings-nav-icon" aria-hidden="true">🕶️</span>
+                        <span class="settings-nav-copy"><strong>Anonimización</strong><small>Datos sensibles (DLP)</small></span>
+                    </button>
                     <button type="button" class="settings-nav-item" data-settings-section="privacy" aria-controls="settingsPanelPrivacy" aria-selected="false" title="Privacidad">
                         <span class="settings-nav-icon" aria-hidden="true">⌾</span>
                         <span class="settings-nav-copy"><strong>Privacidad</strong><small>Sesión y bloqueo</small></span>
@@ -712,9 +716,41 @@
                         </div>
                     </section>
 
+                    <section class="settings-section" id="settingsPanelAnon" data-settings-panel="anon" aria-labelledby="settingsHeadingAnon" hidden>
+                        <div class="settings-section-heading">
+                            <div><span class="settings-section-eyebrow">05 · ANONIMIZACIÓN (DLP LOCAL)</span><h3 id="settingsHeadingAnon">Anonimiza datos sensibles</h3></div>
+                            <p>Sustituye los datos sensibles por placeholders antes de enviarlos a la IA. Todo ocurre en tu navegador; los valores reales nunca salen.</p>
+                        </div>
+                        <div class="settings-grid">
+                            <div class="setting-group anon-master-card">
+                                <label class="setting-label" style="display:flex; align-items:center;">
+                                    <input type="checkbox" id="anonymizeToggle" style="margin-right: 8px;">
+                                    🕶️ Anonimizar datos sensibles al enviar
+                                </label>
+                                <p class="setting-help-text">
+                                    Al activarlo, DNI/NIE, emails, teléfonos, IBAN, nombres… se sustituyen por placeholders
+                                    (<code>[Nombre_001]</code>) antes de enviar el prompt. El mapa reversible se guarda cifrado por chat
+                                    y la respuesta se restaura solo en tu pantalla. También con el icono 🕶️ de la caja de mensaje.
+                                </p>
+                            </div>
+                            <div class="setting-group">
+                                <div class="anon-types-head">
+                                    <label class="setting-label" style="margin:0;">Tipos de datos que se filtran</label>
+                                    <label class="wia-switch" title="Activar o desactivar todos los tipos a la vez">
+                                        <input type="checkbox" id="anonSelectAll">
+                                        <span class="wia-switch-track"><span class="wia-switch-thumb"></span></span>
+                                        <span class="anon-selectall-label">Activar todos</span>
+                                    </label>
+                                </div>
+                                <p class="setting-help-text" style="margin-bottom:10px;">Desactiva los tipos que no quieras anonimizar (p. ej. fechas o IPs si generan falsos positivos).</p>
+                                <div class="anon-types-list" id="anonTypesList"></div>
+                            </div>
+                        </div>
+                    </section>
+
                     <section class="settings-section" id="settingsPanelPrivacy" data-settings-panel="privacy" aria-labelledby="settingsHeadingPrivacy" hidden>
                         <div class="settings-section-heading">
-                            <div><span class="settings-section-eyebrow">05 · PROTECCIÓN LOCAL</span><h3 id="settingsHeadingPrivacy">Controla tu privacidad</h3></div>
+                            <div><span class="settings-section-eyebrow">06 · PROTECCIÓN LOCAL</span><h3 id="settingsHeadingPrivacy">Controla tu privacidad</h3></div>
                             <p>Decide qué se conserva en el navegador y protege el acceso casual.</p>
                         </div>
                         <div class="settings-grid">
@@ -738,24 +774,12 @@
                         Este bloqueo protege la interfaz en este navegador, pero no sustituye autenticación de servidor.
                     </p>
                 </div>
-                <div class="setting-group">
-                    <label class="setting-label" style="display:flex; align-items:center;">
-                        <input type="checkbox" id="anonymizeToggle" style="margin-right: 8px;">
-                        🕶️ Anonimizar datos sensibles al enviar (DLP local)
-                    </label>
-                    <p class="setting-help-text">
-                        Sustituye DNI/NIE, emails, teléfonos, IBAN, tarjetas, nombres, expedientes… por placeholders
-                        (<code>[Nombre_001]</code>) antes de enviar el prompt a la IA. El mapa reversible se guarda
-                        cifrado por chat y la respuesta se restaura solo en tu pantalla: los datos reales nunca salen
-                        del navegador. También puedes activarlo con el icono 🕶️ de la caja de mensaje.
-                    </p>
-                </div>
                         </div>
                     </section>
 
                     <section class="settings-section" id="settingsPanelData" data-settings-panel="data" aria-labelledby="settingsHeadingData" hidden>
                         <div class="settings-section-heading">
-                            <div><span class="settings-section-eyebrow">06 · ALMACENAMIENTO</span><h3 id="settingsHeadingData">Gestiona tus datos</h3></div>
+                            <div><span class="settings-section-eyebrow">07 · ALMACENAMIENTO</span><h3 id="settingsHeadingData">Gestiona tus datos</h3></div>
                             <p>Crea copias de tus preferencias o limpia el almacenamiento local.</p>
                         </div>
                         <div class="settings-grid settings-data-grid">
@@ -795,7 +819,7 @@
 
                     <section class="settings-section" id="settingsPanelDocs" data-settings-panel="docs" aria-labelledby="settingsHeadingDocs" hidden>
                         <div class="settings-section-heading">
-                            <div><span class="settings-section-eyebrow">07 · AYUDA</span><h3 id="settingsHeadingDocs">Documentación</h3></div>
+                            <div><span class="settings-section-eyebrow">08 · AYUDA</span><h3 id="settingsHeadingDocs">Documentación</h3></div>
                             <p>Guía completa de wIA. Usa el índice para navegar o descárgala en PDF.</p>
                         </div>
                         <div class="docs-toolbar">

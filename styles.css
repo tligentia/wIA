@@ -5366,3 +5366,45 @@ body.mobile-device .webgpu-mobile-note {
     border: 1px solid rgba(var(--accent-primary-rgb), 0.25);
     border-radius: 8px;
 }
+
+/* ─── Panel de Anonimización: maestro + lista de tipos ─────────── */
+.anon-master-card {
+    background: rgba(var(--accent-primary-rgb), 0.06);
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.22);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.anon-types-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+.anon-selectall-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-left: 8px;
+}
+.wia-switch { display: inline-flex; align-items: center; }
+.anon-types-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 6px 12px;
+}
+.anon-type-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.anon-type-row:hover { border-color: var(--accent-primary); background: var(--bg-hover); }
+.anon-type-icon { font-size: 1rem; flex-shrink: 0; }
+.anon-type-name { flex: 1; min-width: 0; font-size: 0.82rem; color: var(--text-primary); overflow-wrap: anywhere; }
+.anon-type-check { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: pointer; }

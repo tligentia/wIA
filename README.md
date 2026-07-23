@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.AX)
+# wIA — Multi-Engine AI Chat Interface (v2607.AY)
 
 > **Creado por [Jesús de Pablos](https://jesus.depablos.es)** · Proyecto gratuito y de código abierto · Licencia MIT
 
@@ -296,6 +296,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🕶️ **Anonimización ampliada + panel dedicado (v2607.AY)**: el anonimizador DLP local reconoce ahora **más tipos de datos sensibles** (22 patrones: se añaden CIF, Nº Seguridad Social, matrícula, IP, MAC, fecha/nacimiento, usuario de red social, claves/tokens API y JWT, coordenadas GPS y nº de póliza) más diccionarios de nombres/organizaciones. Nueva pantalla **Anonimización** en Ajustes (encima de Privacidad) que **enumera todos los tipos** y permite **activar/desactivar cada uno** con un interruptor **«Activar todos»**. La opción **«Anonimizar datos»** se traslada desde *Privacidad* al principio de este nuevo panel.
 - 🔁 **Fallback rápido al fallar o agotar créditos (v2607.AQ)**: cuando un modelo falla o se agotan los créditos (p. ej. `429/insufficient_quota`), la tarjeta de error ofrece botones para **continuar con otro modelo** al instante, construidos a partir de los **usados con éxito recientemente** y los **favoritos**, más **WebGPU local** (gratis, sin créditos) como red de seguridad. Excluye el modelo que falló y los motores cloud sin API key. Un clic cambia de motor y **reintenta** el mensaje automáticamente. Se registra el historial de éxitos (persistente).
 - 🚀 **Carga WebGPU más rápida (v2607.AP)**: dos aceleraciones. **(1) Hilos WASM multinúcleo**: onnxruntime-web usa ahora hasta 8 hilos (aprovechando el aislamiento de origen ya activo) + SIMD, acelerando la inicialización del grafo y las operaciones en CPU/WASM. **(2) Precarga en segundo plano**: el modelo empieza a descargarse e inicializarse en cuanto escribes en la caja de mensaje, de modo que al enviar ya está (casi) listo; con coalescencia para no duplicar la descarga, más un botón **⚡ Preparar modelo** en el monitor para descargarlo bajo demanda. La descarga sigue siendo única (queda en caché del navegador).
 - 👤 **Autoría y licencia MIT (v2607.AN)**: wIA se declara **gratuito y de código abierto** con **licencia MIT**, reconociendo la autoría de **Jesús de Pablos** ([jesus.depablos.es](https://jesus.depablos.es)) de forma destacada: crédito enlazado en el pie de página, nueva sección *17 · Autoría y licencia* en la Documentación (con tarjeta de autor, también en el PDF), fichero `LICENSE`, metadatos `author`/`copyright` y datos estructurados JSON-LD (schema.org) para buscadores, y cabecera de copyright en el código.

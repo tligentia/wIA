@@ -118,6 +118,101 @@
         "(?:Diligencias|Diligències|D\\.P\\.|DP|Diligencias\\s+Previas|Diligències\\s+Prèvies|Diligències\\s+Urgents|D\\.U\\.)\\s*(?:nº|n\\.º|número|núm\\.?|no)?[\\s:-]*\\d{1,6}\\/\\d{4}",
         "\\b(?:DP|Diligencias|Diligències)\\s*[\\s:-]*\\d{1,6}\\/\\d{4}\\b"
       ]
+    },
+    {
+      "id": "cif",
+      "name": "CIF (empresa)",
+      "placeholder": "CIF",
+      "type": "regex",
+      "caseSensitive": true,
+      "patterns": [
+        "\\b[ABCDEFGHJNPQRSUVW]\\d{7}[0-9A-J]\\b"
+      ]
+    },
+    {
+      "id": "nss",
+      "name": "Nº Seguridad Social",
+      "placeholder": "SegSocial",
+      "type": "regex",
+      "patterns": [
+        "\\b\\d{2}[ /-]\\d{7,8}[ /-]\\d{2}\\b"
+      ]
+    },
+    {
+      "id": "matricula",
+      "name": "Matrícula de vehículo",
+      "placeholder": "Matricula",
+      "type": "regex",
+      "caseSensitive": true,
+      "patterns": [
+        "\\b\\d{4}[ -]?[BCDFGHJKLMNPRSTVWXYZ]{3}\\b",
+        "\\b[A-Z]{1,2}[ -]?\\d{4}[ -]?[A-Z]{2,3}\\b"
+      ]
+    },
+    {
+      "id": "ip",
+      "name": "Dirección IP",
+      "placeholder": "IP",
+      "type": "regex",
+      "patterns": [
+        "\\b(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\b"
+      ]
+    },
+    {
+      "id": "mac",
+      "name": "Dirección MAC",
+      "placeholder": "MAC",
+      "type": "regex",
+      "patterns": [
+        "\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b"
+      ]
+    },
+    {
+      "id": "fecha",
+      "name": "Fecha (posible nacimiento)",
+      "placeholder": "Fecha",
+      "type": "regex",
+      "patterns": [
+        "\\b(?:0?[1-9]|[12]\\d|3[01])[\\/.\\-](?:0?[1-9]|1[0-2])[\\/.\\-](?:19|20)\\d{2}\\b"
+      ]
+    },
+    {
+      "id": "usuario_red",
+      "name": "Usuario de red social",
+      "placeholder": "Usuario",
+      "type": "regex",
+      "patterns": [
+        "(?<![\\w@.])@[A-Za-z0-9_]{2,30}\\b"
+      ]
+    },
+    {
+      "id": "credencial",
+      "name": "Clave / Token API",
+      "placeholder": "Credencial",
+      "type": "regex",
+      "caseSensitive": true,
+      "patterns": [
+        "\\b(?:sk-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z\\-_]{20,}|gsk_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\\b",
+        "\\beyJ[A-Za-z0-9_\\-]{8,}\\.[A-Za-z0-9_\\-]{8,}\\.[A-Za-z0-9_\\-]{8,}\\b"
+      ]
+    },
+    {
+      "id": "coordenadas",
+      "name": "Coordenadas GPS",
+      "placeholder": "Coordenadas",
+      "type": "regex",
+      "patterns": [
+        "-?\\d{1,3}\\.\\d{4,}\\s*,\\s*-?\\d{1,3}\\.\\d{4,}"
+      ]
+    },
+    {
+      "id": "poliza",
+      "name": "Nº de póliza",
+      "placeholder": "Poliza",
+      "type": "regex",
+      "patterns": [
+        "(?:[Pp][óo]liza)\\s*(?:n[ºo]|n\\.º|número|núm\\.?)?[\\s:-]*[A-Z0-9]{6,}"
+      ]
     }
   ],
   "dictionaries": {

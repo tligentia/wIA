@@ -34,6 +34,9 @@ function activateSettingsSection(sectionId, { focusNav = false } = {}) {
     const content = modal.querySelector('.settings-content');
     if (content) content.scrollTop = 0;
     if (focusNav) nextButton.focus();
+
+    // Al entrar en Anonimización, refresca la lista de tipos de datos.
+    if (sectionId === 'anon' && typeof renderAnonTypesPanel === 'function') renderAnonTypesPanel();
 }
 
 function openSettings(sectionId = activeSettingsSection) {
