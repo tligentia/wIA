@@ -307,6 +307,7 @@ async function init() {
         document.body.classList.toggle('mobile-device', isMobileDevice());
     }
     // Idioma: aplica traducciones y genera la documentación en el idioma activo.
+    if (typeof bindLangSwitch === 'function') bindLangSwitch();
     if (typeof refreshLocalizedUI === 'function') refreshLocalizedUI();
     // Pide almacenamiento persistente: reduce el riesgo de que el navegador
     // purgue chats/proyectos por presión de espacio (best-effort, silencioso).

@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2607.BA)
+# wIA — Multi-Engine AI Chat Interface (v2607.BB)
 
 > **Creado por [Jesús de Pablos](https://jesus.depablos.es)** · Proyecto gratuito y de código abierto · Licencia MIT
 

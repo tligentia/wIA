@@ -71,8 +71,30 @@ function setLanguage(lang) {
     refreshLocalizedUI();
 }
 
+// Marca la bandera activa en todos los selectores de la cabecera.
+function updateLangSwitchUI() {
+    const pref = state?.settings?.language || 'auto';
+    document.querySelectorAll('.lang-switch .lang-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === pref);
+    });
+}
+
+// Enlaza los clics de los selectores de idioma (delegación, una sola vez).
+let _langSwitchBound = false;
+function bindLangSwitch() {
+    if (_langSwitchBound) return;
+    _langSwitchBound = true;
+    document.addEventListener('click', (e) => {
+        const opt = e.target.closest('.lang-switch .lang-opt');
+        if (!opt) return;
+        e.preventDefault();
+        if (typeof setLanguage === 'function') setLanguage(opt.dataset.lang);
+    });
+}
+
 function refreshLocalizedUI() {
     applyI18n();
+    updateLangSwitchUI();
     // Partes generadas por JS que contienen texto traducible.
     try { if (typeof renderDocs === 'function') renderDocs(); } catch (e) {}
     try { if (typeof renderWelcomeStarters === 'function') renderWelcomeStarters(); } catch (e) {}
