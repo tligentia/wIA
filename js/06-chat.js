@@ -113,7 +113,7 @@ function renderMessage(msg, idx) {
             }).join('');
             fallbackHtml = `
                 <div class="error-fallback">
-                    <span class="error-fallback-label">⚡ Continuar con otro modelo (favoritos / usados con éxito):</span>
+                    <span class="error-fallback-label">${(typeof t === 'function' ? t('error.fallback') : '⚡ Continuar con otro modelo (favoritos / usados con éxito):')}</span>
                     <div class="error-fallback-btns">${btns}</div>
                 </div>`;
         }
@@ -121,7 +121,7 @@ function renderMessage(msg, idx) {
             <div class="error-message-card">
                 <div class="error-header">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <span>Fallo de Conexión</span>
+                    <span>${(typeof t === 'function' ? t('error.title') : 'Fallo de Conexión')}</span>
                 </div>
                 <div class="error-body">
                     ${renderMarkdown(displayContent)}
@@ -130,7 +130,7 @@ function renderMessage(msg, idx) {
                 <div class="error-footer" style="display: flex; justify-content: flex-end; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
                     <button class="btn-retry" onclick="retryMessage(${idx})">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-                        Reintentar ahora
+                        ${(typeof t === 'function' ? t('error.retry') : 'Reintentar ahora')}
                     </button>
                 </div>
             </div>
@@ -140,7 +140,11 @@ function renderMessage(msg, idx) {
             displayContent = deanonymizeForDisplay(displayContent);
         }
         if (isUser && msg.anonCount > 0) {
-            contentHtml += `<div class="anon-badge" title="Estos datos se enviaron a la IA como placeholders anónimos; aquí los ves restaurados. Los valores reales nunca salieron de tu navegador.">🕶️ ${msg.anonCount} dato${msg.anonCount === 1 ? '' : 's'} sensible${msg.anonCount === 1 ? '' : 's'} protegido${msg.anonCount === 1 ? '' : 's'}</div>`;
+            const _anonLabel = (typeof t === 'function')
+                ? t(msg.anonCount === 1 ? 'anon.badge.one' : 'anon.badge.many')
+                : `dato${msg.anonCount === 1 ? '' : 's'} sensible${msg.anonCount === 1 ? '' : 's'} protegido${msg.anonCount === 1 ? '' : 's'}`;
+            const _anonTitle = (typeof t === 'function') ? t('anon.badge.title') : '';
+            contentHtml += `<div class="anon-badge" title="${escapeHtml(_anonTitle)}">🕶️ ${msg.anonCount} ${escapeHtml(_anonLabel)}</div>`;
         }
         contentHtml += isUser ? `<p style="white-space: pre-wrap;">${escapeHtml(displayContent)}</p>` : renderMarkdown(displayContent);
     }
@@ -1291,10 +1295,14 @@ async function sendMessage(content, autoSendBody = null) {
             && !state._mobileHeavyAck) {
             const heavyDef = WEBGPU_MODELS.find(m => m.id === state.settings.model);
             const lightDef = WEBGPU_MODELS.find(m => m.id === MOBILE_SAFE_WEBGPU_MODEL);
+            const _tr = (k, fb) => (typeof t === 'function' ? t(k, fb) : fb);
             const useLight = confirm(
-                `⚠️ En el móvil, «${heavyDef?.label || state.settings.model}» (${heavyDef?.size || 'grande'}) puede agotar la memoria y cerrar la pestaña.\n\n` +
-                `¿Usar en su lugar un modelo ligero recomendado (${lightDef?.label || 'Qwen 2.5 0.5B'})?\n\n` +
-                `Aceptar = usar el ligero · Cancelar = continuar con el grande.`
+                _tr('mobile.heavy.warn', '⚠️ En el móvil, «{model}» ({size}) puede agotar la memoria y cerrar la pestaña.')
+                    .replace('{model}', heavyDef?.label || state.settings.model)
+                    .replace('{size}', heavyDef?.size || 'grande') + '\n\n' +
+                _tr('mobile.heavy.ask', '¿Usar en su lugar un modelo ligero recomendado ({light})?')
+                    .replace('{light}', lightDef?.label || 'Qwen 2.5 0.5B') + '\n\n' +
+                _tr('mobile.heavy.hint', 'Aceptar = usar el ligero · Cancelar = continuar con el grande.')
             );
             if (useLight) {
                 state.settings.model = MOBILE_SAFE_WEBGPU_MODEL;
@@ -1315,7 +1323,7 @@ async function sendMessage(content, autoSendBody = null) {
             const useVisionTask = !!modelDef?.omnimodal;
             const pipelineTask = useVisionTask ? 'omnimodal' : 'text-generation';
             dom.statusDot.className = 'status-dot loading';
-            dom.statusText.textContent = 'Inicializando...';
+            dom.statusText.textContent = (typeof t==='function'?t('status.initializing'):'Inicializando...');
             setMessageLoadingState(assistantMsg, {
                 phase: 'preparing',
                 detail: `Arrancando ${modelLabel} en tu navegador.`,
@@ -1374,7 +1382,7 @@ async function sendMessage(content, autoSendBody = null) {
             );
 
             dom.statusDot.className = 'status-dot online';
-            dom.statusText.textContent = '🧠 Inferencia local';
+            dom.statusText.textContent = (typeof t==='function'?t('status.localInference'):'🧠 Inferencia local');
             setMessageLoadingState(assistantMsg, {
                 phase: 'generating',
                 detail: useVisionTask

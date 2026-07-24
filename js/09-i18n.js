@@ -77,6 +77,7 @@ function refreshLocalizedUI() {
     try { if (typeof renderDocs === 'function') renderDocs(); } catch (e) {}
     try { if (typeof renderWelcomeStarters === 'function') renderWelcomeStarters(); } catch (e) {}
     try { if (typeof renderChatList === 'function') renderChatList(); } catch (e) {}
+    try { if (typeof renderMessages === 'function' && state.activeChatId) renderMessages(); } catch (e) {}
     try { if (typeof renderAnonTypesPanel === 'function') renderAnonTypesPanel(); } catch (e) {}
     try { if (typeof updateAnonButtonUI === 'function') updateAnonButtonUI(); } catch (e) {}
     try { if (typeof renderWebGPUMonitor === 'function') renderWebGPUMonitor(); } catch (e) {}
@@ -198,6 +199,33 @@ const I18N_STRINGS = {
         'error.title': 'Fallo de Conexión',
         'error.retry': 'Reintentar ahora',
         'error.fallback': '⚡ Continuar con otro modelo (favoritos / usados con éxito):',
+        // Estados de carga WebGPU
+        'status.preparing': 'Preparando...',
+        'status.installing': 'Instalando...',
+        'status.initializing': 'Inicializando...',
+        'status.initPipeline': 'Inicializando pipeline...',
+        'status.ready': 'Listo',
+        'status.localInference': '🧠 Inferencia local',
+        'status.memFreed': '🧹 Memoria liberada',
+        // Anonimización (insignia)
+        'anon.badge.title': 'Estos datos se enviaron a la IA como placeholders anónimos; aquí los ves restaurados. Los valores reales nunca salieron de tu navegador.',
+        // Salvaguarda móvil (confirm)
+        'mobile.heavy.warn': '⚠️ En el móvil, «{model}» ({size}) puede agotar la memoria y cerrar la pestaña.',
+        'mobile.heavy.ask': '¿Usar en su lugar un modelo ligero recomendado ({light})?',
+        'mobile.heavy.hint': 'Aceptar = usar el ligero · Cancelar = continuar con el grande.',
+        // Iniciadores de conversación
+        'starter.explore.title': 'Explorar capacidades',
+        'starter.explore.desc': 'Descubre todo lo que puedo hacer por ti',
+        'starter.explore.prompt': 'Explícame qué puedes hacer y cuáles son tus capacidades',
+        'starter.improve.title': 'Mejora este Prompt',
+        'starter.improve.desc': 'Optimizo tu prompt: más claro y efectivo',
+        'starter.improve.prompt': 'Mejora y reescribe este prompt para obtener mejores resultados de una IA, haciéndolo más claro, específico y estructurado:\n\n',
+        'starter.analyze.title': 'Analizar ideas',
+        'starter.analyze.desc': 'Pros, contras y enfoque de una decisión',
+        'starter.analyze.prompt': 'Ayúdame a analizar los pros y contras de una decisión importante',
+        'starter.write.title': 'Redacción y traducción',
+        'starter.write.desc': 'Textos profesionales en varios idiomas',
+        'starter.write.prompt': 'Ayúdame a redactar un texto profesional multiidioma',
     },
     en: {
         'app.tagline': 'Your multi-engine AI hub —',
@@ -298,5 +326,28 @@ const I18N_STRINGS = {
         'error.title': 'Connection Failure',
         'error.retry': 'Retry now',
         'error.fallback': '⚡ Continue with another model (favourites / previously successful):',
+        'status.preparing': 'Preparing...',
+        'status.installing': 'Installing...',
+        'status.initializing': 'Initialising...',
+        'status.initPipeline': 'Initialising pipeline...',
+        'status.ready': 'Ready',
+        'status.localInference': '🧠 Local inference',
+        'status.memFreed': '🧹 Memory freed',
+        'anon.badge.title': 'These values were sent to the AI as anonymous placeholders; here you see them restored. The real values never left your browser.',
+        'mobile.heavy.warn': '⚠️ On mobile, «{model}» ({size}) may exhaust memory and close the tab.',
+        'mobile.heavy.ask': 'Use a recommended lightweight model instead ({light})?',
+        'mobile.heavy.hint': 'OK = use the light one · Cancel = keep the large one.',
+        'starter.explore.title': 'Explore capabilities',
+        'starter.explore.desc': 'Discover everything I can do for you',
+        'starter.explore.prompt': 'Explain what you can do and what your capabilities are',
+        'starter.improve.title': 'Improve this Prompt',
+        'starter.improve.desc': 'I optimise your prompt: clearer and more effective',
+        'starter.improve.prompt': 'Improve and rewrite this prompt to get better results from an AI, making it clearer, more specific and better structured:\n\n',
+        'starter.analyze.title': 'Analyse ideas',
+        'starter.analyze.desc': 'Pros, cons and approach to a decision',
+        'starter.analyze.prompt': 'Help me analyse the pros and cons of an important decision',
+        'starter.write.title': 'Writing and translation',
+        'starter.write.desc': 'Professional texts in several languages',
+        'starter.write.prompt': 'Help me draft a professional multilingual text',
     }
 };

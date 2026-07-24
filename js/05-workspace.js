@@ -172,12 +172,17 @@ function renderAttachmentPreview() {
 // puede fijar identidad (emoji, descripción), motor propio (proveedor, modelo,
 // temperatura) e iniciadores de conversación para la pantalla de bienvenida.
 
-const DEFAULT_WELCOME_STARTERS = [
-    { icon: '🚀', title: 'Explorar capacidades', desc: 'Descubre todo lo que puedo hacer por ti', prompt: 'Explícame qué puedes hacer y cuáles son tus capacidades' },
-    { icon: '✨', title: 'Mejora este Prompt', desc: 'Optimizo tu prompt: más claro y efectivo', prompt: 'Mejora y reescribe este prompt para obtener mejores resultados de una IA, haciéndolo más claro, específico y estructurado:\n\n' },
-    { icon: '🧠', title: 'Analizar ideas', desc: 'Pros, contras y enfoque de una decisión', prompt: 'Ayúdame a analizar los pros y contras de una decisión importante' },
-    { icon: '✍️', title: 'Redacción y traducción', desc: 'Textos profesionales en varios idiomas', prompt: 'Ayúdame a redactar un texto profesional multiidioma' },
-];
+// Iniciadores por defecto, traducibles: se resuelven en el idioma activo cada
+// vez que se pintan (renderWelcomeStarters se re-ejecuta al cambiar de idioma).
+function getDefaultWelcomeStarters() {
+    const tr = (k, fb) => (typeof t === 'function' ? t(k, fb) : fb);
+    return [
+        { icon: '🚀', title: tr('starter.explore.title', 'Explorar capacidades'), desc: tr('starter.explore.desc', ''), prompt: tr('starter.explore.prompt', '') },
+        { icon: '✨', title: tr('starter.improve.title', 'Mejora este Prompt'), desc: tr('starter.improve.desc', ''), prompt: tr('starter.improve.prompt', '') },
+        { icon: '🧠', title: tr('starter.analyze.title', 'Analizar ideas'), desc: tr('starter.analyze.desc', ''), prompt: tr('starter.analyze.prompt', '') },
+        { icon: '✍️', title: tr('starter.write.title', 'Redacción y traducción'), desc: tr('starter.write.desc', ''), prompt: tr('starter.write.prompt', '') },
+    ];
+}
 
 function renderProjectSelect() {
     dom.projectSelect.innerHTML = state.projects.map(p =>
@@ -237,7 +242,7 @@ function renderWelcomeStarters() {
 
     const agentStarters = (proj?.starters || []).filter(s => s && s.prompt);
     const isAgent = proj && proj.id !== 'general' && (agentStarters.length > 0 || proj.emoji || proj.description);
-    const starters = agentStarters.length > 0 ? agentStarters.slice(0, 4) : DEFAULT_WELCOME_STARTERS;
+    const starters = agentStarters.length > 0 ? agentStarters.slice(0, 4) : getDefaultWelcomeStarters();
 
     if (titleEl) titleEl.textContent = isAgent ? `${proj.emoji || '🤖'} ${proj.name}` : 'wIA';
     if (subtitleEl) {

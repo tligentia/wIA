@@ -73,7 +73,7 @@ async function releaseWebGPUMemory() {
     webgpuState.imageAssistModelId = null;
     webgpuState.isLoading = false;
     webgpuState.executionMode = null;
-    dom.statusText.textContent = '🧹 Memoria liberada';
+    dom.statusText.textContent = (typeof t==='function'?t('status.memFreed'):'🧹 Memoria liberada');
     if (state.rawModels) populateModels(state.rawModels);
     updateStatusMeta();
     renderWebGPUMonitor();
@@ -377,7 +377,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
         const sourceUrl = buildWebGPURepoUrl(modelId);
 
         dom.statusDot.className = 'status-dot loading';
-        dom.statusText.textContent = 'Preparando...';
+        dom.statusText.textContent = (typeof t==='function'?t('status.preparing'):'Preparando...');
         if (onProgress) onProgress(0, { status: 'init', file: 'Preparando runtime local', sourceUrl });
 
         let pipe = null;
@@ -411,7 +411,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
                             if (onProgress) onProgress(pct, progressWithMeta);
                         } else if (progress.status === 'done') {
                             const installPct = estimateInstallProgress(progressUiState, progress.file);
-                            dom.statusText.textContent = 'Instalando...';
+                            dom.statusText.textContent = (typeof t==='function'?t('status.installing'):'Instalando...');
                             if (onProgress) onProgress(installPct, { ...progressWithMeta, status: 'installing', file: progress.file || 'Registrando artefactos descargados' });
                             // ── Shader compilation gap detection ──────────────
                             // After the last 'done' event, Transformers.js/ONNX enters WebGPU
@@ -441,12 +441,12 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
                         } else if (progress.status === 'ready') {
                             clearTimeout(_shaderTimer);
                             clearInterval(_shaderInterval);
-                            dom.statusText.textContent = 'Inicializando...';
+                            dom.statusText.textContent = (typeof t==='function'?t('status.initializing'):'Inicializando...');
                             if (onProgress) onProgress(97, { ...progressWithMeta, status: 'initializing', file: progress.file || 'Levantando pipeline local' });
                         } else if (progress.status === 'init') {
                             clearTimeout(_shaderTimer);
                             clearInterval(_shaderInterval);
-                            dom.statusText.textContent = 'Preparando...';
+                            dom.statusText.textContent = (typeof t==='function'?t('status.preparing'):'Preparando...');
                             if (onProgress) onProgress(0, progressWithMeta);
                         }
                     }
@@ -480,7 +480,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
             throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
         }
 
-        dom.statusText.textContent = 'Inicializando pipeline...';
+        dom.statusText.textContent = (typeof t==='function'?t('status.initPipeline'):'Inicializando pipeline...');
         if (onProgress) {
             onProgress(100, {
                 status: 'initializing',
@@ -493,7 +493,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
         webgpuState.pipeline = pipe;
         webgpuState.loadedModelId = modelId;
         webgpuState.loadedTask = task;
-        dom.statusText.textContent = 'Listo';
+        dom.statusText.textContent = (typeof t==='function'?t('status.ready'):'Listo');
         return pipe;
     } catch (e) {
         console.error('[WebGPU] load error:', e);
@@ -1062,7 +1062,7 @@ function createWebGPULoadProgressRouter({ onProgress, sourceUrl }) {
             if (onProgress) onProgress(pct, progressWithMeta);
         } else if (progress.status === 'done') {
             const installPct = estimateInstallProgress(progressUiState, progress.file);
-            dom.statusText.textContent = 'Instalando...';
+            dom.statusText.textContent = (typeof t==='function'?t('status.installing'):'Instalando...');
             if (onProgress) onProgress(installPct, { ...progressWithMeta, status: 'installing', file: progress.file || 'Registrando artefactos descargados' });
             // Tras el último 'done', la compilación de shaders no emite eventos:
             // si en 2s no llega nada más, se muestra la fase 'compiling'.
@@ -1083,11 +1083,11 @@ function createWebGPULoadProgressRouter({ onProgress, sourceUrl }) {
             }, 2000);
         } else if (progress.status === 'ready') {
             clearTimers();
-            dom.statusText.textContent = 'Inicializando...';
+            dom.statusText.textContent = (typeof t==='function'?t('status.initializing'):'Inicializando...');
             if (onProgress) onProgress(97, { ...progressWithMeta, status: 'initializing', file: progress.file || 'Levantando pipeline local' });
         } else if (progress.status === 'init') {
             clearTimers();
-            dom.statusText.textContent = 'Preparando...';
+            dom.statusText.textContent = (typeof t==='function'?t('status.preparing'):'Preparando...');
             if (onProgress) onProgress(0, progressWithMeta);
         }
     };
@@ -1119,7 +1119,7 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
         ]));
 
         dom.statusDot.className = 'status-dot loading';
-        dom.statusText.textContent = 'Preparando...';
+        dom.statusText.textContent = (typeof t==='function'?t('status.preparing'):'Preparando...');
         if (onProgress) onProgress(0, { status: 'init', file: 'Preparando runtime local en segundo plano', sourceUrl });
 
         await webgpuWorker.call(
@@ -1133,7 +1133,7 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
             throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
         }
 
-        dom.statusText.textContent = 'Inicializando pipeline...';
+        dom.statusText.textContent = (typeof t==='function'?t('status.initPipeline'):'Inicializando pipeline...');
         if (onProgress) {
             onProgress(100, {
                 status: 'initializing',
@@ -1148,7 +1148,7 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
         webgpuState.loadedTask = task;
         webgpuWorker.loadedModelId = modelId;
         webgpuWorker.loadedTask = task;
-        dom.statusText.textContent = 'Listo';
+        dom.statusText.textContent = (typeof t==='function'?t('status.ready'):'Listo');
         return sentinel;
     } catch (e) {
         console.error('[WebGPU worker] load error:', e);
