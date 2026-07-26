@@ -26,6 +26,10 @@
 <IfModule mod_mime.c>
     AddType application/wasm .wasm
     AddType application/octet-stream .onnx
+    # onnxruntime importa su backend de WebGPU como módulo desde lib/ort/*.mjs.
+    # Si Apache no lo sirve como JavaScript, el navegador se niega a ejecutarlo
+    # (nosniff) y la inferencia local se queda sin backend.
+    AddType text/javascript .mjs
 </IfModule>
 
 # Aislamiento de origen cruzado (COOP+COEP) → crossOriginIsolated → habilita

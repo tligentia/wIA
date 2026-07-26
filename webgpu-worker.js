@@ -14,7 +14,52 @@
    Errores: {id, type:'error', message, name}
    ============================================ */
 
-const TRANSFORMERS_CDN_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
+// Runtime auto-alojado con respaldo al CDN. Réplica de la lógica de
+// js/01-core.js (el worker no comparte ámbito con la app): manténlas
+// sincronizadas al subir de versión.
+const TRANSFORMERS_VERSION = '3.8.1';
+const TRANSFORMERS_CDN_BASE = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${TRANSFORMERS_VERSION}/dist/`;
+const TRANSFORMERS_CDN_URL = `${TRANSFORMERS_CDN_BASE}transformers.min.js`;
+// self.location es la URL del propio worker (raíz del despliegue), así que las
+// rutas relativas funcionan igual bajo un subpath.
+const TRANSFORMERS_LOCAL_URL = new URL('lib/transformers.min.js', self.location.href).href;
+const ORT_LOCAL_DIR = new URL('lib/ort/', self.location.href).href;
+const ORT_WASM_FILE = 'ort-wasm-simd-threaded.jsep.wasm';
+const ORT_MJS_FILE = 'ort-wasm-simd-threaded.jsep.mjs';
+
+// expectJsMime: un servidor que no conozca .mjs lo sirve como octet-stream y,
+// con nosniff, el navegador no lo ejecuta como módulo. Eso cuenta como «no
+// disponible» para que actúe el respaldo al CDN.
+async function urlIsAvailable(url, expectJsMime = false) {
+    try {
+        const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+        if (!res.ok) return false;
+        if (expectJsMime) {
+            const type = (res.headers.get('content-type') || '').toLowerCase();
+            if (!/javascript|ecmascript/.test(type)) return false;
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+let transformersSources = null;
+async function resolveSources() {
+    if (transformersSources) return transformersSources;
+    const [moduleOk, wasmOk, mjsOk] = await Promise.all([
+        urlIsAvailable(TRANSFORMERS_LOCAL_URL, true),
+        urlIsAvailable(ORT_LOCAL_DIR + ORT_WASM_FILE),
+        urlIsAvailable(ORT_LOCAL_DIR + ORT_MJS_FILE, true),
+    ]);
+    const ortOk = wasmOk && mjsOk;
+    transformersSources = {
+        moduleUrl: moduleOk ? TRANSFORMERS_LOCAL_URL : TRANSFORMERS_CDN_URL,
+        wasmPaths: ortOk ? ORT_LOCAL_DIR : TRANSFORMERS_CDN_BASE,
+        origin: moduleOk && ortOk ? 'local' : (moduleOk || ortOk ? 'mixto' : 'cdn'),
+    };
+    return transformersSources;
+}
 
 const workerState = {
     hf: null,
@@ -31,7 +76,16 @@ const workerState = {
 
 async function getHF() {
     if (!workerState.hf) {
-        const hf = await import(TRANSFORMERS_CDN_URL);
+        const src = await resolveSources();
+        let hf;
+        try {
+            hf = await import(src.moduleUrl);
+        } catch (e) {
+            if (src.moduleUrl === TRANSFORMERS_CDN_URL) throw e;
+            // La copia local existe pero no se pudo ejecutar (MIME, corrupción…).
+            transformersSources = { moduleUrl: TRANSFORMERS_CDN_URL, wasmPaths: TRANSFORMERS_CDN_BASE, origin: 'cdn' };
+            hf = await import(TRANSFORMERS_CDN_URL);
+        }
         const { env } = hf;
         env.allowLocalModels = false;
         env.allowRemoteModels = true;
@@ -46,6 +100,9 @@ async function getHF() {
                 const isolated = typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
                 wasm.numThreads = isolated ? Math.max(1, Math.min(self.navigator?.hardwareConcurrency || 4, 8)) : 1;
                 wasm.simd = true;
+                // Explícito siempre: con el módulo servido desde lib/, el valor
+                // por defecto buscaría los .wasm junto a él.
+                if (transformersSources?.wasmPaths) wasm.wasmPaths = transformersSources.wasmPaths;
             }
         } catch (e) { /* best-effort */ }
         workerState.hf = hf;

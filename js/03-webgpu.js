@@ -413,7 +413,7 @@ async function primeWebGPURuntime() {
                 // agota no pasa nada — la carga real lo reintentará.
                 await webgpuWorker.call({ type: 'prime' }, {}, 45000);
             } else {
-                webgpuState.hfModule = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+                webgpuState.hfModule = webgpuState.hfModule || await importTransformers();
                 if (typeof configureOnnxRuntime === 'function') configureOnnxRuntime(webgpuState.hfModule.env);
             }
             webgpuBoot.primed = true;
@@ -459,6 +459,12 @@ function configureOnnxRuntime(env) {
         // Sin aislamiento no hay SharedArrayBuffer: forzar >1 hilo rompería la carga.
         wasm.numThreads = isolated ? Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8)) : 1;
         wasm.simd = true;
+        // De dónde salen los .wasm: la copia auto-alojada si está, y si no el
+        // CDN. Lo decidió resolveTransformersSources() antes de importar. Se fija
+        // SIEMPRE de forma explícita: con el módulo servido desde lib/, el valor
+        // por defecto de onnxruntime buscaría los .wasm junto a él.
+        const src = (typeof _transformersSources !== 'undefined') ? _transformersSources : null;
+        if (src?.wasmPaths) wasm.wasmPaths = src.wasmPaths;
     } catch (e) { /* configuración best-effort */ }
 }
 
@@ -489,7 +495,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
     try {
         const progressUiState = { ts: 0, pct: -1, file: '', completedFiles: new Set() };
         // Transformers.js v3 dynamic import from CDN
-        const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+        const hf = webgpuState.hfModule || await importTransformers();
         webgpuState.hfModule = hf;
         const { pipeline, env } = hf;
         if (webgpuState.cancelRequested) throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
@@ -654,7 +660,7 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
     }
 
     const progressUiState = { ts: 0, pct: -1, file: '', completedFiles: new Set() };
-    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+    const hf = webgpuState.hfModule || await importTransformers();
     webgpuState.hfModule = hf;
     const { pipeline, env } = hf;
 
@@ -710,7 +716,7 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
 // Corren inline (no worker) porque usan clases de modelo específicas, no el
 // pipeline estándar. El resultado (texto) alimenta la cadena visión → chat.
 async function _prepareHfEnv() {
-    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+    const hf = webgpuState.hfModule || await importTransformers();
     webgpuState.hfModule = hf;
     const { env } = hf;
     env.allowLocalModels = false; env.allowRemoteModels = true; env.useBrowserCache = true;

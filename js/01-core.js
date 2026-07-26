@@ -78,12 +78,99 @@
 
 
 // ─── Runtime de inferencia local (Transformers.js) ──
-// URL única del módulo. Centralizada aquí para no repetir la versión en cada
-// import dinámico (03-webgpu.js y 06-chat.js la reutilizan). El worker
-// (webgpu-worker.js) corre en su propio ámbito y mantiene su propia constante
-// TRANSFORMERS_CDN_URL: manténlas sincronizadas al subir de versión.
+// El runtime se sirve desde el PROPIO ORIGEN (lib/) para que el service worker
+// pueda cachearlo: así la inferencia WebGPU funciona sin conexión y no depende
+// de un tercero. Si esa copia no está (despliegue parcial, fichero borrado,
+// file://…), se cae automáticamente al CDN original. Dos niveles:
+//   1) sondeo con HEAD antes de importar → decide módulo y ruta de los .wasm;
+//   2) si aun así el import local falla (MIME raro, fichero corrupto), se
+//      reintenta contra el CDN.
+// El worker (webgpu-worker.js) corre en su propio ámbito y replica esta lógica:
+// manténlas sincronizadas al subir de versión.
 const TRANSFORMERS_VERSION = '3.8.1';
-const TRANSFORMERS_MODULE_URL = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${TRANSFORMERS_VERSION}/dist/transformers.min.js`;
+const TRANSFORMERS_CDN_BASE = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${TRANSFORMERS_VERSION}/dist/`;
+const TRANSFORMERS_CDN_URL = `${TRANSFORMERS_CDN_BASE}transformers.min.js`;
+// Rutas absolutas a partir de la base del documento: así funciona igual servido
+// en la raíz o bajo un subpath del portal. Se resuelven bajo demanda —no al
+// cargar el script— para no depender del DOM en el arranque ni en los tests.
+function _localAssetUrl(path) {
+    const base = (typeof document !== 'undefined' && document.baseURI)
+        || (typeof location !== 'undefined' && location.href)
+        || 'http://localhost/';
+    return new URL(path, base).href;
+}
+// Ficheros que onnxruntime carga para el backend WebGPU (JSEP): el binario
+// grande (~21 MB) y el módulo que lo arranca.
+const ORT_WASM_FILE = 'ort-wasm-simd-threaded.jsep.wasm';
+const ORT_MJS_FILE = 'ort-wasm-simd-threaded.jsep.mjs';
+
+// Compatibilidad: el resto del código usaba esta constante para el import.
+const TRANSFORMERS_MODULE_URL = TRANSFORMERS_CDN_URL;
+
+/**
+ * _urlIsAvailable — ¿responde el fichero y, si se le exige, con el tipo
+ * correcto? Lo segundo importa: un servidor que no conozca .mjs lo sirve como
+ * application/octet-stream y, con `nosniff`, el navegador se niega a ejecutarlo
+ * como módulo. Ese caso debe contar como «no disponible» para que actúe el
+ * respaldo, en vez de dejar WebGPU sin backend.
+ */
+async function _urlIsAvailable(url, expectJsMime = false) {
+    try {
+        const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+        if (!res.ok) return false;
+        if (expectJsMime) {
+            const type = (res.headers.get('content-type') || '').toLowerCase();
+            if (!/javascript|ecmascript/.test(type)) return false;
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Decide (una sola vez) de dónde salen el módulo y los .wasm.
+let _transformersSources = null;
+async function resolveTransformersSources() {
+    if (_transformersSources) return _transformersSources;
+    const localModule = _localAssetUrl('lib/transformers.min.js');
+    const ortDir = _localAssetUrl('lib/ort/');
+    // El backend WebGPU necesita el binario Y su módulo .mjs bien servido: si
+    // cualquiera de los dos falla, los .wasm van al CDN en bloque.
+    const [moduleOk, wasmOk, mjsOk] = await Promise.all([
+        _urlIsAvailable(localModule, true),
+        _urlIsAvailable(ortDir + ORT_WASM_FILE),
+        _urlIsAvailable(ortDir + ORT_MJS_FILE, true),
+    ]);
+    const ortOk = wasmOk && mjsOk;
+    _transformersSources = {
+        moduleUrl: moduleOk ? localModule : TRANSFORMERS_CDN_URL,
+        // wasmPaths se fija SIEMPRE de forma explícita: si el módulo viene de
+        // local y no se fijara, onnxruntime buscaría los .wasm junto a él y
+        // fallaría al no encontrarlos.
+        wasmPaths: ortOk ? ortDir : TRANSFORMERS_CDN_BASE,
+        origin: moduleOk && ortOk ? 'local' : (moduleOk || ortOk ? 'mixto' : 'cdn'),
+    };
+    return _transformersSources;
+}
+
+/**
+ * importTransformers — carga el runtime con respaldo. Devuelve el módulo y deja
+ * en _transformersSources la procedencia efectiva (la consulta el monitor y
+ * configureOnnxRuntime para fijar wasmPaths).
+ */
+async function importTransformers() {
+    const src = await resolveTransformersSources();
+    try {
+        return await import(src.moduleUrl);
+    } catch (e) {
+        if (src.moduleUrl === TRANSFORMERS_CDN_URL) throw e;
+        console.warn('[WebGPU] el runtime auto-alojado falló; se recurre al CDN:', e);
+        const mod = await import(TRANSFORMERS_CDN_URL);
+        // Si el módulo local no sirve, sus .wasm tampoco son de fiar.
+        _transformersSources = { moduleUrl: TRANSFORMERS_CDN_URL, wasmPaths: TRANSFORMERS_CDN_BASE, origin: 'cdn' };
+        return mod;
+    }
+}
 
 
 // ─── Performance Utilities ──────────────────

@@ -87,6 +87,11 @@ const MIME_TYPES = {
     '.html': 'text/html',
     '.css': 'text/css',
     '.js': 'text/javascript',
+    // .mjs es imprescindible: onnxruntime carga su backend de WebGPU importando
+    // lib/ort/*.mjs como módulo. Con `nosniff`, el navegador se niega a ejecutar
+    // un módulo servido como application/octet-stream («Failed to fetch
+    // dynamically imported module») y WebGPU se queda sin backend.
+    '.mjs': 'text/javascript',
     '.json': 'application/json',
     '.png': 'image/png',
     '.jpg': 'image/jpeg',

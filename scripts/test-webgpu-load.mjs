@@ -41,6 +41,7 @@ const sandbox = {
     requestIdleCallback: (fn) => setTimeout(fn, 0),
     fetch: () => Promise.reject(new Error('sin red')),
     TextEncoder, TextDecoder, AbortSignal: globalThis.AbortSignal,
+    URL, URLSearchParams,
     Worker: class { postMessage() {} terminate() {} },
     DOMParser: class { parseFromString() { return { body: { querySelectorAll: () => [], innerHTML: '' } }; } },
 };
@@ -181,6 +182,67 @@ const run = (e) => runInContext(e, sandbox);
     run(`state.settings.provider = 'webgpu'; scheduleWebGPUPriming();`);
     await new Promise(r => setTimeout(r, 60));
     check('con WebGPU activo sí se precalienta', run('__primes') === 1, `${run('__primes')} veces`);
+}
+
+// ── 7. Runtime auto-alojado con respaldo al CDN ──────────────────────
+// El runtime se sirve desde lib/ para que el service worker lo cachee (WebGPU
+// sin conexión y sin depender de un tercero). Si esa copia falta —despliegue
+// parcial, fichero borrado, file://— hay que caer al CDN en vez de quedarse sin
+// inferencia. Aquí se comprueba la DECISIÓN; que el import real se reintente
+// contra el CDN se verifica en el navegador.
+{
+    // Un servidor correcto: todo existe y el JS se sirve como JavaScript.
+    const okJs = `fetch = async () => ({ ok: true, headers: { get: () => 'text/javascript' } });`;
+
+    // 7a. Copia local completa → módulo y .wasm del propio origen.
+    run(`_transformersSources = null; ${okJs}`);
+    let src = await run('resolveTransformersSources()');
+    check('con la copia local presente se sirve del propio origen', src.origin === 'local', src.origin);
+    check('el módulo apunta a lib/', src.moduleUrl.includes('lib/transformers.min.js'));
+    check('y los .wasm a lib/ort/', src.wasmPaths.includes('lib/ort/'));
+
+    // 7b. Nada en local → CDN completo.
+    run(`_transformersSources = null; fetch = async () => ({ ok: false, headers: { get: () => 'text/javascript' } });`);
+    src = await run('resolveTransformersSources()');
+    check('sin copia local se recurre al CDN', src.origin === 'cdn', src.origin);
+    check('módulo desde jsdelivr', src.moduleUrl.startsWith('https://cdn.jsdelivr.net'));
+    check('y .wasm desde jsdelivr', src.wasmPaths.startsWith('https://cdn.jsdelivr.net'));
+
+    // 7c. Está el módulo pero falta el binario grande: el caso realista de un
+    // despliegue que se dejó los 21 MB por el camino.
+    run(`_transformersSources = null; fetch = async (url) => ({ ok: !String(url).endsWith('.wasm'), headers: { get: () => 'text/javascript' } });`);
+    src = await run('resolveTransformersSources()');
+    check('si falta solo el .wasm se mezclan orígenes', src.origin === 'mixto', src.origin);
+    check('el .wasm cae al CDN', src.wasmPaths.startsWith('https://cdn.jsdelivr.net'));
+    check('y el módulo sigue siendo el local', src.moduleUrl.includes('lib/'));
+
+    // 7d. Sin red (el sondeo lanza): no debe romper, sino decidir CDN.
+    run(`_transformersSources = null; fetch = async () => { throw new Error('sin red'); };`);
+    src = await run('resolveTransformersSources()');
+    check('un sondeo que falla no rompe la resolución', src.origin === 'cdn', src.origin);
+    check('wasmPaths se fija siempre, nunca queda vacío', typeof src.wasmPaths === 'string' && src.wasmPaths.length > 0);
+
+    // 7e. El .mjs existe pero el servidor no conoce la extensión y lo manda como
+    // octet-stream: con nosniff el navegador no lo ejecutaría, así que debe
+    // contar como no disponible (este fallo real se detectó en el navegador).
+    run(`
+        _transformersSources = null;
+        fetch = async (url) => ({
+            ok: true,
+            headers: { get: () => String(url).endsWith('.mjs') ? 'application/octet-stream' : 'text/javascript' },
+        });
+    `);
+    src = await run('resolveTransformersSources()');
+    check('un .mjs con MIME erróneo manda los .wasm al CDN', src.wasmPaths.startsWith('https://cdn.jsdelivr.net'), src.origin);
+    check('y no se queda en «local» fingiendo que todo va bien', src.origin !== 'local', src.origin);
+
+    // 7f. La decisión se toma una sola vez (no se re-sondea en cada carga).
+    // Aunque ahora el servidor responda perfecto, no debe volver a sondear:
+    // la decisión anterior sigue en pie.
+    const antes = src.origin;
+    run(okJs);
+    const cached = await run('resolveTransformersSources()');
+    check('la decisión queda memoizada', cached.origin === antes, `${antes} → ${cached.origin}`);
 }
 
 console.log(failures === 0 ? '\n✔ Acelerador de carga WebGPU correcto.' : `\n✖ ${failures} fallo(s).`);

@@ -698,7 +698,7 @@ async function getWebGPURawImages(imageMetaList, forceInline = false) {
         return imageMetaList.map(img =>
             `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`);
     }
-    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+    const hf = webgpuState.hfModule || await importTransformers();
     webgpuState.hfModule = hf;
     const { RawImage } = hf;
 
@@ -789,7 +789,7 @@ async function analyzeImagesForWebGPUInline(imageMetaList = [], onProgress, user
     // getWebGPURawImages puede devolver data-URLs en modo worker; aquí forzamos
     // RawImage reales porque los motores de visión corren inline.
     const dataUrls = normalized.map(img => `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`);
-    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+    const hf = webgpuState.hfModule || await importTransformers();
     webgpuState.hfModule = hf;
     const rawImages = await Promise.all(dataUrls.map(u => hf.RawImage.fromURL(u)));
 

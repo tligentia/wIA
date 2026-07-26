@@ -144,7 +144,7 @@ async function loadRagPipeline(onProgress) {
     if (ragState.loading) return ragState.loading;
 
     ragState.loading = (async () => {
-        const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+        const hf = webgpuState.hfModule || await importTransformers();
         webgpuState.hfModule = hf;
         const { pipeline, env } = hf;
         env.allowLocalModels = false;

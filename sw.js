@@ -10,7 +10,7 @@
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v2607.BF';
+const CACHE = 'wia-shell-v2607.BG';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).
@@ -23,6 +23,17 @@ const CORE = [
     './lang/docs/es.json', './lang/docs/en.json',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
     './lib/anonimae-engine.js', './lib/anonimae-rules.json',
+    // transformers.min.js (868 KB) SÍ se precachea, y por una razón concreta: el
+    // worker lo carga con import() y Chrome no pasa por el service worker el
+    // módulo de entrada que importa un worker, así que el handler de fetch nunca
+    // llega a guardarlo. Sin precacheo, la inferencia local no funcionaría
+    // offline por mucho que el resto del runtime sí quedara cacheado.
+    './lib/transformers.min.js',
+    // El binario WebGPU (lib/ort/*, ~21 MB) NO se precachea: penalizaría la
+    // instalación a todo el mundo, incluido quien solo usa motores cloud. Lo pide
+    // onnxruntime por fetch/WebAssembly, que sí atraviesa el service worker, así
+    // que el handler lo guarda la primera vez que se usa WebGPU y a partir de ahí
+    // la inferencia local funciona sin conexión.
     // pdf.worker.min.js (1 MB) NO se precachea: pdf.js solo lo pide al abrir un
     // PDF, y cargarlo en la instalación penalizaba a todos —incluido quien nunca
     // adjunta uno— con 1 MB de descarga. El handler de fetch lo guarda en la
