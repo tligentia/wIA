@@ -10,7 +10,7 @@
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v2607.BE';
+const CACHE = 'wia-shell-v2607.BF';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).

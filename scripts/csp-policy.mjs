@@ -19,6 +19,13 @@
  *   import() dinámico desde ese CDN.
  * · worker-src incluye blob: porque onnxruntime crea sus hilos como workers a
  *   partir de blobs; sin ello se cae a un solo hilo o falla.
+ * · script-src TAMBIÉN necesita blob:, y no es lo mismo que lo anterior: aparte
+ *   de los workers, onnxruntime-web carga su backend de WebGPU (JSEP) con un
+ *   import() dinámico de un módulo blob:, y los import() los rige script-src, no
+ *   worker-src. Sin blob: aquí la inferencia local moría con «no available
+ *   backend found. ERR: [webgpu] Failed to fetch dynamically imported module:
+ *   blob:…». Un blob: solo lo puede crear código del propio origen, así que el
+ *   margen que abre es pequeño frente a dejar WebGPU inservible.
  * · connect-src es abierto a propósito: el usuario configura la URL de su motor
  *   (Ollama en su LAN, un proxy propio, cualquier proveedor cloud). Restringirlo
  *   a una lista rompería la función principal de la app.
@@ -27,7 +34,7 @@
  */
 export const CSP_POLICY = [
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'",
+    "script-src 'self' https://cdn.jsdelivr.net blob: 'wasm-unsafe-eval'",
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
