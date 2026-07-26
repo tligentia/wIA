@@ -1,0 +1,116 @@
+{
+  "_lang": "es",
+  "footNote": "wIA — hub de IA multimotor · Creado por <a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">Jesús de Pablos</a> · © 2026 · Licencia MIT.",
+  "sections": [
+    {
+      "id": "doc-intro",
+      "title": "Introducción",
+      "html": "\n<p><strong>wIA</strong> es un hub de inteligencia artificial multimotor: una única interfaz de chat que conecta con <strong>modelos locales</strong> (en tu ordenador o dentro del navegador) y con los principales <strong>proveedores en la nube</strong>. Es una aplicación web estática (HTML, CSS y JavaScript, sin framework ni servidor propio), pensada para ser rápida, privada y portable.</p>\n<ul>\n<li><strong>Privacidad primero:</strong> tus chats, proyectos y ajustes viven solo en tu navegador. No hay backend que almacene tus datos.</li>\n<li><strong>Multi-motor:</strong> cambia entre motores locales y en la nube sin salir de la conversación.</li>\n<li><strong>Sin instalación obligatoria:</strong> funciona abriendo una web; opcionalmente se instala como app (PWA) y funciona sin conexión.</li>\n</ul>"
+    },
+    {
+      "id": "doc-inicio",
+      "title": "Primeros pasos",
+      "html": "\n<ol>\n<li>Abre wIA en tu navegador (Chrome, Edge o similar recientes recomendados).</li>\n<li>Pulsa el icono ⚙️ (arriba a la derecha) para abrir <strong>Ajustes</strong> y, en <em>Conexión</em>, elige el <strong>motor de IA</strong>.</li>\n<li>Si el motor lo requiere, introduce su <strong>API Key</strong> o la <strong>URL</strong> del servidor. wIA valida la conexión automáticamente.</li>\n<li>Cierra Ajustes, escribe tu mensaje y pulsa <strong>Enter</strong>.</li>\n</ol>\n<p class=\"doc-tip\">Consejo: si no quieres configurar nada, elige <strong>WebGPU (Browser)</strong>; se ejecuta 100 % dentro de tu navegador, sin claves ni servidores.</p>"
+    },
+    {
+      "id": "doc-motores",
+      "title": "Motores de IA",
+      "html": "\n<p>wIA agrupa los motores en tres familias: <strong>locales en tu equipo</strong>, <strong>dentro del navegador</strong> y <strong>en la nube</strong>.</p>\n<table class=\"doc-table\">\n<thead><tr><th>Motor</th><th>Tipo</th><th>Acceso</th></tr></thead>\n<tbody>\n<tr><td>Ollama (Local)</td><td>Local en tu equipo</td><td>Sin credenciales</td></tr>\n<tr><td>Ollama (Remoto)</td><td>Servidor Ollama propio</td><td>Bearer opcional</td></tr>\n<tr><td>Ollama Cloud</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>LM Studio</td><td>Local en tu equipo</td><td>Sin credenciales</td></tr>\n<tr><td>Groq</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>OpenRouter</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>Google Gemini</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>Claude (Anthropic)</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>OpenAI</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>Nvidia Integrate</td><td>Nube</td><td>API Key</td></tr>\n<tr><td>WebGPU (Browser)</td><td>Dentro del navegador</td><td>Sin credenciales</td></tr>\n</tbody></table>\n<p>Cada motor recuerda su propia configuración (modelo, URL, clave y parámetros), así que puedes alternar sin reconfigurar. La conexión se valida al seleccionar el motor y al guardar cambios.</p>\n<p><strong>Proxy CORS:</strong> cuando wIA se sirve con su servidor Node incluido (o bajo Plesk), un proxy interno permite alcanzar motores que no admiten llamadas directas desde el navegador. En hosting estático, wIA lo detecta y va directo a los proveedores que sí soportan CORS.</p>"
+    },
+    {
+      "id": "doc-webgpu",
+      "title": "Modelos en el navegador (WebGPU)",
+      "html": "\n<p>El motor <strong>WebGPU (Browser)</strong> ejecuta modelos directamente en la GPU/CPU de tu dispositivo mediante Transformers.js, sin enviar nada a ningún servidor.</p>\n<ul>\n<li><strong>Requisitos:</strong> navegador con soporte WebGPU (Chrome/Edge recientes). Sin WebGPU, wIA recurre a WASM (más lento).</li>\n<li><strong>Descarga y caché:</strong> la primera vez el modelo se descarga desde Hugging Face y queda <strong>cacheado</strong>; después carga al instante y funciona sin conexión.</li>\n<li><strong>Cuantización adaptativa:</strong> wIA elige la precisión (q4/q8/fp16) según tu equipo, equilibrando velocidad y calidad.</li>\n<li><strong>Web Worker:</strong> la inferencia corre en un hilo aparte para no bloquear la interfaz.</li>\n<li><strong>Streaming y cancelación:</strong> las respuestas aparecen token a token y puedes detenerlas.</li>\n</ul>\n<p class=\"doc-q\">Aceleración de la carga</p>\n<ul>\n<li><strong>WASM multinúcleo:</strong> gracias al aislamiento de origen, el runtime usa varios hilos (hasta 8) y SIMD, acelerando la inicialización y las operaciones en CPU.</li>\n<li><strong>Precarga en segundo plano:</strong> el modelo empieza a descargarse e inicializarse <strong>en cuanto escribes</strong>, de modo que al enviar ya está listo.</li>\n<li><strong>Botón «⚡ Preparar modelo»:</strong> en <em>Ajustes → Modelos</em>, descarga e inicializa el modelo bajo demanda.</li>\n</ul>\n<p class=\"doc-q\">Uso en móvil</p>\n<p>En teléfonos la memoria es limitada (sobre todo en iOS, con límites estrictos por pestaña). wIA lo detecta y: arranca con un <strong>modelo ligero</strong> por defecto, muestra un aviso en el panel de WebGPU y, si eliges uno grande, <strong>ofrece cambiar a uno ligero</strong> antes de cargarlo. Para máxima calidad en el móvil, usa un motor cloud.</p>"
+    },
+    {
+      "id": "doc-carga",
+      "title": "Velocidad de carga (WebGPU)",
+      "html": "\n<p>La primera vez que usas un modelo en el navegador hay que pagar dos cosas: el <strong>runtime</strong> (el motor que ejecuta el modelo) y los <strong>pesos</strong> del modelo. wIA adelanta todo lo que puede para que no coincida con tu espera:</p>\n<ul>\n<li><strong>Al abrir la app</strong> con WebGPU activo, prepara el runtime en segundo plano. Es un coste fijo que no depende del modelo.</li>\n<li><strong>Al pinchar en la caja de mensaje</strong>, si aún no estaba listo, lo prepara.</li>\n<li><strong>Al empezar a escribir</strong>, descarga el modelo mientras redactas.</li>\n<li>Si el modelo <strong>ya está en caché</strong>, lo sube a memoria nada más abrir la app.</li>\n</ul>\n<p>Además se adapta a tu entorno: si detecta <strong>conexión lenta o ahorro de datos</strong>, elige la variante más ligera del modelo (baja antes aunque pierda algo de calidad); si tu GPU no admite <code>shader-f16</code>, evita las variantes que fallarían en ella; y si no hay GPU, cae a CPU con todos los hilos disponibles.</p>\n<p class=\"doc-tip\">En <em>Ajustes → Conexión</em>, con WebGPU seleccionado, el monitor muestra cuánto tardó la última carga separando <strong>runtime</strong> y <strong>modelo</strong>. Si el runtime tarda mucho, es tu conexión con el CDN; si tarda el modelo, es su tamaño. También puedes usar «Preparar modelo» para cargarlo antes de escribir.</p>"
+    },
+    {
+      "id": "doc-vision",
+      "title": "Visión e imágenes",
+      "html": "\n<p>wIA puede analizar imágenes que adjuntes con el icono 📎. Según el motor y el modelo dispones de:</p>\n<ul>\n<li><strong>Modelos multimodales</strong> (nube o WebGPU) que entienden imagen y texto juntos.</li>\n<li><strong>Asistentes de visión</strong> en WebGPU: descripción de imágenes, lectura de texto (OCR) y análisis avanzado.</li>\n<li><strong>Modelos médicos orientativos:</strong> clasificación visual zero-shot y un <strong>clasificador de heridas</strong> que reconoce el tipo (abrasión, hematoma, quemadura, corte, laceración, herida diabética/venosa/quirúrgica, úlcera por presión o piel normal). <strong>Son orientativos, no diagnósticos:</strong> ante cualquier duda, consulta a un profesional sanitario.</li>\n</ul>\n<p><strong>Cadena visión → chat:</strong> en <em>Ajustes → Modelos</em> (bajo el selector) puedes combinar un modelo de visión con uno de chat, y <strong>activar o desactivar</strong> la cadena con su conmutador. Cuando hay visión activa, aparece el icono 👁 en la caja de mensaje.</p>"
+    },
+    {
+      "id": "doc-agentes",
+      "title": "Agentes",
+      "html": "\n<p>Los <strong>agentes</strong> son asistentes preconfigurados (al estilo de los GPTs): combinan nombre, icono, descripción, un prompt de sistema propio, opcionalmente un motor/modelo concreto y unos <em>iniciadores</em>.</p>\n<ul>\n<li>Abre la <strong>galería de agentes</strong> para explorar una selección curada y activarlos con un clic.</li>\n<li>Crea los tuyos con su personalidad y base de conocimiento.</li>\n<li><strong>Exporta e importa</strong> agentes como JSON para compartirlos o respaldarlos.</li>\n</ul>"
+    },
+    {
+      "id": "doc-proyectos",
+      "title": "Proyectos y documentos",
+      "html": "\n<p>Los <strong>proyectos</strong> agrupan chats bajo un contexto común. Cada proyecto puede tener:</p>\n<ul>\n<li>Un <strong>prompt de sistema</strong> propio que orienta todas sus conversaciones.</li>\n<li>Una <strong>base de conocimiento</strong> de documentos (incluye lectura de PDF), disponible como referencia permanente para el modelo.</li>\n</ul>\n<p>Cambia de proyecto desde el selector superior. El proyecto «General» existe siempre por defecto.</p>\n<p class=\"doc-tip\"><strong>Límites:</strong> cada documento del proyecto admite hasta 4 MB y cada archivo adjunto a un mensaje hasta 2 MB. Las imágenes se redimensionan y recomprimen automáticamente en tu navegador antes de guardarse, para no agotar el almacenamiento local ni inflar cada petición.</p>"
+    },
+    {
+      "id": "doc-contexto",
+      "title": "Límite de contexto",
+      "html": "\n<p>Cada modelo tiene una <strong>ventana de contexto</strong>: el máximo de texto que puede leer de una vez. wIA calcula cuánto cabe y envía lo que entra, reservando siempre espacio para la respuesta.</p>\n<ul>\n<li>Si la conversación es larga, se envían los <strong>mensajes más recientes</strong> y se descartan los más antiguos.</li>\n<li>Si la base de conocimiento del proyecto es grande, se incluye <strong>recortada</strong>, avisando al modelo de que lo está.</li>\n<li>Tu <strong>última pregunta nunca se descarta</strong>, aunque por sí sola sea muy larga.</li>\n</ul>\n<p>Cuando ha habido recorte, la respuesta muestra una etiqueta <strong>✂️</strong> indicando qué se quedó fuera. Si te ocurre a menudo, cambia a un modelo con más contexto o empieza un chat nuevo.</p>\n<p class=\"doc-tip\">Los modelos del navegador (WebGPU) son los que menos contexto tienen —varios rondan los 8K tokens—, así que ahí el recorte aparece antes.</p>"
+    },
+    {
+      "id": "doc-rag",
+      "title": "Búsqueda en tus documentos",
+      "html": "\n<p>Cuando un proyecto tiene documentos grandes, wIA no se los manda enteros al modelo: <strong>busca dentro de ellos</strong> y envía solo los fragmentos relacionados con tu pregunta.</p>\n<ol>\n<li>La primera vez descarga un <strong>modelo de búsqueda</strong> pequeño (unos 25-120 MB, se queda en caché).</li>\n<li>Trocea cada documento y lo convierte en vectores. Ese índice se guarda <strong>cifrado</strong> en tu navegador.</li>\n<li>En cada mensaje recupera los extractos más parecidos a lo que preguntas y solo esos viajan al modelo.</li>\n</ol>\n<p>Cuando ocurre, la respuesta lleva una etiqueta <strong>🔎</strong> con cuántos extractos se usaron. Puedes desactivarlo en <em>Ajustes → Generación</em>, y reconstruir el índice desde ahí si algo se queda desincronizado.</p>\n<p class=\"doc-tip\">Los documentos pequeños no se indexan: caben enteros y montar un índice para ellos solo añadiría espera. Si la respuesta necesita algo que no está en los extractos, el modelo tiene instrucciones de decirlo en vez de inventarlo.</p>"
+    },
+    {
+      "id": "doc-chat",
+      "title": "El chat",
+      "html": "\n<ul>\n<li><strong>Enviar:</strong> Enter. <strong>Salto de línea:</strong> Shift + Enter.</li>\n<li><strong>Streaming:</strong> la respuesta se escribe en directo; puedes cancelarla.</li>\n<li><strong>Razonamiento:</strong> con modelos compatibles, wIA muestra su «pensamiento» separado de la respuesta.</li>\n<li><strong>Markdown y código:</strong> con resaltado de sintaxis y botón de copiar.</li>\n<li><strong>Adjuntos:</strong> imágenes y documentos con el icono 📎.</li>\n<li>Cada chat puede <strong>exportarse</strong> por separado (texto/JSON).</li>\n</ul>\n<p class=\"doc-q\">Fallback rápido si algo falla</p>\n<p>Si un modelo falla o <strong>se agotan los créditos</strong> del proveedor, la tarjeta de error ofrece botones para <strong>continuar al instante con otro modelo</strong>, construidos a partir de los <strong>usados con éxito recientemente</strong> y tus <strong>favoritos</strong>, más <strong>WebGPU local</strong> (gratis, sin créditos) como red de seguridad. Un clic cambia de motor y reintenta el mensaje.</p>"
+    },
+    {
+      "id": "doc-selectores",
+      "title": "Selectores rápidos",
+      "html": "\n<p>Desde la propia caja de mensaje puedes cambiar de prompt, modelo o motor sin abrir Ajustes:</p>\n<table class=\"doc-table\">\n<thead><tr><th>Escribes</th><th>Qué abre</th></tr></thead>\n<tbody>\n<tr><td><code>/</code></td><td>Biblioteca de <strong>prompts</strong> guardados</td></tr>\n<tr><td><code>//</code></td><td><strong>Modelos</strong> del motor seleccionado</td></tr>\n<tr><td><code>///</code></td><td>Elegir el <strong>motor</strong> de IA</td></tr>\n<tr><td><code>+</code></td><td>Encola la orden en vez de enviarla</td></tr>\n</tbody></table>\n<p>Puedes filtrar escribiendo tras el prefijo (por ejemplo <code>//qwen</code> o <code>///groq</code>), navegar con ↑ ↓ y confirmar con Enter. El elemento activo aparece marcado como «· actual».</p>"
+    },
+    {
+      "id": "doc-web",
+      "title": "Búsqueda en Internet",
+      "html": "\n<p>wIA puede consultar Internet para responder con información actual. Cuando la herramienta está disponible, el modelo la usa automáticamente si detecta que necesita datos recientes, y verás el icono correspondiente en la caja de mensaje.</p>\n<p>La búsqueda combina varias fuentes con degradación por capas: resultados web reales (vía DuckDuckGo Lite cuando hay proxy), respuestas directas de DuckDuckGo y Wikipedia en español e inglés. Así devuelve algo útil tanto con servidor propio como en hosting estático.</p>"
+    },
+    {
+      "id": "doc-cola",
+      "title": "Cola de órdenes",
+      "html": "\n<p>Si empiezas un mensaje con el prefijo <strong><code>+</code></strong>, en lugar de enviarse se añade a una <strong>cola de órdenes pendientes</strong>. Puedes encolar varias y wIA las ejecuta de forma secuencial. La cola <strong>se conserva entre sesiones</strong> y se incluye en la copia de seguridad completa.</p>"
+    },
+    {
+      "id": "doc-anon",
+      "title": "Anonimización de datos (DLP)",
+      "html": "\n<p>wIA incluye una capa de <strong>protección de datos local</strong>: antes de enviar tu prompt a la IA, sustituye los datos sensibles por <strong>placeholders</strong> consistentes (<code>[Nombre_001]</code>, <code>[DNI_001]</code>…).</p>\n<ul>\n<li><strong>Activarlo:</strong> con el icono <strong>🕶️</strong> de la caja de mensaje o desde <em>Ajustes → Anonimización</em>.</li>\n<li><strong>Reversible y privado:</strong> el mapa de equivalencias se guarda <strong>cifrado por chat</strong> (AES-GCM) y la respuesta se restaura <strong>solo en tu pantalla</strong>. Los valores reales nunca salen del navegador.</li>\n<li>Una <strong>insignia</strong> bajo tu mensaje indica cuántos datos se protegieron.</li>\n</ul>\n<p class=\"doc-q\">Tipos de datos reconocidos</p>\n<p>Se detectan más de 20 tipos: correo electrónico, teléfono, DNI/NIE/NIF, CIF, IBAN, tarjeta de crédito, nº de Seguridad Social, pasaporte, dirección física, código postal, matrícula de vehículo, dirección IP, dirección MAC, fechas (posible nacimiento), usuario de red social, claves y tokens de API (incluido JWT), coordenadas GPS, nº de póliza, expedientes y diligencias judiciales, más diccionarios de nombres de persona y organizaciones.</p>\n<p class=\"doc-q\">Activar o desactivar tipos</p>\n<p>En <em>Ajustes → Anonimización</em> se enumeran todos los tipos con una casilla cada uno, y un interruptor <strong>«Activar todos»</strong>. Desactiva los que no te interesen (por ejemplo fechas o IPs si generan falsos positivos). Tu selección se memoriza.</p>"
+    },
+    {
+      "id": "doc-privacidad",
+      "title": "Privacidad y seguridad",
+      "html": "\n<ul>\n<li><strong>Inferencia local:</strong> con WebGPU, LM Studio u Ollama local, tus mensajes no salen de tu equipo.</li>\n<li><strong>Todo cifrado en local:</strong> API keys, chats, proyectos, documentos y el índice de búsqueda se guardan cifrados con AES-GCM, usando una clave no exportable que vive en el navegador y nunca sale de él.</li>\n<li><strong>Bloqueo con PIN:</strong> disuade accesos casuales en dispositivos compartidos. No cifra nada por sí mismo y requiere una conexión segura (https o localhost) para poder activarse.</li>\n<li><strong>Modo incógnito:</strong> desactiva el guardado de la conversación en curso.</li>\n<li><strong>Anonimización 🕶️:</strong> ver la sección dedicada.</li>\n<li><strong>Cabeceras de seguridad:</strong> el despliegue añade aislamiento de origen y cabeceras que endurecen la app (y habilitan el WASM multihilo).</li>\n</ul>\n<p>Ten presente que los motores <em>en la nube</em> reciben tus mensajes en sus servidores según sus propias políticas; para máxima privacidad, usa motores locales.</p>"
+    },
+    {
+      "id": "doc-backup",
+      "title": "Copias de seguridad",
+      "html": "\n<p>Tus datos viven en el navegador y podrían borrarse si libera espacio. Desde <em>Ajustes → Datos</em>:</p>\n<ul>\n<li><strong>Exportar / Importar Ajustes:</strong> solo preferencias y configuración de motores.</li>\n<li><strong>Exportar / Importar Todo:</strong> copia integral (proyectos, agentes, chats, cola de órdenes y ajustes) en un único JSON. Las API keys se excluyen por seguridad.</li>\n</ul>\n<p>wIA solicita además <em>almacenamiento persistente</em> para reducir el riesgo de purga automática. Aun así, exporta una copia de vez en cuando.</p>"
+    },
+    {
+      "id": "doc-tema",
+      "title": "Temas e idioma",
+      "html": "\n<p>En <em>Ajustes → Experiencia</em> puedes personalizar el aspecto y el idioma.</p>\n<p class=\"doc-q\">Temas</p>\n<ul>\n<li><strong>Sistema (Automático)</strong> — por defecto: sigue el modo claro/oscuro de tu sistema operativo.</li>\n<li><strong>Tligent (Corporativo)</strong> — fondo blanco, texto negro y acentos rojo/gris de marca.</li>\n<li><strong>Oscuro</strong>, <strong>Claro</strong> y <strong>Vanilla</strong> (minimalista).</li>\n</ul>\n<p class=\"doc-q\">Idioma</p>\n<p>wIA está disponible en <strong>español</strong> e <strong>inglés</strong>. Por defecto <strong>detecta el idioma de tu navegador</strong>. Si eliges uno concreto en el selector de idioma, esa elección <strong>se memoriza y tiene prioridad</strong> sobre la detección. La documentación también cambia de idioma.</p>"
+    },
+    {
+      "id": "doc-pwa",
+      "title": "Instalación y uso offline",
+      "html": "\n<p>wIA es una <strong>PWA</strong>: desde un navegador compatible puedes <strong>instalarla</strong> como aplicación. Gracias a su service worker, el «esqueleto» de la app se guarda para <strong>arrancar sin conexión</strong>. Combinado con los modelos WebGPU ya cacheados, puedes chatear con IA <strong>en modo avión</strong>.</p>\n<p class=\"doc-tip\">Tras publicar una versión nueva, puede hacer falta recargar una vez para que el service worker sirva la última.</p>"
+    },
+    {
+      "id": "doc-atajos",
+      "title": "Atajos de teclado",
+      "html": "\n<table class=\"doc-table\">\n<thead><tr><th>Atajo</th><th>Acción</th></tr></thead>\n<tbody>\n<tr><td><kbd>Enter</kbd></td><td>Enviar el mensaje</td></tr>\n<tr><td><kbd>Shift</kbd> + <kbd>Enter</kbd></td><td>Salto de línea</td></tr>\n<tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>N</kbd></td><td>Nuevo chat</td></tr>\n<tr><td><kbd>/</kbd> (al inicio)</td><td>Biblioteca de prompts</td></tr>\n<tr><td><kbd>/</kbd><kbd>/</kbd> (al inicio)</td><td>Modelos del motor actual</td></tr>\n<tr><td><kbd>/</kbd><kbd>/</kbd><kbd>/</kbd> (al inicio)</td><td>Elegir motor de IA</td></tr>\n<tr><td><kbd>+</kbd> (al inicio)</td><td>Encolar la orden</td></tr>\n<tr><td><kbd>Esc</kbd></td><td>Cerrar ventanas/paneles</td></tr>\n<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Navegar por los selectores</td></tr>\n</tbody></table>"
+    },
+    {
+      "id": "doc-faq",
+      "title": "Problemas frecuentes",
+      "html": "\n<p class=\"doc-q\">No conecta con un motor en la nube.</p>\n<p>Revisa que la API Key sea válida y la URL correcta. wIA muestra el motivo (credenciales, URL, red o tiempo de espera).</p>\n<p class=\"doc-q\">Un modelo WebGPU no carga o va muy lento.</p>\n<p>Comprueba que tu navegador tenga WebGPU activo; sin él se usa WASM, más lento. Los modelos grandes tardan en la primera descarga y luego quedan cacheados.</p>\n<p class=\"doc-q\">En el móvil se cierra la pestaña al cargar un modelo.</p>\n<p>Es falta de memoria. Usa un modelo ligero (hasta ~500 MB) o un motor cloud. wIA te avisa y ofrece cambiar automáticamente.</p>\n<p class=\"doc-q\">He perdido mis chats.</p>\n<p>El navegador puede haber liberado el almacenamiento. Restaura desde <em>Importar Todo</em> y exporta copias periódicas.</p>\n<p class=\"doc-q\">Los resultados de imagen médica, ¿son un diagnóstico?</p>\n<p>No. Son estimaciones automáticas orientativas; cualquier decisión clínica corresponde a un profesional sanitario.</p>"
+    },
+    {
+      "id": "doc-autoria",
+      "title": "Autoría y licencia",
+      "html": "\n<div class=\"doc-author-card\">\n  <div class=\"doc-author-avatar\" aria-hidden=\"true\">JdP</div>\n  <div class=\"doc-author-info\">\n    <p class=\"doc-author-name\">Creado por <a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">Jesús de Pablos</a></p>\n    <p class=\"doc-author-role\">Autor, diseño y desarrollo de wIA</p>\n    <p><a class=\"doc-author-web\" href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">🌐 jesus.depablos.es</a></p>\n  </div>\n</div>\n<p><strong>wIA</strong> es un proyecto <strong>gratuito y de código abierto</strong> ideado, diseñado y desarrollado por <strong>Jesús de Pablos</strong>. Puedes usarlo, estudiarlo, modificarlo y compartirlo libremente bajo licencia <strong>MIT</strong>.</p>\n<p>La única condición es <strong>mantener el reconocimiento de autoría</strong>: conserva el aviso de copyright y el crédito a Jesús de Pablos (<a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">jesus.depablos.es</a>) en cualquier copia u obra derivada.</p>\n<p class=\"doc-license-note\">© 2026 Jesús de Pablos · Licencia MIT · <a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">jesus.depablos.es</a></p>"
+    }
+  ]
+}

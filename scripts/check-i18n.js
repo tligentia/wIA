@@ -137,3 +137,53 @@ if (undeclared.length) {
 }
 
 console.log('\nTodas las claves usadas están declaradas. ✅');
+
+/* ── Documentación (lang/docs/*.json) ───────────────────────────────────────
+   El contenido del manual vive fuera del código, igual que las cadenas. Aquí se
+   comprueba que los dos idiomas describan LA MISMA documentación: mismas
+   secciones, en el mismo orden y sin huecos. Un desajuste significa que alguien
+   añadió una sección en un idioma y se olvidó del otro.
+   ────────────────────────────────────────────────────────────────────────── */
+const DOCS_DIR = join(LANG_DIR, 'docs');
+let docsProblems = 0;
+const docPacks = {};
+
+for (const lang of langs) {
+  const path = join(DOCS_DIR, `${lang}.json`);
+  try {
+    const pack = JSON.parse(readFileSync(path, 'utf8'));
+    if (!Array.isArray(pack.sections)) throw new Error('falta el array «sections»');
+    if (!String(pack.footNote || '').trim()) throw new Error('falta «footNote»');
+    const bad = pack.sections.filter((s) => !s || !s.id || !String(s.title || '').trim() || !String(s.html || '').trim());
+    if (bad.length) throw new Error(`${bad.length} sección(es) sin id, título o contenido`);
+    docPacks[lang] = pack;
+  } catch (e) {
+    console.error(`✖ lang/docs/${lang}.json — ${e.message}`);
+    docsProblems++;
+  }
+}
+
+if (!docsProblems) {
+  const refIds = docPacks[REFERENCE].sections.map((s) => s.id);
+  for (const lang of langs) {
+    if (lang === REFERENCE) continue;
+    const ids = docPacks[lang].sections.map((s) => s.id);
+    if (ids.join('|') === refIds.join('|')) {
+      console.log(`✔ lang/docs/${lang}.json — ${ids.length} secciones, en paridad con ${REFERENCE}`);
+      continue;
+    }
+    docsProblems++;
+    const missing = refIds.filter((id) => !ids.includes(id));
+    const extra = ids.filter((id) => !refIds.includes(id));
+    console.error(`✖ lang/docs/${lang}.json`);
+    if (missing.length) console.error(`   Faltan secciones: ${missing.join(', ')}`);
+    if (extra.length) console.error(`   Sobran secciones: ${extra.join(', ')}`);
+    if (!missing.length && !extra.length) console.error('   Mismas secciones pero en orden distinto.');
+  }
+}
+
+if (docsProblems) {
+  console.error('\nLa documentación no está en paridad entre idiomas.');
+  process.exit(1);
+}
+console.log('Documentación en paridad entre idiomas. ✅');

@@ -1,0 +1,116 @@
+{
+  "_lang": "en",
+  "footNote": "wIA — multi-engine AI hub · Created by <a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">Jesús de Pablos</a> · © 2026 · MIT Licence.",
+  "sections": [
+    {
+      "id": "doc-intro",
+      "title": "Introduction",
+      "html": "\n<p><strong>wIA</strong> is a multi-engine AI hub: a single chat interface that connects to <strong>local models</strong> (on your computer or inside the browser) and to the main <strong>cloud providers</strong>. It is a static web app (HTML, CSS and JavaScript, no framework and no backend of its own), designed to be fast, private and portable.</p>\n<ul>\n<li><strong>Privacy first:</strong> your chats, projects and settings live only in your browser. There is no backend storing your data.</li>\n<li><strong>Multi-engine:</strong> switch between local and cloud engines without leaving the conversation.</li>\n<li><strong>No mandatory install:</strong> it works by opening a web page; optionally it installs as an app (PWA) and works offline.</li>\n</ul>"
+    },
+    {
+      "id": "doc-inicio",
+      "title": "Getting started",
+      "html": "\n<ol>\n<li>Open wIA in your browser (recent Chrome, Edge or similar recommended).</li>\n<li>Click the ⚙️ icon (top right) to open <strong>Settings</strong> and, under <em>Connection</em>, choose the <strong>AI engine</strong>.</li>\n<li>If the engine requires it, enter its <strong>API Key</strong> or server <strong>URL</strong>. wIA validates the connection automatically.</li>\n<li>Close Settings, type your message and press <strong>Enter</strong>.</li>\n</ol>\n<p class=\"doc-tip\">Tip: if you would rather not configure anything, pick <strong>WebGPU (Browser)</strong>; it runs 100% inside your browser, with no keys or servers.</p>"
+    },
+    {
+      "id": "doc-motores",
+      "title": "AI engines",
+      "html": "\n<p>wIA groups engines into three families: <strong>local on your machine</strong>, <strong>inside the browser</strong> and <strong>in the cloud</strong>.</p>\n<table class=\"doc-table\">\n<thead><tr><th>Engine</th><th>Type</th><th>Access</th></tr></thead>\n<tbody>\n<tr><td>Ollama (Local)</td><td>Local on your machine</td><td>No credentials</td></tr>\n<tr><td>Ollama (Remote)</td><td>Your own Ollama server</td><td>Optional bearer</td></tr>\n<tr><td>Ollama Cloud</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>LM Studio</td><td>Local on your machine</td><td>No credentials</td></tr>\n<tr><td>Groq</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>OpenRouter</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>Google Gemini</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>Claude (Anthropic)</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>OpenAI</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>Nvidia Integrate</td><td>Cloud</td><td>API Key</td></tr>\n<tr><td>WebGPU (Browser)</td><td>Inside the browser</td><td>No credentials</td></tr>\n</tbody></table>\n<p>Each engine remembers its own configuration (model, URL, key and parameters), so you can switch without reconfiguring. The connection is validated when you select an engine and when you save changes.</p>\n<p><strong>CORS proxy:</strong> when wIA is served with its bundled Node server (or under Plesk), an internal proxy reaches engines that do not allow direct browser calls. On static hosting, wIA detects this and goes straight to providers that do support CORS.</p>"
+    },
+    {
+      "id": "doc-webgpu",
+      "title": "In-browser models (WebGPU)",
+      "html": "\n<p>The <strong>WebGPU (Browser)</strong> engine runs models directly on your device's GPU/CPU via Transformers.js, without sending anything to a server.</p>\n<ul>\n<li><strong>Requirements:</strong> a browser with WebGPU support (recent Chrome/Edge). Without WebGPU, wIA falls back to WASM (slower).</li>\n<li><strong>Download and cache:</strong> the first time, the model is downloaded from Hugging Face and <strong>cached</strong>; afterwards it loads instantly and works offline.</li>\n<li><strong>Adaptive quantisation:</strong> wIA picks the precision (q4/q8/fp16) based on your hardware, balancing speed and quality.</li>\n<li><strong>Web Worker:</strong> inference runs on a separate thread so the interface stays responsive.</li>\n<li><strong>Streaming and cancellation:</strong> responses appear token by token and can be stopped.</li>\n</ul>\n<p class=\"doc-q\">Loading acceleration</p>\n<ul>\n<li><strong>Multi-threaded WASM:</strong> thanks to cross-origin isolation, the runtime uses several threads (up to 8) plus SIMD, speeding up initialisation and CPU operations.</li>\n<li><strong>Background preloading:</strong> the model starts downloading and initialising <strong>as soon as you type</strong>, so it is ready when you hit send.</li>\n<li><strong>«⚡ Prepare model» button:</strong> in <em>Settings → Models</em>, downloads and initialises the model on demand.</li>\n</ul>\n<p class=\"doc-q\">Using it on mobile</p>\n<p>Phones have limited memory (especially iOS, with strict per-tab limits). wIA detects this and: starts with a <strong>lightweight model</strong> by default, shows a notice in the WebGPU panel and, if you pick a large one, <strong>offers to switch to a light model</strong> before loading. For maximum quality on the phone, use a cloud engine.</p>"
+    },
+    {
+      "id": "doc-carga",
+      "title": "Loading speed (WebGPU)",
+      "html": "\n<p>The first time you use an in-browser model there are two costs: the <strong>runtime</strong> (the engine that runs the model) and the model <strong>weights</strong>. wIA brings forward everything it can so it does not overlap with your wait:</p>\n<ul>\n<li><strong>When the app opens</strong> with WebGPU active, it prepares the runtime in the background. That cost is fixed and does not depend on the model.</li>\n<li><strong>When you click the message box</strong>, it prepares the runtime if it was not ready yet.</li>\n<li><strong>When you start typing</strong>, it downloads the model while you write.</li>\n<li>If the model is <strong>already cached</strong>, it is loaded into memory as soon as the app opens.</li>\n</ul>\n<p>It also adapts to your environment: if it detects a <strong>slow connection or data saver</strong>, it picks the lighter variant of the model (downloads sooner even if it loses some quality); if your GPU lacks <code>shader-f16</code>, it avoids variants that would fail on it; and with no GPU at all it falls back to CPU using every available thread.</p>\n<p class=\"doc-tip\">In <em>Settings → Connection</em>, with WebGPU selected, the monitor shows how long the last load took, split into <strong>runtime</strong> and <strong>model</strong>. If the runtime is slow, that is your connection to the CDN; if the model is slow, that is its size. You can also use \"Prepare model\" to load it before typing.</p>"
+    },
+    {
+      "id": "doc-vision",
+      "title": "Vision and images",
+      "html": "\n<p>wIA can analyse images you attach with the 📎 icon. Depending on the engine and model you get:</p>\n<ul>\n<li><strong>Multimodal models</strong> (cloud or WebGPU) that understand image and text together.</li>\n<li><strong>Vision assistants</strong> on WebGPU: image captioning, text reading (OCR) and advanced analysis.</li>\n<li><strong>Indicative medical models:</strong> zero-shot visual classification and a <strong>wound classifier</strong> that recognises the type (abrasion, bruise, burn, cut, laceration, diabetic/venous/surgical wound, pressure ulcer or normal skin). <strong>These are indicative, not diagnostic:</strong> when in doubt, consult a healthcare professional.</li>\n</ul>\n<p><strong>Vision → chat chain:</strong> in <em>Settings → Models</em> (below the selector) you can combine a vision model with a chat model, and <strong>enable or disable</strong> the chain with its switch. When vision is active, the 👁 icon appears in the message box.</p>"
+    },
+    {
+      "id": "doc-agentes",
+      "title": "Agents",
+      "html": "\n<p><strong>Agents</strong> are preconfigured assistants (in the style of GPTs): they combine a name, icon, description, their own system prompt, optionally a specific engine/model, and <em>starters</em>.</p>\n<ul>\n<li>Open the <strong>agent gallery</strong> to explore a curated selection and activate them with one click.</li>\n<li>Create your own with their personality and knowledge base.</li>\n<li><strong>Export and import</strong> agents as JSON to share or back them up.</li>\n</ul>"
+    },
+    {
+      "id": "doc-proyectos",
+      "title": "Projects and documents",
+      "html": "\n<p><strong>Projects</strong> group chats under a common context. Each project can have:</p>\n<ul>\n<li>Its own <strong>system prompt</strong> guiding all its conversations.</li>\n<li>A <strong>knowledge base</strong> of documents (including PDF reading), available as permanent reference material for the model.</li>\n</ul>\n<p>Switch projects from the selector at the top. The «General» project always exists by default.</p>\n<p class=\"doc-tip\"><strong>Limits:</strong> each project document can be up to 4 MB, and each file attached to a message up to 2 MB. Images are resized and re-compressed automatically in your browser before being stored, so they neither exhaust local storage nor bloat every request.</p>"
+    },
+    {
+      "id": "doc-contexto",
+      "title": "Context limit",
+      "html": "\n<p>Every model has a <strong>context window</strong>: the maximum amount of text it can read at once. wIA works out how much fits and sends what does, always reserving room for the answer.</p>\n<ul>\n<li>If the conversation is long, the <strong>most recent messages</strong> are sent and the oldest ones are dropped.</li>\n<li>If the project knowledge base is large, it is included <strong>trimmed</strong>, and the model is told so.</li>\n<li>Your <strong>latest question is never dropped</strong>, even if on its own it is very long.</li>\n</ul>\n<p>When trimming happens, the answer shows a <strong>✂️</strong> label stating what was left out. If you see it often, switch to a model with a larger context or start a new chat.</p>\n<p class=\"doc-tip\">In-browser models (WebGPU) have the smallest context — several are around 8K tokens — so trimming shows up sooner there.</p>"
+    },
+    {
+      "id": "doc-rag",
+      "title": "Searching your documents",
+      "html": "\n<p>When a project has large documents, wIA does not send them whole to the model: it <strong>searches inside them</strong> and sends only the passages related to your question.</p>\n<ol>\n<li>The first time it downloads a small <strong>search model</strong> (about 25-120 MB, kept in cache).</li>\n<li>It splits each document and turns it into vectors. That index is stored <strong>encrypted</strong> in your browser.</li>\n<li>On every message it retrieves the passages closest to your question, and only those travel to the model.</li>\n</ol>\n<p>When this happens, the answer carries a <strong>🔎</strong> label with how many passages were used. You can turn it off in <em>Settings → Generation</em>, and rebuild the index from there if it ever falls out of sync.</p>\n<p class=\"doc-tip\">Small documents are not indexed: they fit whole, and building an index for them would only add waiting. If the answer needs something that is not in the passages, the model is instructed to say so rather than make it up.</p>"
+    },
+    {
+      "id": "doc-chat",
+      "title": "The chat",
+      "html": "\n<ul>\n<li><strong>Send:</strong> Enter. <strong>New line:</strong> Shift + Enter.</li>\n<li><strong>Streaming:</strong> the reply is written live; you can cancel it.</li>\n<li><strong>Reasoning:</strong> with supported models, wIA shows its «thinking» separately from the answer.</li>\n<li><strong>Markdown and code:</strong> with syntax highlighting and a copy button.</li>\n<li><strong>Attachments:</strong> images and documents via the 📎 icon.</li>\n<li>Each chat can be <strong>exported</strong> individually (text/JSON).</li>\n</ul>\n<p class=\"doc-q\">Quick fallback when something fails</p>\n<p>If a model fails or the provider's <strong>credits run out</strong>, the error card offers buttons to <strong>continue instantly with another model</strong>, built from those <strong>recently used successfully</strong> and your <strong>favourites</strong>, plus <strong>local WebGPU</strong> (free, no credits) as a safety net. One click switches engine and retries the message.</p>"
+    },
+    {
+      "id": "doc-selectores",
+      "title": "Quick selectors",
+      "html": "\n<p>From the message box itself you can switch prompt, model or engine without opening Settings:</p>\n<table class=\"doc-table\">\n<thead><tr><th>You type</th><th>What opens</th></tr></thead>\n<tbody>\n<tr><td><code>/</code></td><td>Saved <strong>prompt</strong> library</td></tr>\n<tr><td><code>//</code></td><td><strong>Models</strong> of the selected engine</td></tr>\n<tr><td><code>///</code></td><td>Choose the AI <strong>engine</strong></td></tr>\n<tr><td><code>+</code></td><td>Queues the order instead of sending it</td></tr>\n</tbody></table>\n<p>You can filter by typing after the prefix (for example <code>//qwen</code> or <code>///groq</code>), navigate with ↑ ↓ and confirm with Enter. The active item is marked as «· current».</p>"
+    },
+    {
+      "id": "doc-web",
+      "title": "Web search",
+      "html": "\n<p>wIA can search the internet to answer with current information. When the tool is available, the model uses it automatically if it detects it needs recent data, and you will see the corresponding icon in the message box.</p>\n<p>The search combines several sources with layered fallback: real web results (via DuckDuckGo Lite when a proxy is available), DuckDuckGo instant answers and Wikipedia in Spanish and English. This way it returns something useful both with your own server and on static hosting.</p>"
+    },
+    {
+      "id": "doc-cola",
+      "title": "Order queue",
+      "html": "\n<p>If you start a message with the <strong><code>+</code></strong> prefix, instead of being sent it is added to a <strong>queue of pending orders</strong>. You can queue several and wIA runs them sequentially. The queue <strong>persists between sessions</strong> and is included in the full backup.</p>"
+    },
+    {
+      "id": "doc-anon",
+      "title": "Data anonymisation (DLP)",
+      "html": "\n<p>wIA includes a <strong>local data protection</strong> layer: before sending your prompt to the AI, it replaces sensitive data with consistent <strong>placeholders</strong> (<code>[Nombre_001]</code>, <code>[DNI_001]</code>…).</p>\n<ul>\n<li><strong>Enable it:</strong> with the <strong>🕶️</strong> icon in the message box or from <em>Settings → Anonymisation</em>.</li>\n<li><strong>Reversible and private:</strong> the mapping is stored <strong>encrypted per chat</strong> (AES-GCM) and the reply is restored <strong>only on your screen</strong>. The real values never leave the browser.</li>\n<li>A <strong>badge</strong> under your message shows how many items were protected.</li>\n</ul>\n<p class=\"doc-q\">Recognised data types</p>\n<p>Over 20 types are detected: email, phone number, national ID (DNI/NIE/NIF), company tax ID, IBAN, credit card, social security number, passport, physical address, postcode, vehicle plate, IP address, MAC address, dates (possible date of birth), social media handle, API keys and tokens (including JWT), GPS coordinates, policy number, court case and proceedings references, plus dictionaries of personal names and organisations.</p>\n<p class=\"doc-q\">Enabling or disabling types</p>\n<p>In <em>Settings → Anonymisation</em> all types are listed with a checkbox each, plus an <strong>«Enable all»</strong> switch. Turn off the ones you do not need (for example dates or IPs if they cause false positives). Your selection is remembered.</p>"
+    },
+    {
+      "id": "doc-privacidad",
+      "title": "Privacy and security",
+      "html": "\n<ul>\n<li><strong>Local inference:</strong> with WebGPU, LM Studio or local Ollama, your messages never leave your machine.</li>\n<li><strong>Everything encrypted locally:</strong> API keys, chats, projects, documents and the search index are stored encrypted with AES-GCM, using a non-exportable key that lives in the browser and never leaves it.</li>\n<li><strong>PIN lock:</strong> deters casual access on shared devices. It does not encrypt anything by itself, and needs a secure connection (https or localhost) to be enabled.</li>\n<li><strong>Incognito mode:</strong> disables saving of the current conversation.</li>\n<li><strong>Anonymisation 🕶️:</strong> see the dedicated section.</li>\n<li><strong>Security headers:</strong> the deployment adds cross-origin isolation and headers that harden the app (and enable multi-threaded WASM).</li>\n</ul>\n<p>Bear in mind that <em>cloud</em> engines receive your messages on their servers under their own policies; for maximum privacy, use local engines.</p>"
+    },
+    {
+      "id": "doc-backup",
+      "title": "Backups",
+      "html": "\n<p>Your data lives in the browser and could be cleared if it frees up space. From <em>Settings → Data</em>:</p>\n<ul>\n<li><strong>Export / Import Settings:</strong> preferences and engine configuration only.</li>\n<li><strong>Export / Import All:</strong> a complete copy (projects, agents, chats, order queue and settings) in a single JSON. API keys are excluded for security.</li>\n</ul>\n<p>wIA also requests <em>persistent storage</em> to reduce the risk of automatic eviction. Even so, export a copy from time to time.</p>"
+    },
+    {
+      "id": "doc-tema",
+      "title": "Themes and language",
+      "html": "\n<p>In <em>Settings → Experience</em> you can customise the look and the language.</p>\n<p class=\"doc-q\">Themes</p>\n<ul>\n<li><strong>System (Automatic)</strong> — default: follows your operating system's light/dark mode.</li>\n<li><strong>Tligent (Corporate)</strong> — white background, black text and red/grey brand accents.</li>\n<li><strong>Dark</strong>, <strong>Light</strong> and <strong>Vanilla</strong> (minimalist).</li>\n</ul>\n<p class=\"doc-q\">Language</p>\n<p>wIA is available in <strong>Spanish</strong> and <strong>English</strong>. By default it <strong>detects your browser language</strong>. If you pick a specific one in the language selector, that choice is <strong>remembered and takes priority</strong> over detection. The documentation changes language too.</p>"
+    },
+    {
+      "id": "doc-pwa",
+      "title": "Installation and offline use",
+      "html": "\n<p>wIA is a <strong>PWA</strong>: from a compatible browser you can <strong>install it</strong> as an application. Thanks to its service worker, the app shell is stored so it can <strong>start offline</strong>. Combined with already-cached WebGPU models, you can chat with AI <strong>in flight mode</strong>.</p>\n<p class=\"doc-tip\">After a new version is published, you may need to reload once for the service worker to serve the latest one.</p>"
+    },
+    {
+      "id": "doc-atajos",
+      "title": "Keyboard shortcuts",
+      "html": "\n<table class=\"doc-table\">\n<thead><tr><th>Shortcut</th><th>Action</th></tr></thead>\n<tbody>\n<tr><td><kbd>Enter</kbd></td><td>Send the message</td></tr>\n<tr><td><kbd>Shift</kbd> + <kbd>Enter</kbd></td><td>New line</td></tr>\n<tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>N</kbd></td><td>New chat</td></tr>\n<tr><td><kbd>/</kbd> (at the start)</td><td>Prompt library</td></tr>\n<tr><td><kbd>/</kbd><kbd>/</kbd> (at the start)</td><td>Models of the current engine</td></tr>\n<tr><td><kbd>/</kbd><kbd>/</kbd><kbd>/</kbd> (at the start)</td><td>Choose AI engine</td></tr>\n<tr><td><kbd>+</kbd> (at the start)</td><td>Queue the order</td></tr>\n<tr><td><kbd>Esc</kbd></td><td>Close dialogs/panels</td></tr>\n<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Navigate the selectors</td></tr>\n</tbody></table>"
+    },
+    {
+      "id": "doc-faq",
+      "title": "Troubleshooting",
+      "html": "\n<p class=\"doc-q\">It will not connect to a cloud engine.</p>\n<p>Check that the API Key is valid and the URL correct. wIA shows the reason (credentials, URL, network or timeout).</p>\n<p class=\"doc-q\">A WebGPU model does not load or is very slow.</p>\n<p>Check that your browser has WebGPU enabled; without it, WASM is used, which is slower. Large models take time on the first download and are cached afterwards.</p>\n<p class=\"doc-q\">On mobile the tab closes while loading a model.</p>\n<p>That is a memory issue. Use a lightweight model (up to ~500 MB) or a cloud engine. wIA warns you and offers to switch automatically.</p>\n<p class=\"doc-q\">I lost my chats.</p>\n<p>The browser may have cleared storage. Restore from <em>Import All</em> and export copies regularly.</p>\n<p class=\"doc-q\">Are the medical image results a diagnosis?</p>\n<p>No. They are indicative automatic estimates; any clinical decision belongs to a healthcare professional.</p>"
+    },
+    {
+      "id": "doc-autoria",
+      "title": "Authorship and licence",
+      "html": "\n<div class=\"doc-author-card\">\n  <div class=\"doc-author-avatar\" aria-hidden=\"true\">JdP</div>\n  <div class=\"doc-author-info\">\n    <p class=\"doc-author-name\">Created by <a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">Jesús de Pablos</a></p>\n    <p class=\"doc-author-role\">Author, design and development of wIA</p>\n    <p><a class=\"doc-author-web\" href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">🌐 jesus.depablos.es</a></p>\n  </div>\n</div>\n<p><strong>wIA</strong> is a <strong>free and open source</strong> project conceived, designed and developed by <strong>Jesús de Pablos</strong>. You may use, study, modify and share it freely under the <strong>MIT</strong> licence.</p>\n<p>The only condition is to <strong>keep the attribution</strong>: preserve the copyright notice and the credit to Jesús de Pablos (<a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">jesus.depablos.es</a>) in any copy or derivative work.</p>\n<p class=\"doc-license-note\">© 2026 Jesús de Pablos · MIT Licence · <a href=\"https://jesus.depablos.es\" target=\"_blank\" rel=\"author noopener\">jesus.depablos.es</a></p>"
+    }
+  ]
+}

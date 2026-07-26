@@ -1,0 +1,24 @@
+# Ejecuta la suite de comprobaciones de wIA en cada push y pull request.
+# Son pruebas puras de Node (sin dependencias ni navegador), así que el job
+# es rápido y no necesita instalar nada: el proyecto no tiene node_modules.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Comprobaciones (sintaxis, CSP, i18n, arranque, RAG, WebGPU, servidor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm test
+        run: npm test

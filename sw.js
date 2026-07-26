@@ -10,7 +10,7 @@
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v2607.BD';
+const CACHE = 'wia-shell-v2607.BE';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).
@@ -20,11 +20,15 @@ const CORE = [
     './js/05-workspace.js', './js/06-chat.js', './js/07-ui.js', './js/08-anon.js',
     './js/09-i18n.js', './js/10-docs.js', './js/11-rag.js', './js/12-pwa.js',
     './lang/es.json', './lang/en.json',
+    './lang/docs/es.json', './lang/docs/en.json',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
     './lib/anonimae-engine.js', './lib/anonimae-rules.json',
-    // pdf.worker es un fichero aparte que pdf.js carga bajo demanda: sin él en
-    // caché, adjuntar un PDF fallaba justo cuando no había conexión.
-    './lib/pdf.min.js', './lib/pdf.worker.min.js', './Plantilla/Version.js',
+    // pdf.worker.min.js (1 MB) NO se precachea: pdf.js solo lo pide al abrir un
+    // PDF, y cargarlo en la instalación penalizaba a todos —incluido quien nunca
+    // adjunta uno— con 1 MB de descarga. El handler de fetch lo guarda en la
+    // misma caché la primera vez que se usa, así que el offline con PDF sigue
+    // funcionando a partir de entonces.
+    './lib/pdf.min.js', './Plantilla/Version.js',
     './secure-gate.js', './webgpu-worker.js', './agents.json',
     './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png',
 ];
