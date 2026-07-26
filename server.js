@@ -44,6 +44,31 @@ function isProxyTargetAllowed(targetUrl) {
     );
 }
 
+/**
+ * isSameOriginRequest — el proxy SOLO debe atender a la propia app.
+ *
+ * Sin esta comprobación, cualquier página web que el usuario visite podía
+ * hacer fetch('http://127.0.0.1:8080/cors-proxy?url=http://192.168.1.1/…') y
+ * LEER la respuesta (el proxy devolvía Access-Control-Allow-Origin: *), lo que
+ * convertía este servidor local en un SSRF de lectura hacia la red privada del
+ * usuario mientras estuviera arrancado.
+ *
+ * El navegador añade `Origin` a toda petición cross-origin y a cualquier
+ * petición no-GET/HEAD; solo las GET del mismo origen lo omiten. Por eso
+ * "sin Origin" es seguro, y "con Origin" exige que coincida con este host.
+ */
+function isSameOriginRequest(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase();
+    if (!host) return false;
+    try {
+        return new URL(origin).host.toLowerCase() === host;
+    } catch (_) {
+        return false;
+    }
+}
+
 // Cabeceras de seguridad + aislamiento de origen cruzado. COOP+COEP habilitan
 // crossOriginIsolated → SharedArrayBuffer → WASM multihilo (onnxruntime-web más
 // rápido). credentialless no exige CORP a terceros (fuentes/CDN cargan igual).
@@ -54,6 +79,8 @@ const SECURITY_HEADERS = {
     'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=()',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'credentialless',
+    // Ver scripts/csp-policy.mjs — mantener sincronizado (npm run check:csp)
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src *; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'",
 };
 
 const MIME_TYPES = {
@@ -71,13 +98,14 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-    // Add CORS headers to all responses
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', '*');
+    // Nada de `Access-Control-Allow-Origin: *`: la app consume este servidor
+    // desde su propio origen, así que no necesita CORS y abrirlo a cualquier
+    // origen convertía el proxy en un relay legible desde webs de terceros.
+    const sameOrigin = isSameOriginRequest(req);
 
     if (req.method === 'OPTIONS') {
-        res.writeHead(200);
+        // Un preflight solo llega si alguien intenta usarnos cross-origin.
+        res.writeHead(sameOrigin ? 204 : 403);
         res.end();
         return;
     }
@@ -85,6 +113,11 @@ const server = http.createServer((req, res) => {
     // CORS Proxy endpoint
     // Format: /cors-proxy?url=https://integrate.api.nvidia.com/v1/...
     if (req.url.startsWith('/cors-proxy')) {
+        if (!sameOrigin) {
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            res.end('Forbidden: el proxy solo atiende peticiones del propio origen.');
+            return;
+        }
         const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
 
         // Health-check: la app lo usa para saber si el proxy existe
@@ -113,11 +146,14 @@ const server = http.createServer((req, res) => {
             }
             const headers = { ...req.headers };
             
-            // Remove browser headers that would cause issues on the destination server
+            // Remove browser headers that would cause issues on the destination server.
+            // `cookie` se elimina además por seguridad: son cookies de ESTE origen
+            // y no deben viajar a un tercero.
             delete headers.host;
             delete headers.origin;
             delete headers.referer;
             delete headers.connection;
+            delete headers.cookie;
 
             const client = targetUrl.protocol === 'https:' ? https : http;
 
@@ -138,9 +174,11 @@ const server = http.createServer((req, res) => {
                         responseHeaders.location = `/cors-proxy?url=${encodeURIComponent(absoluteLocation)}`;
                     } catch (_) { /* leave Location untouched if it cannot be parsed */ }
                 }
-                responseHeaders['Access-Control-Allow-Origin'] = '*';
-                responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, PATCH, DELETE';
-                responseHeaders['Access-Control-Allow-Headers'] = '*';
+                // La respuesta se sirve al mismo origen: no se añaden cabeceras
+                // CORS, y se descartan las que traiga el destino para que no
+                // reabran el acceso a orígenes ajenos.
+                delete responseHeaders['access-control-allow-origin'];
+                delete responseHeaders['access-control-allow-credentials'];
 
                 res.writeHead(proxyRes.statusCode, responseHeaders);
                 proxyRes.pipe(res, { end: true });
@@ -161,9 +199,13 @@ const server = http.createServer((req, res) => {
 
     // Static file serving
     let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url.split('?')[0]);
-    
-    // Security check: ensure filePath is within __dirname
-    if (!filePath.startsWith(__dirname)) {
+
+    // Security check: ensure filePath is within __dirname. Comparar contra
+    // `__dirname + separador` evita que un directorio HERMANO con el mismo
+    // prefijo (p. ej. «…/wIA-otro») supere el startsWith y sirva ficheros
+    // fuera de la raíz.
+    const rootWithSep = __dirname.endsWith(path.sep) ? __dirname : __dirname + path.sep;
+    if (filePath !== __dirname && !filePath.startsWith(rootWithSep)) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
         res.end('Forbidden');
         return;

@@ -1,4 +1,28 @@
-.@__thumb/
-.claude/
-.DS_Store
+# vercel.json despliega con `builds: [{ "src": "**/*", "use": "@vercel/static" }]`,
+# es decir, TODO fichero que llegue al build queda publicado en una URL. Esta
+# lista es la única barrera: lo que no esté aquí es contenido público.
+# (agents.json, lang/, lib/ y Plantilla/ SÍ se despliegan: la app los pide en runtime.)
+
+# Credenciales y estado del despliegue — nunca deben publicarse
+.env
+.env.*
+*.env
+.vercel/
+.git/
+.gitignore
+
+# Servidor y configuración de otros entornos: en Vercel no se ejecutan, así que
+# solo se servirían como texto plano revelando la configuración del proxy
+server.js
+.htaccess
+
+# Herramientas de desarrollo y documentación
 scripts/
+.claude/
+README.md
+LICENSE
+
+# Ruido del sistema y de la unidad de red
+.@__thumb/
+.DS_Store
+Thumbs.db

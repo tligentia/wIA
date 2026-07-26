@@ -77,6 +77,15 @@
 })();
 
 
+// ─── Runtime de inferencia local (Transformers.js) ──
+// URL única del módulo. Centralizada aquí para no repetir la versión en cada
+// import dinámico (03-webgpu.js y 06-chat.js la reutilizan). El worker
+// (webgpu-worker.js) corre en su propio ámbito y mantiene su propia constante
+// TRANSFORMERS_CDN_URL: manténlas sincronizadas al subir de versión.
+const TRANSFORMERS_VERSION = '3.8.1';
+const TRANSFORMERS_MODULE_URL = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${TRANSFORMERS_VERSION}/dist/transformers.min.js`;
+
+
 // ─── Performance Utilities ──────────────────
 
 /**
@@ -88,14 +97,39 @@ function debounce(fn, ms) {
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
+// ─── Estimación de tokens ───────────────────
+// Aproximación por caracteres: ~3,5 por token, que es lo razonable para una
+// mezcla de español e inglés con los tokenizadores BPE habituales. No sustituye
+// a un tokenizador real, pero para decidir qué recortar del historial basta y
+// no obliga a cargar uno por proveedor.
+const CHARS_PER_TOKEN = 3.5;
+// Colchón para lo que la estimación no ve: plantilla de chat, nombres de rol,
+// tokens especiales y el desvío del propio cálculo.
+const CONTEXT_SAFETY_MARGIN_TOKENS = 512;
+
+function estimateTokenCount(text) {
+    if (!text) return 0;
+    if (typeof text !== 'string') {
+        try { text = JSON.stringify(text); } catch (_) { return 0; }
+    }
+    return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
 /**
- * escapeHtml — reuses a single, persistent div node instead of creating
- * a new DOM element on every call (hot path during streaming).
+ * escapeHtml — escapa texto para insertarlo en HTML.
+ *
+ * Cubre también comillas simples y dobles porque el resultado se interpola
+ * tanto en nodos de texto como DENTRO de atributos (`title="…"`,
+ * `data-model="…"`). La versión anterior usaba textContent→innerHTML, que no
+ * escapa comillas: un identificador de modelo con `"` (los añade el propio
+ * usuario al pegar un repo de Hugging Face) rompía el atributo y con él la
+ * tarjeta entera. En nodos de texto las entidades se decodifican igual, así
+ * que escapar de más no cambia lo que ve el usuario.
  */
-const _escapeDiv = document.createElement('div');
+const _HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function escapeHtml(text) {
-    _escapeDiv.textContent = text;
-    return _escapeDiv.innerHTML;
+    if (text === null || text === undefined) return '';
+    return String(text).replace(/[&<>"']/g, (ch) => _HTML_ESCAPES[ch]);
 }
 
 const MARKDOWN_ALLOWED_TAGS = new Set([
@@ -158,12 +192,15 @@ function sanitizeRenderedHtml(html) {
 // ─── Provider Registry ──────────────────────
 const PROVIDERS = {
     ollama:        { name: 'Ollama (Local)',     type: 'ollama',     auth: 'none',             defaultUrl: 'http://localhost:11434',                                  defaultModel: 'gemma4:e4b',                icon: '🟢' },
-    ollama_remote: { name: 'Ollama (Remoto)',    type: 'ollama',     auth: 'optional_bearer',  defaultUrl: '',                                                        defaultModel: 'gemma4',                    icon: '🌐' },
+    ollama_remote: { name: 'Ollama (Remoto)',    type: 'ollama',     auth: 'optional_bearer',  defaultUrl: '',                                                        defaultModel: 'gemma4:e4b',                icon: '🌐' },
     ollama_cloud:  { name: 'Ollama Cloud',      type: 'ollama',     auth: 'apikey',           defaultUrl: 'https://ollama.com',                            defaultModel: 'qwen3-vl:235b-instruct',    icon: '☁️' },
     lmstudio:      { name: 'LM Studio',          type: 'openai',     auth: 'none',             defaultUrl: 'http://localhost:1234/v1',                                 defaultModel: '',                          icon: '💻' },
     groq:          { name: 'Groq',               type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.groq.com/openai/v1',                          defaultModel: 'llama-3.3-70b-versatile',   icon: '⚡' },
     openrouter:    { name: 'OpenRouter',          type: 'openai',     auth: 'apikey',           defaultUrl: 'https://openrouter.ai/api/v1',                            defaultModel: 'google/gemma-3-27b-it',     icon: '🔀' },
     gemini:        { name: 'Google Gemini',       type: 'gemini',     auth: 'apikey',           defaultUrl: 'https://generativelanguage.googleapis.com/v1beta',        defaultModel: 'gemini-2.5-flash',          icon: '✨' },
+    // El modelo por defecto debe coincidir con state.settings.providerConfigs.claude
+    // (02-state.js): si divergen, gana el de providerConfigs y el de aquí solo se
+    // usa como respaldo, con lo que la app arranca con un modelo distinto al anunciado.
     claude:        { name: 'Claude (Anthropic)',  type: 'anthropic',  auth: 'apikey',           defaultUrl: 'https://api.anthropic.com/v1',                            defaultModel: 'claude-sonnet-5',           icon: '🟣' },
     openai:        { name: 'OpenAI',              type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.openai.com/v1',                               defaultModel: 'gpt-4.1',                   icon: '🤖' },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },

@@ -143,7 +143,15 @@ async function detectLocalProviderAvailability({ selectDefault = false } = {}) {
     renderProviderOptions();
     updateSettingsActiveContext();
 
+    // Contenido mixto: una página servida por HTTPS no puede llamar a
+    // http://localhost:11434 (el navegador lo bloquea siempre). Sondearlo solo
+    // gastaba 2,5 s del arranque para un resultado imposible, así que en ese
+    // caso se marca como no alcanzable con un motivo explicable en la UI.
+    const httpsPage = window.location.protocol === 'https:';
+    const blockedByMixedContent = (url) => httpsPage && /^http:\/\//i.test(url);
+
     const probeJsonEndpoint = async (url) => {
+        if (blockedByMixedContent(url)) return false;
         try {
             const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
             return response.ok;
@@ -165,10 +173,19 @@ async function detectLocalProviderAvailability({ selectDefault = false } = {}) {
         ollama: ollamaAvailable,
         lmstudio: lmstudioAvailable,
     };
+    const mixedContentBlocked = {
+        ollama: blockedByMixedContent(PROVIDERS.ollama.defaultUrl),
+        lmstudio: blockedByMixedContent(PROVIDERS.lmstudio.defaultUrl),
+    };
     priority.forEach(id => {
+        let detail;
+        if (results[id]) detail = 'Disponible';
+        else if (mixedContentBlocked[id]) detail = 'Bloqueado (HTTPS→HTTP)';
+        else if (id === 'webgpu' && webgpuMode === 'wasm') detail = 'Solo WASM';
+        else detail = 'No detectado';
         state.providerAvailability[id] = {
             status: results[id] ? 'available' : 'unavailable',
-            detail: results[id] ? 'Disponible' : (id === 'webgpu' && webgpuMode === 'wasm' ? 'Solo WASM' : 'No detectado'),
+            detail,
             checkedAt: Date.now(),
         };
     });
@@ -241,8 +258,8 @@ async function checkProviderStatus(options = {}) {
             // Gemini REST API
             const apiKey = state.settings.apiKey;
             if (!apiKey) throw new Error('API Key requerida');
-            const url = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
-            const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+            const url = `${baseUrl}/models`;
+            const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
             if (!res.ok) throw await providerHttpError(res);
             const data = await res.json();
             models = (data.models || [])
@@ -288,7 +305,9 @@ async function checkProviderStatus(options = {}) {
             // WebGPU / Transformers.js — no server needed, models run in browser
             const support = await checkWebGPUSupport();
             
-            // Scan Cache Storage
+            // Scan Cache Storage. Sin forzar: esta comprobación es periódica y
+            // recorrer miles de entradas cada vez sale caro; el escaneo se
+            // invalida explícitamente cuando algo cambia en la caché.
             webgpuState.cachedModelIds = await getCachedWebGPUModels();
             if (runId !== providerStatusRun || state.settings.provider !== providerId) {
                 return { ok: false, stale: true, provider: providerId };
@@ -362,6 +381,11 @@ async function checkProviderStatus(options = {}) {
 
             populateModels(models);
             setProviderAvailability(providerId, 'available', support === 'webgpu' ? 'Disponible' : 'WASM');
+
+            // «Mejorar prompt» habla HTTP con el proveedor y no tiene rama WebGPU:
+            // si venimos de otro motor, el botón se quedaba visible y al pulsarlo
+            // fallaba con «Respuesta vacía del modelo». Se oculta explícitamente.
+            dom.improvePromptBtn?.classList.add('hidden');
 
             // Check if currently selected model is already loaded
             if (webgpuState.loadedModelId === state.settings.model) {
@@ -471,10 +495,17 @@ async function fetchModelCapabilities(modelName) {
     }
 
     try {
+        // getAuthHeaders es obligatorio: Ollama remoto y Ollama Cloud exigen
+        // Bearer, así que sin cabeceras esta detección de capacidades fallaba
+        // siempre en silencio en esos dos motores. El timeout evita que un
+        // servidor que no responde deje la barra de herramientas congelada.
         const res = await fetch(`${state.settings.ollamaUrl}/api/show`, {
             method: 'POST',
-            body: JSON.stringify({ name: modelName })
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ name: modelName }),
+            signal: AbortSignal.timeout(6000)
         });
+        if (!res.ok) throw await providerHttpError(res);
         const data = await res.json();
         const rawCaps = normalizeKeywordList(data.details?.capabilities || data.capabilities || []);
         const merged = new Set([...inferred, ...rawCaps]);
@@ -825,7 +856,8 @@ async function removeManualWebGPUModel(modelId) {
         for (const req of await cache.keys()) {
             if (decodeURIComponent(req.url).includes(modelId)) await cache.delete(req);
         }
-        webgpuState.cachedModelIds = await getCachedWebGPUModels();
+        invalidateWebGPUCacheScan();
+        webgpuState.cachedModelIds = await getCachedWebGPUModels({ force: true });
     } catch (e) { console.warn('[WebGPU] no se pudo limpiar la caché del modelo manual:', e); }
 
     // Si era el modelo seleccionado, volver a uno verificado
@@ -946,12 +978,15 @@ function renderModelCard(m, { isWebGPU }) {
     const isFav = isFavoriteModel(m.name);
     const disabled = m.selectable === false;
     const tags = getModelTags(m);
-    const star = `<button class="model-card-star ${isFav ? 'on' : ''}" title="${isFav ? 'Quitar de favoritos' : 'Marcar como favorito'}" onclick="event.stopPropagation(); toggleFavoriteModel('${escapeHtml(m.name)}')">${isFav ? '★' : '☆'}</button>`;
+    // Sin `onclick` inline: el id del modelo lo elige el usuario (pega un repo de
+    // Hugging Face), así que interpolarlo dentro de una cadena JS era frágil.
+    // La acción viaja en data-model-action y la resuelve el listener de la tarjeta.
+    const star = `<button class="model-card-star ${isFav ? 'on' : ''}" data-model-action="favorite" title="${isFav ? 'Quitar de favoritos' : 'Marcar como favorito'}">${isFav ? '★' : '☆'}</button>`;
     // Los modelos añadidos a mano se pueden quitar del catálogo
     const removeBtn = m.custom
-        ? `<button class="model-card-remove" title="Quitar este modelo añadido manualmente" onclick="event.stopPropagation(); removeManualWebGPUModel('${escapeHtml(m.name)}')">🗑️</button>`
+        ? `<button class="model-card-remove" data-model-action="remove" title="Quitar este modelo añadido manualmente">🗑️</button>`
         : '';
-    const repoLink = m.repoUrl ? `<a href="${m.repoUrl}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
+    const repoLink = m.repoUrl ? `<a href="${escapeHtml(m.repoUrl)}" target="_blank" rel="noopener noreferrer" class="model-card-link" title="Abrir ficha del modelo">Ver ficha</a>` : '';
 
     // Badge de estado (prioridad: en uso como asistente > cargado > caché > probado)
     let statusBadge = '';
@@ -960,7 +995,7 @@ function renderModelCard(m, { isWebGPU }) {
         const isCached = webgpuState.cachedModelIds && webgpuState.cachedModelIds.has(m.name);
         if (isVisionAssist && isActive) statusBadge = '<span class="model-status-badge loaded" title="Es el asistente visual que describe tus imágenes adjuntas">👁 En uso</span>';
         else if (isLoaded) statusBadge = '<span class="model-status-badge loaded" title="Modelo cargado en memoria">● Cargado</span>';
-        else if (isCached) statusBadge = `<span class="model-status-badge cached" title="Guardado en la caché del navegador">💾 En caché <button class="model-card-delete-cache-btn" onclick="event.stopPropagation(); deleteWebGPUModelCache('${escapeHtml(m.name)}')" title="Borrar de la caché">🗑️</button></span>`;
+        else if (isCached) statusBadge = `<span class="model-status-badge cached" title="Guardado en la caché del navegador">💾 En caché <button class="model-card-delete-cache-btn" data-model-action="delete-cache" title="Borrar de la caché">🗑️</button></span>`;
         else if (m.verified) statusBadge = '<span class="model-status-badge verified" title="Probado: carga e infiere correctamente en WebGPU">✅ Probado</span>';
         else statusBadge = '<span class="model-status-badge untested" title="Sin verificar: puede tardar o no funcionar en tu equipo">⚠️ Sin verificar</span>';
     } else if (isActive) {
@@ -1097,9 +1132,21 @@ function populateModels(models) {
 
     // ── Bind card click events ───────────────────
     modelCardsContainer.querySelectorAll('.model-card').forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (event) => {
             const modelId = card.dataset.model;
             if (!modelId) return;
+
+            // Acciones de los botones internos (estrella, borrar caché, quitar
+            // manual). Van antes que la selección de modelo y la cancelan.
+            const action = event.target.closest('[data-model-action]')?.dataset.modelAction;
+            if (action) {
+                event.stopPropagation();
+                if (action === 'favorite') toggleFavoriteModel(modelId);
+                else if (action === 'remove') removeManualWebGPUModel(modelId);
+                else if (action === 'delete-cache') deleteWebGPUModelCache(modelId);
+                return;
+            }
+
             if (card.dataset.disabled === 'true') {
                 alert('Este modelo ya está identificado y catalogado, pero todavía no está habilitado para el chat WebGPU actual.');
                 return;
@@ -1127,6 +1174,14 @@ function populateModels(models) {
             getActiveProviderConfig().model = modelId;
             fetchModelCapabilities(modelId);
             saveState();
+
+            // Precarga en 2º plano SOLO si el modelo ya está en caché del
+            // navegador: cargarlo a VRAM es casi instantáneo y deja el envío
+            // listo. Si no está cacheado, no se descarga aquí (evita bajar
+            // cientos de MB por un simple clic); se hará al empezar a escribir.
+            if (webgpuState.cachedModelIds?.has(modelId) && typeof warmUpActiveWebGPUModel === 'function') {
+                warmUpActiveWebGPUModel();
+            }
 
             // Re-render to update active card
             if (state.rawModels) populateModels(state.rawModels);
@@ -1160,7 +1215,20 @@ function populateModels(models) {
 // ─── Model Management Logic ──────────────────
 async function openModelManager() {
     dom.modelManagerModal.classList.remove('hidden');
+    bindManagedModelListActions();
     renderManagedModelList();
+}
+
+// Delegación en el contenedor (se enlaza una sola vez): el nombre del modelo lo
+// devuelve el servidor Ollama, así que no debe acabar dentro de una cadena JS.
+let _managedListBound = false;
+function bindManagedModelListActions() {
+    if (_managedListBound || !dom.managedModelList) return;
+    _managedListBound = true;
+    dom.managedModelList.addEventListener('click', (event) => {
+        const name = event.target.closest('[data-delete-model]')?.dataset.deleteModel;
+        if (name) deleteModel(name);
+    });
 }
 
 async function renderManagedModelList() {
@@ -1171,7 +1239,7 @@ async function renderManagedModelList() {
 
     try {
         const headers = getAuthHeaders();
-        const res = await fetch(`${state.settings.ollamaUrl}/api/tags`, { headers });
+        const res = await fetch(`${state.settings.ollamaUrl}/api/tags`, { headers, signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error('Error al conectar con Ollama');
         const data = await res.json();
         const models = data.models || [];
@@ -1189,7 +1257,7 @@ async function renderManagedModelList() {
                         <span class="model-item-name">${escapeHtml(m.name)}</span>
                         <span class="model-item-size">${sizeGB} GB — ${m.details?.parameter_size || 'N/A'}</span>
                     </div>
-                    <button class="btn-icon remove-model-btn" onclick="deleteModel('${m.name}')" title="Eliminar modelo">
+                    <button class="btn-icon remove-model-btn" data-delete-model="${escapeHtml(m.name)}" title="Eliminar modelo">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
                 </div>
@@ -1203,7 +1271,7 @@ async function renderManagedModelList() {
         dom.managedModelList.innerHTML = `
             <div style="text-align: center; color: var(--danger); padding: 20px;">
                 <p>${escapeHtml(failure.message)}</p>
-                ${needsDiagnosis ? '<button type="button" class="btn-secondary" onclick="document.getElementById(\'corsErrorModal\').classList.remove(\'hidden\')" style="margin-top:10px;">Ver diagnóstico</button>' : ''}
+                ${needsDiagnosis ? '<button type="button" class="btn-secondary" data-open-modal="corsErrorModal" style="margin-top:10px;">Ver diagnóstico</button>' : ''}
             </div>
         `;
     }
@@ -1217,7 +1285,8 @@ async function deleteModel(name) {
         const res = await fetch(`${state.settings.ollamaUrl}/api/delete`, {
             method: 'DELETE',
             headers,
-            body: JSON.stringify({ name })
+            body: JSON.stringify({ name }),
+            signal: AbortSignal.timeout(15000)
         });
         if (!res.ok) throw new Error('Fallo al eliminar el modelo');
         

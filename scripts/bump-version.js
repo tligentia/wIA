@@ -39,4 +39,28 @@ const updated = source
   .replace(/const VERSION_SEQUENCE = '[A-Z]{2}';/, `const VERSION_SEQUENCE = '${sequence}';`);
 
 writeFileSync(versionPath, updated);
-console.log(`Version actualizada a v${currentYear}${String(currentMonth).padStart(2, '0')}.${sequence}`);
+
+const version = `v${currentYear}${String(currentMonth).padStart(2, '0')}.${sequence}`;
+
+// Sincroniza el nombre de caché del service worker con la versión. Cambiar el
+// nombre en cada bump invalida la caché vieja del shell y fuerza al SW a
+// reprecachear los archivos nuevos (evita servir JS/estáticos obsoletos tras un
+// despliegue). Best-effort: si sw.js cambia de formato, no bloquea el bump.
+try {
+  const swPath = resolve('sw.js');
+  const swSource = readFileSync(swPath, 'utf8');
+  const swUpdated = swSource.replace(
+    /const CACHE = '[^']*';/,
+    `const CACHE = 'wia-shell-${version}';`
+  );
+  if (swUpdated !== swSource) {
+    writeFileSync(swPath, swUpdated);
+    console.log(`Caché del service worker → wia-shell-${version}`);
+  } else {
+    console.warn('Aviso: no se encontró «const CACHE = …» en sw.js; revísalo a mano.');
+  }
+} catch (e) {
+  console.warn(`Aviso: no se pudo actualizar la caché del service worker: ${e.message}`);
+}
+
+console.log(`Version actualizada a ${version}`);

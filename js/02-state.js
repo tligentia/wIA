@@ -42,6 +42,7 @@ const state = {
         modelSuccessHistory: [],  // [{provider, model}] usados con éxito, recientes primero (para fallback rápido)
         webgpuVisionModel: '',// Asistente visual elegido (tier 'vision'); vacío = el por defecto
         visionChainEnabled: true, // Conmutador de la cadena de análisis de imagen (WebGPU)
+        ragEnabled: true,     // Buscar fragmentos relevantes en los documentos del proyecto
         systemPrompt: `# System Prompt: Asistente IA Experto
 
 ## Rol y Personalidad
@@ -87,7 +88,7 @@ Cuando generes código:
             groq:          { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             openrouter:    { url: 'https://openrouter.ai/api/v1', model: 'google/gemma-3-27b-it', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             gemini:        { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
-            claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-20250514', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
+            claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             // maxTokens contenido por defecto: los modelos pequeños de navegador
@@ -170,6 +171,7 @@ const dom = {
     ollamaUrl: $('#ollamaUrl'),
     themeSelect: $('#themeSelect'),
     modelSelect: $('#modelSelect'),
+    modelSearchInput: $('#modelSearchInput'),
     refreshModels: $('#refreshModels'),
     webgpuManualAdd: $('#webgpuManualAdd'),
     webgpuManualModelInput: $('#webgpuManualModelInput'),
@@ -220,6 +222,9 @@ const dom = {
     anonymizeToggle: $('#anonymizeToggle'),
     anonSelectAll: $('#anonSelectAll'),
     anonTypesList: $('#anonTypesList'),
+    ragEnabledToggle: $('#ragEnabledToggle'),
+    ragReindexBtn: $('#ragReindexBtn'),
+    ragIndexStatus: $('#ragIndexStatus'),
     languageSelect: $('#languageSelect'),
     // Model Manager
     manageModelsBtn: $('#manageModelsBtn'),
@@ -306,8 +311,10 @@ async function init() {
     if (typeof isMobileDevice === 'function') {
         document.body.classList.toggle('mobile-device', isMobileDevice());
     }
-    // Idioma: aplica traducciones y genera la documentación en el idioma activo.
+    // Idioma: carga los diccionarios externos (lang/*.json), aplica traducciones
+    // y genera la documentación en el idioma activo.
     if (typeof bindLangSwitch === 'function') bindLangSwitch();
+    if (typeof loadTranslations === 'function') await loadTranslations();
     if (typeof refreshLocalizedUI === 'function') refreshLocalizedUI();
     // Pide almacenamiento persistente: reduce el riesgo de que el navegador
     // purgue chats/proyectos por presión de espacio (best-effort, silencioso).
@@ -327,15 +334,55 @@ async function init() {
     await localDetection;
     applySettingsToUI();
     checkProviderStatus().then(result => showConnectionValidationResult?.(result));
+    // Sondeo periódico del motor. Se salta cuando hay una generación en curso o
+    // un modelo WebGPU cargándose: checkProviderStatus reescribe la barra de
+    // estado ("Verificando…") y repinta la rejilla de modelos, lo que borraba el
+    // contador «✍️ Generando… N tkn» en mitad de la respuesta. También se salta
+    // con la pestaña oculta, para no gastar cuota de las APIs cloud en segundo
+    // plano; al volver a primer plano se comprueba una vez.
     setInterval(() => {
+        if (state.isStreaming || webgpuState?.isLoading || document.hidden) return;
         checkProviderStatus().then(result => showConnectionValidationResult?.(result));
-    }, 30000); // 30s is plenty — halved polling overhead
+    }, 30000);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden || state.isStreaming || webgpuState?.isLoading) return;
+        checkProviderStatus().then(result => showConnectionValidationResult?.(result));
+    });
     autoResizeTextarea();
 
     // Render dynamic version
     const versionEl = document.getElementById('versionTag');
     if (versionEl && window.APP_VERSION) {
         versionEl.textContent = `Vers: ${window.APP_VERSION}`;
+    }
+
+    // Precarga temprana del modelo WebGPU activo si YA está en caché del
+    // navegador: al volver a la app, cargarlo a VRAM en segundo plano deja el
+    // primer envío casi instantáneo. Solo si está cacheado (no dispara
+    // descargas sorpresa) y en tiempo ocioso para no competir con el arranque.
+    if (state.settings.provider === 'webgpu') {
+        // Escalón 1 (siempre): precalentar el runtime. Es el coste fijo de
+        // cualquier carga —importar Transformers.js, montar onnxruntime,
+        // negociar el adaptador— y no depende del modelo, así que se paga en
+        // tiempo ocioso en vez de cuando el usuario ya está esperando.
+        if (typeof scheduleWebGPUPriming === 'function') scheduleWebGPUPriming();
+
+        // Escalón 2 (solo si ya está en caché): subir el modelo a memoria. No se
+        // dispara una descarga sorpresa de cientos de MB sin que el usuario haya
+        // hecho nada.
+        if (typeof warmUpActiveWebGPUModel === 'function') {
+            const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+            idle(async () => {
+                try {
+                    if (typeof getCachedWebGPUModels === 'function') {
+                        webgpuState.cachedModelIds = await getCachedWebGPUModels();
+                    }
+                    if (webgpuState.cachedModelIds?.has(state.settings.model)) {
+                        warmUpActiveWebGPUModel();
+                    }
+                } catch (e) { /* silencioso: se cargará al escribir */ }
+            });
+        }
     }
 }
 
@@ -445,6 +492,12 @@ function getAuthHeaders() {
         headers['x-api-key'] = apiKey;
         headers['anthropic-version'] = '2023-06-01';
         headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    } else if (prov.type === 'gemini' && apiKey) {
+        // Cabecera, NO `?key=` en la URL: en query string la clave acaba dentro
+        // del parámetro `url=` del proxy CORS, en el historial y en cualquier
+        // log intermedio. `Authorization: Bearer` no sirve aquí (Google lo
+        // reserva para tokens OAuth, no para API keys).
+        headers['x-goog-api-key'] = apiKey;
     } else if ((prov.auth === 'apikey' || prov.auth === 'optional_bearer') && apiKey) {
         headers['Authorization'] = `Bearer ${apiKey}`;
     }
@@ -552,9 +605,10 @@ function updateProviderUI() {
 
     // A single validation action covers credentials, URLs and local WebGPU.
     if (dom.validateConnectionLabel) {
+        const _tr = (k, fb) => (typeof t === 'function' ? t(k, fb) : fb);
         dom.validateConnectionLabel.textContent = isWebGPU
-            ? 'Comprobar WebGPU'
-            : (prov.auth === 'apikey' ? 'Validar API Key' : 'Validar conexión');
+            ? _tr('connection.check', 'Comprobar WebGPU')
+            : (prov.auth === 'apikey' ? _tr('connection.validateKey', 'Validar API Key') : _tr('connection.validate', 'Validar conexión'));
     }
     if (dom.connectionValidationHint) {
         if (isWebGPU) {
@@ -699,6 +753,59 @@ const secretVault = {
             console.warn('No se pudo descifrar un secreto:', e);
             return '';
         }
+    },
+
+    // ── Registros grandes (chats, proyectos, índice RAG) ──────────────────
+    // Estos NO pasan por base64: un historial con imágenes ocupa megas y
+    // `btoa(String.fromCharCode(...bytes))` desbordaría la pila al expandir el
+    // array como argumentos. IndexedDB guarda ArrayBuffer y Uint8Array tal cual
+    // (clonado estructurado), así que el binario se almacena directamente:
+    // menos memoria, sin el 33 % de sobrecoste del base64 y más rápido.
+    async encryptRecord(value) {
+        // Sin WebCrypto (contexto no seguro) se guarda en claro pero MARCADO,
+        // para que la lectura sepa distinguirlo y no intente descifrarlo.
+        if (!this.available()) return { __wiaEnc: 'plain', value };
+        try {
+            const key = await this._getKey();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const plaintext = new TextEncoder().encode(JSON.stringify(value));
+            const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+            return { __wiaEnc: 'v1', iv, data };
+        } catch (e) {
+            console.warn('No se pudo cifrar el registro; se guarda en claro:', e);
+            return { __wiaEnc: 'plain', value };
+        }
+    },
+
+    /**
+     * decryptRecord — devuelve { value, wasEncrypted }.
+     *
+     * `wasEncrypted: false` señala un registro heredado en texto plano (los
+     * arrays sueltos que escribían las versiones anteriores) para que quien
+     * llama pueda reescribirlo ya cifrado.
+     */
+    async decryptRecord(record) {
+        if (record === null || record === undefined) return { value: null, wasEncrypted: true };
+        // Formato antiguo: el array iba directo a IndexedDB, sin envoltorio.
+        if (Array.isArray(record) || typeof record !== 'object') return { value: record, wasEncrypted: false };
+        if (record.__wiaEnc === 'plain') return { value: record.value, wasEncrypted: false };
+        if (record.__wiaEnc !== 'v1') return { value: record, wasEncrypted: false };
+
+        if (!this.available()) {
+            console.warn('Historial cifrado pero sin WebCrypto disponible en este contexto.');
+            return { value: null, wasEncrypted: true, unreadable: true };
+        }
+        try {
+            const key = await this._getKey();
+            const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: record.iv }, key, record.data);
+            return { value: JSON.parse(new TextDecoder().decode(pt)), wasEncrypted: true };
+        } catch (e) {
+            // La clave vive en IndexedDB junto a los datos: si se borra una y no
+            // la otra (limpieza parcial del navegador), el historial es
+            // irrecuperable. Se avisa en vez de fingir que está vacío.
+            console.error('No se pudo descifrar el historial (¿se borró la clave del navegador?):', e);
+            return { value: null, wasEncrypted: true, unreadable: true };
+        }
     }
 };
 
@@ -761,11 +868,25 @@ async function loadState() {
         // 1º IndexedDB; si no hay datos, migra desde localStorage
         let projects = null;
         let chats = null;
+        // `needsReencrypt` se activa si lo leído estaba en texto plano (versiones
+        // anteriores al cifrado): al terminar la carga se reescribe ya cifrado.
+        let needsReencrypt = false;
+        let unreadable = false;
         try {
-            projects = await idbStore.get('projects');
-            chats = await idbStore.get('chats');
+            const rawProjects = await secretVault.decryptRecord(await idbStore.get('projects'));
+            const rawChats = await secretVault.decryptRecord(await idbStore.get('chats'));
+            projects = rawProjects.value;
+            chats = rawChats.value;
+            if (rawProjects.unreadable || rawChats.unreadable) unreadable = true;
+            if ((projects && !rawProjects.wasEncrypted) || (chats && !rawChats.wasEncrypted)) needsReencrypt = true;
         } catch (e) {
             console.warn('IndexedDB no disponible, usando localStorage:', e);
+        }
+
+        if (unreadable) {
+            // No se sobrescribe nada: si el usuario recupera la clave (o restaura
+            // el perfil del navegador) sus chats siguen ahí.
+            showPersistenceAlert('No se ha podido descifrar tu historial guardado. La clave de cifrado de este navegador no está disponible (puede haberse borrado al limpiar datos del sitio). Los chats anteriores no se mostrarán, pero no se han borrado. Si tienes una copia de seguridad, restáurala desde Ajustes → Datos.');
         }
 
         let migrated = false;
@@ -792,15 +913,20 @@ async function loadState() {
 
         if (migrated) {
             try {
-                await idbStore.set('projects', state.projects);
-                await idbStore.set('chats', state.chats);
+                await persistConversationsToIdb({ notifyOnError: false });
                 // Libera la cuota de localStorage solo tras migrar con éxito
                 localStorage.removeItem('antigravity_projects');
                 localStorage.removeItem('antigravity_chats');
-                console.log('[Persistencia] chats y proyectos migrados a IndexedDB');
+                console.log('[Persistencia] chats y proyectos migrados a IndexedDB (cifrados)');
             } catch (e) {
                 console.warn('No se pudo migrar a IndexedDB, se mantiene localStorage:', e);
             }
+        } else if (needsReencrypt) {
+            // Historial de una versión anterior, guardado en claro: se reescribe
+            // cifrado en cuanto se ha leído bien.
+            persistConversationsToIdb({ notifyOnError: false })
+                .then(() => console.log('[Persistencia] historial existente reescrito cifrado'))
+                .catch(() => {});
         }
 
         // Restaura la cola de órdenes pendientes (prefijo +) de la sesión previa.
@@ -946,8 +1072,13 @@ function persistOrderQueue() {
 
 async function persistConversationsToIdb(options = {}) {
     try {
-        await idbStore.set('projects', state.projects);
-        await idbStore.set('chats', state.chats);
+        // Chats y proyectos se guardan CIFRADOS (AES-GCM con la clave no
+        // exportable de la bóveda). Antes iban en claro en IndexedDB: cualquier
+        // extensión con permiso sobre el sitio, o quien abriese las herramientas
+        // de desarrollo, leía conversaciones y documentos enteros. Es coherente
+        // con lo que promete la app y con el cifrado que ya tenían las API keys.
+        await idbStore.set('projects', await secretVault.encryptRecord(state.projects));
+        await idbStore.set('chats', await secretVault.encryptRecord(state.chats));
         return true;
     } catch (e) {
         console.warn('Failed to persist conversations to IndexedDB:', e);
@@ -1065,7 +1196,11 @@ function updateSettingsActiveContext() {
         const statusText = availability?.status === 'available'
             ? `✓ ${availability.detail || 'Disponible'}`
             : (availability?.status === 'unavailable'
-                ? 'No detectado'
+                // El detalle explica el porqué cuando lo hay (p. ej. «Bloqueado
+                // (HTTPS→HTTP)» para un motor local desde una página segura).
+                ? (availability.detail && availability.detail !== 'No detectado'
+                    ? availability.detail
+                    : 'No detectado')
                 : (availability?.status === 'error' ? 'Requiere atención' : 'Sin comprobar'));
         dom.settingsActiveAvailability.textContent = statusText;
         dom.settingsActiveAvailability.className = `settings-active-availability is-${availability?.status || 'unknown'}`;
@@ -1084,8 +1219,14 @@ function updateSettingsActiveContext() {
                 : `${modelCount} ${modelCount === 1 ? 'modelo' : 'modelos'}`;
     }
 
+    // Este encabezado lleva data-i18n en el HTML, así que applyI18n también lo
+    // reescribe: se usa la misma vía de traducción para que no se pisen entre sí
+    // según el orden en que se ejecuten.
     const modelHeading = document.getElementById('settingsHeadingModels');
-    if (modelHeading) modelHeading.textContent = `Modelos de ${provider.name}`;
+    if (modelHeading) {
+        const template = (typeof t === 'function' ? t('panel.models.headingFor', 'Modelos de {provider}') : 'Modelos de {provider}');
+        modelHeading.textContent = template.replace('{provider}', provider.name);
+    }
 }
 
 // ─── Indicador IA Local / Cloud ──────────────
@@ -1213,6 +1354,8 @@ function applySettingsToUI() {
     dom.tempValue.textContent = state.settings.temperature;
     dom.systemPrompt.value = state.settings.systemPrompt;
     dom.thinkingMode.checked = state.settings.thinkingMode;
+    if (dom.ragEnabledToggle) dom.ragEnabledToggle.checked = state.settings.ragEnabled !== false;
+    if (typeof renderRagIndexStatus === 'function') renderRagIndexStatus();
     if (dom.incognitoMode) dom.incognitoMode.checked = !!state.settings.incognitoMode;
     if (dom.privacyLockEnabled) dom.privacyLockEnabled.checked = !!state.settings.privacyLockEnabled;
     if (dom.privacyLockPin) dom.privacyLockPin.value = '';

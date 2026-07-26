@@ -62,6 +62,17 @@ const DOCS_CONTENT = {
 <p class="doc-q">Uso en móvil</p>
 <p>En teléfonos la memoria es limitada (sobre todo en iOS, con límites estrictos por pestaña). wIA lo detecta y: arranca con un <strong>modelo ligero</strong> por defecto, muestra un aviso en el panel de WebGPU y, si eliges uno grande, <strong>ofrece cambiar a uno ligero</strong> antes de cargarlo. Para máxima calidad en el móvil, usa un motor cloud.</p>` },
 
+        { id: 'doc-carga', title: 'Velocidad de carga (WebGPU)', html: `
+<p>La primera vez que usas un modelo en el navegador hay que pagar dos cosas: el <strong>runtime</strong> (el motor que ejecuta el modelo) y los <strong>pesos</strong> del modelo. wIA adelanta todo lo que puede para que no coincida con tu espera:</p>
+<ul>
+<li><strong>Al abrir la app</strong> con WebGPU activo, prepara el runtime en segundo plano. Es un coste fijo que no depende del modelo.</li>
+<li><strong>Al pinchar en la caja de mensaje</strong>, si aún no estaba listo, lo prepara.</li>
+<li><strong>Al empezar a escribir</strong>, descarga el modelo mientras redactas.</li>
+<li>Si el modelo <strong>ya está en caché</strong>, lo sube a memoria nada más abrir la app.</li>
+</ul>
+<p>Además se adapta a tu entorno: si detecta <strong>conexión lenta o ahorro de datos</strong>, elige la variante más ligera del modelo (baja antes aunque pierda algo de calidad); si tu GPU no admite <code>shader-f16</code>, evita las variantes que fallarían en ella; y si no hay GPU, cae a CPU con todos los hilos disponibles.</p>
+<p class="doc-tip">En <em>Ajustes → Conexión</em>, con WebGPU seleccionado, el monitor muestra cuánto tardó la última carga separando <strong>runtime</strong> y <strong>modelo</strong>. Si el runtime tarda mucho, es tu conexión con el CDN; si tarda el modelo, es su tamaño. También puedes usar «Preparar modelo» para cargarlo antes de escribir.</p>` },
+
         { id: 'doc-vision', title: 'Visión e imágenes', html: `
 <p>wIA puede analizar imágenes que adjuntes con el icono 📎. Según el motor y el modelo dispones de:</p>
 <ul>
@@ -85,7 +96,28 @@ const DOCS_CONTENT = {
 <li>Un <strong>prompt de sistema</strong> propio que orienta todas sus conversaciones.</li>
 <li>Una <strong>base de conocimiento</strong> de documentos (incluye lectura de PDF), disponible como referencia permanente para el modelo.</li>
 </ul>
-<p>Cambia de proyecto desde el selector superior. El proyecto «General» existe siempre por defecto.</p>` },
+<p>Cambia de proyecto desde el selector superior. El proyecto «General» existe siempre por defecto.</p>
+<p class="doc-tip"><strong>Límites:</strong> cada documento del proyecto admite hasta 4 MB y cada archivo adjunto a un mensaje hasta 2 MB. Las imágenes se redimensionan y recomprimen automáticamente en tu navegador antes de guardarse, para no agotar el almacenamiento local ni inflar cada petición.</p>` },
+
+        { id: 'doc-contexto', title: 'Límite de contexto', html: `
+<p>Cada modelo tiene una <strong>ventana de contexto</strong>: el máximo de texto que puede leer de una vez. wIA calcula cuánto cabe y envía lo que entra, reservando siempre espacio para la respuesta.</p>
+<ul>
+<li>Si la conversación es larga, se envían los <strong>mensajes más recientes</strong> y se descartan los más antiguos.</li>
+<li>Si la base de conocimiento del proyecto es grande, se incluye <strong>recortada</strong>, avisando al modelo de que lo está.</li>
+<li>Tu <strong>última pregunta nunca se descarta</strong>, aunque por sí sola sea muy larga.</li>
+</ul>
+<p>Cuando ha habido recorte, la respuesta muestra una etiqueta <strong>✂️</strong> indicando qué se quedó fuera. Si te ocurre a menudo, cambia a un modelo con más contexto o empieza un chat nuevo.</p>
+<p class="doc-tip">Los modelos del navegador (WebGPU) son los que menos contexto tienen —varios rondan los 8K tokens—, así que ahí el recorte aparece antes.</p>` },
+
+        { id: 'doc-rag', title: 'Búsqueda en tus documentos', html: `
+<p>Cuando un proyecto tiene documentos grandes, wIA no se los manda enteros al modelo: <strong>busca dentro de ellos</strong> y envía solo los fragmentos relacionados con tu pregunta.</p>
+<ol>
+<li>La primera vez descarga un <strong>modelo de búsqueda</strong> pequeño (unos 25-120 MB, se queda en caché).</li>
+<li>Trocea cada documento y lo convierte en vectores. Ese índice se guarda <strong>cifrado</strong> en tu navegador.</li>
+<li>En cada mensaje recupera los extractos más parecidos a lo que preguntas y solo esos viajan al modelo.</li>
+</ol>
+<p>Cuando ocurre, la respuesta lleva una etiqueta <strong>🔎</strong> con cuántos extractos se usaron. Puedes desactivarlo en <em>Ajustes → Generación</em>, y reconstruir el índice desde ahí si algo se queda desincronizado.</p>
+<p class="doc-tip">Los documentos pequeños no se indexan: caben enteros y montar un índice para ellos solo añadiría espera. Si la respuesta necesita algo que no está en los extractos, el modelo tiene instrucciones de decirlo en vez de inventarlo.</p>` },
 
         { id: 'doc-chat', title: 'El chat', html: `
 <ul>
@@ -133,8 +165,8 @@ const DOCS_CONTENT = {
         { id: 'doc-privacidad', title: 'Privacidad y seguridad', html: `
 <ul>
 <li><strong>Inferencia local:</strong> con WebGPU, LM Studio u Ollama local, tus mensajes no salen de tu equipo.</li>
-<li><strong>API keys cifradas:</strong> las claves no se guardan en texto plano. Se cifran con AES-GCM usando una clave no exportable que vive en el navegador.</li>
-<li><strong>Bloqueo con PIN:</strong> protege la interfaz en dispositivos compartidos.</li>
+<li><strong>Todo cifrado en local:</strong> API keys, chats, proyectos, documentos y el índice de búsqueda se guardan cifrados con AES-GCM, usando una clave no exportable que vive en el navegador y nunca sale de él.</li>
+<li><strong>Bloqueo con PIN:</strong> disuade accesos casuales en dispositivos compartidos. No cifra nada por sí mismo y requiere una conexión segura (https o localhost) para poder activarse.</li>
 <li><strong>Modo incógnito:</strong> desactiva el guardado de la conversación en curso.</li>
 <li><strong>Anonimización 🕶️:</strong> ver la sección dedicada.</li>
 <li><strong>Cabeceras de seguridad:</strong> el despliegue añade aislamiento de origen y cabeceras que endurecen la app (y habilitan el WASM multihilo).</li>
@@ -261,6 +293,17 @@ const DOCS_CONTENT = {
 <p class="doc-q">Using it on mobile</p>
 <p>Phones have limited memory (especially iOS, with strict per-tab limits). wIA detects this and: starts with a <strong>lightweight model</strong> by default, shows a notice in the WebGPU panel and, if you pick a large one, <strong>offers to switch to a light model</strong> before loading. For maximum quality on the phone, use a cloud engine.</p>` },
 
+        { id: 'doc-carga', title: 'Loading speed (WebGPU)', html: `
+<p>The first time you use an in-browser model there are two costs: the <strong>runtime</strong> (the engine that runs the model) and the model <strong>weights</strong>. wIA brings forward everything it can so it does not overlap with your wait:</p>
+<ul>
+<li><strong>When the app opens</strong> with WebGPU active, it prepares the runtime in the background. That cost is fixed and does not depend on the model.</li>
+<li><strong>When you click the message box</strong>, it prepares the runtime if it was not ready yet.</li>
+<li><strong>When you start typing</strong>, it downloads the model while you write.</li>
+<li>If the model is <strong>already cached</strong>, it is loaded into memory as soon as the app opens.</li>
+</ul>
+<p>It also adapts to your environment: if it detects a <strong>slow connection or data saver</strong>, it picks the lighter variant of the model (downloads sooner even if it loses some quality); if your GPU lacks <code>shader-f16</code>, it avoids variants that would fail on it; and with no GPU at all it falls back to CPU using every available thread.</p>
+<p class="doc-tip">In <em>Settings → Connection</em>, with WebGPU selected, the monitor shows how long the last load took, split into <strong>runtime</strong> and <strong>model</strong>. If the runtime is slow, that is your connection to the CDN; if the model is slow, that is its size. You can also use "Prepare model" to load it before typing.</p>` },
+
         { id: 'doc-vision', title: 'Vision and images', html: `
 <p>wIA can analyse images you attach with the 📎 icon. Depending on the engine and model you get:</p>
 <ul>
@@ -284,7 +327,28 @@ const DOCS_CONTENT = {
 <li>Its own <strong>system prompt</strong> guiding all its conversations.</li>
 <li>A <strong>knowledge base</strong> of documents (including PDF reading), available as permanent reference material for the model.</li>
 </ul>
-<p>Switch projects from the selector at the top. The «General» project always exists by default.</p>` },
+<p>Switch projects from the selector at the top. The «General» project always exists by default.</p>
+<p class="doc-tip"><strong>Limits:</strong> each project document can be up to 4 MB, and each file attached to a message up to 2 MB. Images are resized and re-compressed automatically in your browser before being stored, so they neither exhaust local storage nor bloat every request.</p>` },
+
+        { id: 'doc-contexto', title: 'Context limit', html: `
+<p>Every model has a <strong>context window</strong>: the maximum amount of text it can read at once. wIA works out how much fits and sends what does, always reserving room for the answer.</p>
+<ul>
+<li>If the conversation is long, the <strong>most recent messages</strong> are sent and the oldest ones are dropped.</li>
+<li>If the project knowledge base is large, it is included <strong>trimmed</strong>, and the model is told so.</li>
+<li>Your <strong>latest question is never dropped</strong>, even if on its own it is very long.</li>
+</ul>
+<p>When trimming happens, the answer shows a <strong>✂️</strong> label stating what was left out. If you see it often, switch to a model with a larger context or start a new chat.</p>
+<p class="doc-tip">In-browser models (WebGPU) have the smallest context — several are around 8K tokens — so trimming shows up sooner there.</p>` },
+
+        { id: 'doc-rag', title: 'Searching your documents', html: `
+<p>When a project has large documents, wIA does not send them whole to the model: it <strong>searches inside them</strong> and sends only the passages related to your question.</p>
+<ol>
+<li>The first time it downloads a small <strong>search model</strong> (about 25-120 MB, kept in cache).</li>
+<li>It splits each document and turns it into vectors. That index is stored <strong>encrypted</strong> in your browser.</li>
+<li>On every message it retrieves the passages closest to your question, and only those travel to the model.</li>
+</ol>
+<p>When this happens, the answer carries a <strong>🔎</strong> label with how many passages were used. You can turn it off in <em>Settings → Generation</em>, and rebuild the index from there if it ever falls out of sync.</p>
+<p class="doc-tip">Small documents are not indexed: they fit whole, and building an index for them would only add waiting. If the answer needs something that is not in the passages, the model is instructed to say so rather than make it up.</p>` },
 
         { id: 'doc-chat', title: 'The chat', html: `
 <ul>
@@ -332,8 +396,8 @@ const DOCS_CONTENT = {
         { id: 'doc-privacidad', title: 'Privacy and security', html: `
 <ul>
 <li><strong>Local inference:</strong> with WebGPU, LM Studio or local Ollama, your messages never leave your machine.</li>
-<li><strong>Encrypted API keys:</strong> keys are not stored in plain text. They are encrypted with AES-GCM using a non-exportable key that lives in the browser.</li>
-<li><strong>PIN lock:</strong> protects the interface on shared devices.</li>
+<li><strong>Everything encrypted locally:</strong> API keys, chats, projects, documents and the search index are stored encrypted with AES-GCM, using a non-exportable key that lives in the browser and never leaves it.</li>
+<li><strong>PIN lock:</strong> deters casual access on shared devices. It does not encrypt anything by itself, and needs a secure connection (https or localhost) to be enabled.</li>
 <li><strong>Incognito mode:</strong> disables saving of the current conversation.</li>
 <li><strong>Anonymisation 🕶️:</strong> see the dedicated section.</li>
 <li><strong>Security headers:</strong> the deployment adds cross-origin isolation and headers that harden the app (and enable multi-threaded WASM).</li>

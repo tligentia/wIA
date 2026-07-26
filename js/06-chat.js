@@ -42,17 +42,102 @@ function renderThinkingBlockHtml(msg, idx) {
     `;
 }
 
-function renderMessages() {
+// ─── Render incremental ─────────────────────
+// renderMessages se llama tras CADA turno, y antes reconstruía el innerHTML de
+// toda la conversación: en un chat largo eso significa reparsear cientos de
+// mensajes, rehacer el resaltado de sintaxis de todos los bloques de código y
+// perder la selección de texto del usuario, cada vez. Ahora se compara una
+// firma por mensaje y solo se toca lo que ha cambiado.
+
+/** Contador para forzar repintado cuando cambia algo externo al mensaje. */
+let _renderEpoch = 0;
+function invalidateMessageRender() { _renderEpoch++; }
+
+/** Hash corto y estable de una cadena (djb2). */
+function hashString(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+}
+
+/**
+ * messageSignature — resume TODO lo que influye en el HTML de un mensaje.
+ * Si se añade un dato nuevo a renderMessage hay que reflejarlo aquí, o el
+ * cambio no se repintará.
+ */
+function messageSignature(msg, idx) {
+    const parts = JSON.stringify([
+        _renderEpoch, idx, msg.role,
+        msg.content || '', msg.thinking || '',
+        msg.thinkingOpen ?? null,
+        state.settings.thinkingMode ? 1 : 0,
+        // isThinkingBlockOpen y el indicador de escritura dependen del estado de
+        // streaming, pero solo mientras el mensaje aún no tiene contenido.
+        (!msg.content && state.isStreaming) ? 1 : 0,
+        msg.loading?.active ? [msg.loading.phase, msg.loading.progress, msg.loading.file, msg.loading.detail, msg.loading.note] : 0,
+        msg.metrics ? [msg.metrics.tps ?? null, msg.metrics.eval_count ?? null, msg.metrics.eval_duration ?? null] : 0,
+        msg.bookmarked ? 1 : 0,
+        msg.anonCount || 0,
+        msg.contextTrim ? [msg.contextTrim.droppedMessages, msg.contextTrim.docsTruncated, msg.contextTrim.docsIncluded, msg.contextTrim.docsTotal, msg.contextTrim.mode, msg.contextTrim.chunksUsed] : 0,
+        msg.isProposal ? 1 : 0,
+        (msg.images || []).length,
+        (msg.attachedDocs || []),
+        msg.provider || '', msg.model || '',
+    ]);
+    // Se añade la longitud: dos contenidos distintos con el mismo hash de 32
+    // bits tendrían que coincidir además en tamaño para pasar desapercibidos.
+    return `${hashString(parts)}-${parts.length.toString(36)}`;
+}
+
+/**
+ * renderMessages — pinta la conversación activa.
+ * @param {{force?: boolean}} options `force` reconstruye entero (cambio de
+ *        idioma, hidratación del mapa de anonimización…).
+ */
+function renderMessages(options = {}) {
     const chat = getActiveChat();
     if (!chat) return;
 
-    dom.messagesScroll.innerHTML = chat.messages.map((msg, idx) =>
-        renderMessage(msg, idx)
-    ).join('');
+    const scroll = dom.messagesScroll;
+    const messages = chat.messages;
 
-    // Process code blocks
-    processCodeBlocks();
-    scrollToBottom();
+    // Cambiar de chat siempre reconstruye: los índices ya no significan lo mismo.
+    if (options.force || scroll.dataset.chatId !== chat.id) {
+        scroll.dataset.chatId = chat.id;
+        scroll.innerHTML = messages.map((msg, idx) => renderMessage(msg, idx)).join('');
+        processCodeBlocks();
+        scrollToBottom();
+        return;
+    }
+
+    // Sobrantes: mensajes borrados (editar, regenerar, reintentar).
+    const nodes = [...scroll.children];
+    for (let i = nodes.length - 1; i >= messages.length; i--) nodes[i].remove();
+
+    const touched = [];
+    for (let i = 0; i < messages.length; i++) {
+        const signature = messageSignature(messages[i], i);
+        const existing = nodes[i];
+        if (existing && existing.dataset.sig === signature) continue;
+
+        const html = renderMessage(messages[i], i);
+        if (existing) {
+            const holder = document.createElement('div');
+            holder.innerHTML = html;
+            const fresh = holder.firstElementChild;
+            existing.replaceWith(fresh);
+            touched.push(fresh);
+        } else {
+            scroll.insertAdjacentHTML('beforeend', html);
+            touched.push(scroll.lastElementChild);
+        }
+    }
+
+    // El resaltado de sintaxis solo se aplica a lo nuevo, no a todo el hilo.
+    touched.forEach(el => el && processCodeBlocks(el));
+    // Sin cambios no se desplaza: así no se le arranca la vista al usuario que
+    // está leyendo más arriba mientras un repintado no aporta nada.
+    if (touched.length) scrollToBottom();
 }
 
 function renderMessage(msg, idx) {
@@ -68,6 +153,30 @@ function renderMessage(msg, idx) {
 
     if (msg.loading?.active) {
         contentHtml += renderLoadingState(msg.loading);
+    }
+
+    // Aviso de recorte de contexto: el usuario debe saber que el modelo NO ha
+    // visto toda la conversación o toda la base de conocimiento, porque explica
+    // respuestas que parecen olvidar lo hablado antes.
+    if (!isUser && msg.contextTrim) {
+        const trim = msg.contextTrim;
+
+        // RAG no es un recorte forzoso sino una selección deliberada: se muestra
+        // como información (🔎), no como advertencia.
+        if (trim.mode === 'rag' && trim.chunksUsed > 0) {
+            contentHtml += `<div class="context-rag-badge" title="En vez de mandar los documentos enteros, se han buscado y enviado los fragmentos más relacionados con tu pregunta. Así cabe más conversación en el contexto del modelo.">🔎 ${trim.chunksUsed} extracto${trim.chunksUsed === 1 ? '' : 's'} de ${trim.docsIncluded} documento${trim.docsIncluded === 1 ? '' : 's'}</div>`;
+        }
+
+        const parts = [];
+        if (trim.droppedMessages > 0) {
+            parts.push(`${trim.droppedMessages} mensaje${trim.droppedMessages === 1 ? '' : 's'} antiguo${trim.droppedMessages === 1 ? '' : 's'} fuera de contexto`);
+        }
+        if (trim.docsTruncated) {
+            parts.push(`base de conocimiento recortada (${trim.docsIncluded}/${trim.docsTotal})`);
+        }
+        if (parts.length) {
+            contentHtml += `<div class="context-trim-badge" title="La conversación supera la ventana de contexto de este modelo (${formatTokens(getModelContextWindow())} tokens). Se ha enviado lo más reciente. Para conservar todo el hilo, usa un modelo con más contexto o empieza un chat nuevo.">✂️ ${escapeHtml(parts.join(' · '))}</div>`;
+        }
     }
 
     let displayContent = msg.content || '';
@@ -107,9 +216,9 @@ function renderMessage(msg, idx) {
                 const provLabel = getCompactProviderLabel(c.provider);
                 const modelLabel = getCompactModelLabel(c.model, c.provider);
                 const icon = getProviderDef(c.provider)?.icon || '⚡';
-                const p = c.provider.replace(/'/g, "\\'");
-                const m = c.model.replace(/'/g, "\\'");
-                return `<button class="error-fallback-btn" onclick="fallbackToModel(${idx}, '${p}', '${m}')" title="Reintentar con ${escapeHtml(provLabel)} · ${escapeHtml(modelLabel)}"><span class="efb-icon">${icon}</span> ${escapeHtml(modelLabel)}<span class="efb-prov">${escapeHtml(provLabel)}</span></button>`;
+                // El motor y el modelo viajan en data-*, no interpolados en una
+                // cadena JS: ya no hay que escapar comillas a mano.
+                return `<button class="error-fallback-btn" data-msg-action="fallback" data-idx="${idx}" data-provider="${escapeHtml(c.provider)}" data-model="${escapeHtml(c.model)}" title="Reintentar con ${escapeHtml(provLabel)} · ${escapeHtml(modelLabel)}"><span class="efb-icon">${icon}</span> ${escapeHtml(modelLabel)}<span class="efb-prov">${escapeHtml(provLabel)}</span></button>`;
             }).join('');
             fallbackHtml = `
                 <div class="error-fallback">
@@ -128,7 +237,7 @@ function renderMessage(msg, idx) {
                 </div>
                 ${fallbackHtml}
                 <div class="error-footer" style="display: flex; justify-content: flex-end; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-                    <button class="btn-retry" onclick="retryMessage(${idx})">
+                    <button class="btn-retry" data-msg-action="retry" data-idx="${idx}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                         ${(typeof t === 'function' ? t('error.retry') : 'Reintentar ahora')}
                     </button>
@@ -155,7 +264,7 @@ function renderMessage(msg, idx) {
         if (msg.metrics.eval_count && msg.metrics.eval_duration) {
             tps = (msg.metrics.eval_count / (msg.metrics.eval_duration / 1e9)).toFixed(2);
         }
-        metricsHtml = `<span class="metrics-btn" onclick="showMetricsModal(${idx})" title="Geek Info">⏱️ ${tps} T/s</span>`;
+        metricsHtml = `<span class="metrics-btn" data-msg-action="metrics" data-idx="${idx}" role="button" tabindex="0" title="Geek Info">⏱️ ${tps} T/s</span>`;
     }
 
     // Message action buttons
@@ -164,21 +273,21 @@ function renderMessage(msg, idx) {
     if (isUser) {
         actionsHtml = `
             <div class="message-actions">
-                <button class="msg-action-btn msg-save-prompt-btn" onclick="saveMessageAsPrompt(${idx})" title="Guardar como prompt">➕</button>
-                <button class="msg-action-btn" onclick="editMessage(${idx})" title="Editar mensaje">✏️ Editar</button>
-                <button class="msg-action-btn ${isBookmarked}" onclick="toggleBookmark(${idx})" title="Marcar">⭐</button>
+                <button class="msg-action-btn msg-save-prompt-btn" data-msg-action="save-prompt" data-idx="${idx}" title="Guardar como prompt">➕</button>
+                <button class="msg-action-btn" data-msg-action="edit" data-idx="${idx}" title="Editar mensaje">✏️ Editar</button>
+                <button class="msg-action-btn ${isBookmarked}" data-msg-action="bookmark" data-idx="${idx}" title="Marcar">⭐</button>
             </div>`;
     } else if (!isError) {
         actionsHtml = `
             <div class="message-actions">
-                <button class="msg-action-btn" onclick="copyFullResponse(${idx}, this)" title="Copiar respuesta">📋 Copiar</button>
-                <button class="msg-action-btn" onclick="regenerateResponse(${idx})" title="Regenerar">🔄 Regenerar</button>
-                <button class="msg-action-btn ${isBookmarked}" onclick="toggleBookmark(${idx})" title="Marcar">⭐</button>
+                <button class="msg-action-btn" data-msg-action="copy" data-idx="${idx}" title="Copiar respuesta">📋 Copiar</button>
+                <button class="msg-action-btn" data-msg-action="regenerate" data-idx="${idx}" title="Regenerar">🔄 Regenerar</button>
+                <button class="msg-action-btn ${isBookmarked}" data-msg-action="bookmark" data-idx="${idx}" title="Marcar">⭐</button>
             </div>`;
     }
 
     return `
-        <div class="message ${msg.role} ${isError ? 'message-error' : ''}" id="msg-${idx}">
+        <div class="message ${msg.role} ${isError ? 'message-error' : ''}" id="msg-${idx}" data-sig="${messageSignature(msg, idx)}">
             <div class="message-inner">
                 <div class="message-avatar">${avatarContent}</div>
                 <div class="message-body">
@@ -187,7 +296,7 @@ function renderMessage(msg, idx) {
                         ${contentHtml}
                         ${msg.isProposal ? `
                         <div class="proposal-actions">
-                            <button class="btn-primary apply-proposal-btn" onclick="applyProposal(${idx})" title="Usar este prompt mejorado">
+                            <button class="btn-primary apply-proposal-btn" data-msg-action="apply-proposal" data-idx="${idx}" title="Usar este prompt mejorado">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
                                 Usar este prompt
                             </button>
@@ -340,7 +449,7 @@ function getFallbackCandidates(excludeProvider, excludeModel, limit = 4) {
 }
 
 // Cambia a otro motor+modelo y reintenta el mensaje fallido.
-window.fallbackToModel = (idx, provider, model) => {
+window.fallbackToModel = async (idx, provider, model) => {
     const chat = getActiveChat();
     if (!chat || state.isStreaming) return;
     if (!(chat.messages[idx] && chat.messages[idx].role === 'assistant')) return;
@@ -350,7 +459,18 @@ window.fallbackToModel = (idx, provider, model) => {
     saveCurrentProviderConfig();
     saveState();
     if (typeof applySettingsToUI === 'function') applySettingsToUI();
-    if (typeof checkProviderStatus === 'function') checkProviderStatus();
+    // Hay que ESPERAR a la comprobación: su lógica de «el modelo no está en el
+    // catálogo → usa el primero» puede reescribir state.settings.model. Lanzada
+    // sin await, esa reescritura caía en mitad del reintento y se acababa
+    // generando con un modelo distinto del que eligió el usuario.
+    if (typeof checkProviderStatus === 'function') {
+        try { await checkProviderStatus(); } catch (e) { /* el reintento decidirá */ }
+        // La comprobación puede haber caído a otro modelo; restauramos el elegido.
+        if (state.settings.model !== model) {
+            state.settings.model = model;
+            getActiveProviderConfig().model = model;
+        }
+    }
     chat.messages.splice(idx, 1);
     saveState();
     renderMessages();
@@ -394,7 +514,7 @@ function renderLoadingState(loading) {
     const sourceUrlHtml = loading.sourceUrl
         ? `<div class="loading-card-source">
                 <code class="loading-card-url" title="${escapeHtml(loading.sourceUrl)}">${escapeHtml(loading.sourceUrl)}</code>
-                <button class="loading-card-copy-btn" type="button" onclick="copyText('${loading.sourceUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', this)" title="Copiar URL de carga">📋</button>
+                <button class="loading-card-copy-btn" type="button" data-msg-action="copy-url" data-url="${escapeHtml(loading.sourceUrl)}" title="Copiar URL de carga">📋</button>
            </div>`
         : '';
     const percent = Number.isFinite(loading.progress) ? Math.max(0, Math.min(100, loading.progress)) : null;
@@ -491,7 +611,7 @@ function patchStreamingLoadingCard(contentEl, loading) {
     const nextSourceHtml = loading.sourceUrl
         ? `<div class="loading-card-source">
                 <code class="loading-card-url" title="${escapeHtml(loading.sourceUrl)}">${escapeHtml(loading.sourceUrl)}</code>
-                <button class="loading-card-copy-btn" type="button" onclick="copyText('${loading.sourceUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', this)" title="Copiar URL de carga">📋</button>
+                <button class="loading-card-copy-btn" type="button" data-msg-action="copy-url" data-url="${escapeHtml(loading.sourceUrl)}" title="Copiar URL de carga">📋</button>
            </div>`
         : '';
     if (sourceEl) {
@@ -578,7 +698,7 @@ async function getWebGPURawImages(imageMetaList, forceInline = false) {
         return imageMetaList.map(img =>
             `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`);
     }
-    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
     webgpuState.hfModule = hf;
     const { RawImage } = hf;
 
@@ -669,7 +789,7 @@ async function analyzeImagesForWebGPUInline(imageMetaList = [], onProgress, user
     // getWebGPURawImages puede devolver data-URLs en modo worker; aquí forzamos
     // RawImage reales porque los motores de visión corren inline.
     const dataUrls = normalized.map(img => `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`);
-    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
     webgpuState.hfModule = hf;
     const rawImages = await Promise.all(dataUrls.map(u => hf.RawImage.fromURL(u)));
 
@@ -952,6 +1072,13 @@ function buildWebGPUConversation(chat, systemContent = '', useVision = false) {
         conversationHistory.push({ role: 'system', content: systemContent.trim() });
     }
 
+    // Los modelos de navegador son los que menos contexto tienen (8K en varios
+    // del catálogo), así que aquí el recorte es especialmente necesario: sin él
+    // el modelo empieza a divagar sin que nada lo explique. Se recolecta primero
+    // y se recorta al final, para no romper el emparejamiento con las imágenes.
+    const budget = getPromptTokenBudget() - estimateTokenCount(systemContent);
+    const entries = [];
+
     for (const msg of chat.messages) {
         if (msg.role === 'assistant' && !msg.content) continue;
         if (msg.role === 'tool') continue;
@@ -960,29 +1087,46 @@ function buildWebGPUConversation(chat, systemContent = '', useVision = false) {
             const normalizedImages = normalizeImageMeta(msg.imageMeta, msg.images || []);
             if (normalizedImages.length > 0) {
                 const content = normalizedImages.map(() => ({ type: 'image' }));
-                normalizedImages.forEach(img => imageMetaList.push(img));
-
                 const text = (msg.content || '').trim();
                 content.push({
                     type: 'text',
                     text: text || 'Describe la imagen y responde a la petición del usuario.'
                 });
 
-                conversationHistory.push({ role: msg.role, content });
+                entries.push({
+                    value: { role: msg.role, content },
+                    // Las imágenes se guardan JUNTO al turno, no en una lista
+                    // aparte: si el recorte descarta este mensaje, sus imágenes
+                    // se van con él y no queda un `{type:'image'}` huérfano
+                    // apuntando a un tensor que ya no se envía.
+                    images: normalizedImages,
+                    tokens: estimateTokenCount(text) + normalizedImages.length * 300
+                });
                 continue;
             }
         }
 
         if (!useVision && msg.role === 'user' && Array.isArray(msg.imageCaptions) && msg.imageCaptions.length > 0) {
-            conversationHistory.push({
-                role: msg.role,
-                content: `${msg.content || ''}${formatWebGPUImageAssistContext(msg.imageCaptions)}`
+            const withCaptions = `${msg.content || ''}${formatWebGPUImageAssistContext(msg.imageCaptions)}`;
+            entries.push({
+                value: { role: msg.role, content: withCaptions },
+                tokens: estimateTokenCount(withCaptions)
             });
             continue;
         }
 
-        conversationHistory.push({ role: msg.role, content: msg.content || '' });
+        entries.push({
+            value: { role: msg.role, content: msg.content || '' },
+            tokens: estimateTokenCount(msg.content)
+        });
     }
+
+    const { kept, dropped } = applyHistoryBudget(entries, budget);
+    kept.forEach(entry => {
+        conversationHistory.push(entry.value);
+        (entry.images || []).forEach(img => imageMetaList.push(img));
+    });
+    noteContextTrim(chat, { droppedMessages: dropped, docsIncluded: 0, docsTotal: 0, docsTruncated: false });
 
     if (conversationHistory.length > 0) {
         const last = conversationHistory[conversationHistory.length - 1];
@@ -1061,6 +1205,14 @@ async function improvePrompt() {
     const originalText = dom.messageInput.value.trim();
     if (!originalText || state.isStreaming) return;
 
+    // Red de seguridad: esta función solo habla HTTP con el proveedor y no tiene
+    // rama WebGPU. El botón ya se oculta con ese motor; si aun así llegara aquí,
+    // más vale un aviso claro que un «Respuesta vacía del modelo».
+    if (getProviderDef(state.settings.provider).type === 'webgpu') {
+        alert('«Mejorar prompt» todavía no está disponible con el motor WebGPU local. Cambia a otro motor para usarlo.');
+        return;
+    }
+
     dom.improvePromptBtn.classList.add('active-optimization');
     dom.improvePromptBtn.disabled = true;
 
@@ -1085,8 +1237,11 @@ async function improvePrompt() {
         
         const provType = getProviderDef(state.settings.provider).type;
         const headers = getAuthHeaders();
+        // Es una llamada no-streaming y corta: si el motor no contesta, el botón
+        // no puede quedarse deshabilitado para siempre.
+        const improveSignal = AbortSignal.timeout(30000);
         let url, payload, optimizedText;
-        
+
         if (provType === 'ollama') {
             url = `${state.settings.ollamaUrl}/api/chat`;
             payload = {
@@ -1098,7 +1253,7 @@ async function improvePrompt() {
                 stream: false,
                 options: { temperature: 0.4, num_predict: 500 }
             };
-            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: improveSignal });
             if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
             const data = await response.json();
             optimizedText = data.message?.content?.trim();
@@ -1115,20 +1270,19 @@ async function improvePrompt() {
                 temperature: 0.4,
                 max_tokens: 500
             };
-            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: improveSignal });
             if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
             const data = await response.json();
             optimizedText = data.choices?.[0]?.message?.content?.trim();
             
         } else if (provType === 'gemini') {
-            const apiKey = state.settings.apiKey;
-            url = `${state.settings.ollamaUrl}/models/${state.settings.model}:generateContent?key=${apiKey}`;
+            url = `${state.settings.ollamaUrl}/models/${state.settings.model}:generateContent`;
             payload = {
                 system_instruction: { parts: [{ text: systemInstruction }] },
                 contents: [{ role: 'user', parts: [{ text: originalText }] }],
                 generationConfig: { temperature: 0.4, maxOutputTokens: 500 }
             };
-            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: improveSignal });
             if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
             const data = await response.json();
             optimizedText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -1142,7 +1296,7 @@ async function improvePrompt() {
                 max_tokens: 500,
                 temperature: 0.4
             };
-            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+            const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: improveSignal });
             if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
             const data = await response.json();
             optimizedText = data.content?.[0]?.text?.trim();
@@ -1286,6 +1440,34 @@ async function sendMessage(content, autoSendBody = null) {
 
     const provType = getProviderDef(state.settings.provider).type;
 
+    // ── Recuperación sobre los documentos del proyecto (RAG) ─────────────────
+    // Va aquí, antes de bifurcar por motor, porque los cuatro constructores de
+    // mensajes son síncronos: el resultado se deja en state._ragContext y
+    // buildSystemContext lo recoge. Si falla, se sigue con el recorte de
+    // siempre; nunca debe impedir enviar el mensaje.
+    if (typeof prepareRagContext === 'function') {
+        const lastUserMessage = [...chat.messages].reverse().find(m => m.role === 'user');
+        const queryText = (lastUserMessage?.content || '').split('\n\n--- Archivo adjunto:')[0];
+        try {
+            await prepareRagContext(chat, queryText, {
+                onProgress: (pct, info) => {
+                    setMessageLoadingState(assistantMsg, {
+                        phase: 'initializing',
+                        detail: 'Preparando la base de conocimiento del proyecto para buscar en ella.',
+                        progress: pct,
+                        progressLabel: 'Indexando',
+                        file: info?.file || '',
+                        note: 'Solo la primera vez por documento: después las búsquedas son instantáneas. Todo ocurre en tu navegador.'
+                    });
+                    updateStreamingMessage(msgIdx, assistantMsg);
+                }
+            });
+        } catch (e) {
+            console.warn('[RAG] omitido en este envío:', e);
+        }
+        clearMessageLoadingState(assistantMsg);
+    }
+
     // ── WebGPU Branch ────────────────────────────────────────────────────────
     if (provType === 'webgpu') {
         // Salvaguarda móvil: antes de cargar un modelo grande que podría agotar
@@ -1400,10 +1582,13 @@ async function sendMessage(content, autoSendBody = null) {
             });
             updateStreamingMessage(msgIdx, assistantMsg);
 
-            // Build conversation context
-            const proj = state.projects.find(p => p.id === chat.projectId) || getActiveProject();
-            let systemContent = state.settings.systemPrompt || '';
-            if (proj.systemPrompt?.trim()) systemContent += `\n\n${proj.systemPrompt}`;
+            // Build conversation context.
+            // Se usa el mismo constructor que el resto de motores: además de
+            // presupuestar el tamaño, incorpora la BASE DE CONOCIMIENTO del
+            // proyecto, que en la rama WebGPU no se estaba enviando nunca (los
+            // documentos adjuntos a un agente se ignoraban en silencio al usar
+            // un modelo local).
+            const systemContent = buildSystemContext(chat, getPromptTokenBudget()).text;
 
             if (!useVisionTask && supportsWebGPUImageAssist() && imageAssistMessages.length > 0) {
                 setMessageLoadingState(assistantMsg, {
@@ -1526,6 +1711,11 @@ async function sendMessage(content, autoSendBody = null) {
                         updateStreamingMessage(msgIdx, assistantMsg);
                     }, 'text-generation');
 
+                    // Guarda: loadWebGPUModel devuelve null si hay otra carga en
+                    // curso (guarda isLoading). Sin esto, runWebGPUGeneration(null)
+                    // reventaría al leer .__omnimodal/.__worker sobre null.
+                    if (!fallbackPipe) throw new Error('No se pudo inicializar el modelo de reserva WebGPU (otra carga en curso).');
+
                     conversationHistory = buildWebGPUConversation(chat, systemContent, false).conversationHistory;
                     setMessageLoadingState(assistantMsg, {
                         phase: 'generating',
@@ -1633,7 +1823,11 @@ async function sendMessage(content, autoSendBody = null) {
         return;
     }
     // ── End WebGPU Branch ────────────────────────────────────────────────────
-    
+
+    // Marca de relevo: la pone la rama de llamada a herramienta para que el
+    // `finally` deje el cierre del streaming a la continuación encadenada.
+    let handedOffToToolFollowUp = false;
+
     try {
         const headers = getAuthHeaders();
         // Solo usar autoSendBody si es un array de mensajes (para el optimizador de prompts u otros)
@@ -1841,8 +2035,8 @@ async function sendMessage(content, autoSendBody = null) {
             }
             
             const response = await fetch(
-                `${state.settings.ollamaUrl}/models/${state.settings.model}:streamGenerateContent?alt=sse&key=${apiKey}`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody), signal: state.abortController.signal }
+                `${state.settings.ollamaUrl}/models/${state.settings.model}:streamGenerateContent?alt=sse`,
+                { method: 'POST', headers, body: JSON.stringify(reqBody), signal: state.abortController.signal }
             );
             if (!response.ok) throw new Error(`Error: ${response.status} ${response.statusText}`);
             
@@ -1894,14 +2088,16 @@ async function sendMessage(content, autoSendBody = null) {
             // Anthropic Messages API streaming
             const anthropicData = buildAnthropicMessages(chat);
             
+            // Sin top_k: Anthropic lo reserva para casos avanzados y desaconseja
+            // combinarlo con top_p; además los modelos con razonamiento extendido
+            // rechazan la petición si llegan los tres muestreadores a la vez.
             let reqBody = {
                 model: state.settings.model,
                 messages: anthropicData.messages,
                 max_tokens: parseInt(state.settings.maxTokens || 8192),
                 stream: true,
                 temperature: parseFloat(state.settings.temperature),
-                top_p: parseFloat(state.settings.topP || 0.9),
-                top_k: parseInt(state.settings.topK || 40)
+                top_p: parseFloat(state.settings.topP || 0.9)
             };
             if (anthropicData.system) {
                 reqBody.system = anthropicData.system;
@@ -1964,8 +2160,6 @@ async function sendMessage(content, autoSendBody = null) {
         
         // Tool Call Proxy Logic (Ollama & OpenAI)
         if (pendingToolCall && pendingToolCall.length > 0) {
-            state.isStreaming = false;
-            
             const tool = pendingToolCall[0];
             const searchQuery = tool.function.arguments?.query || '';
             assistantMsg.content = `*(🌐 Buscando en Internet: "${searchQuery}"...)*\n\n`;
@@ -1979,11 +2173,18 @@ async function sendMessage(content, autoSendBody = null) {
 
             const toolMsg = { role: 'tool', content: searchResult };
             chat.messages.push(toolMsg);
-            
+
+            // La segunda vuelta se marca para que el `finally` de ESTA llamada no
+            // toque el estado de streaming: en una función async, `return promesa`
+            // dentro de un try ejecuta el finally ANTES de que la promesa se
+            // resuelva. Antes eso ponía isStreaming=false y devolvía el botón de
+            // enviar mientras la continuación seguía generando, permitiendo lanzar
+            // dos generaciones en paralelo.
+            handedOffToToolFollowUp = true;
             const loopMessages = buildApiMessages(chat);
             return sendMessage('', loopMessages);
         }
-        
+
     } catch (e) {
         if (e.name === 'AbortError') {
             assistantMsg.content += '\n\n*[Generación detenida]*';
@@ -1994,19 +2195,24 @@ async function sendMessage(content, autoSendBody = null) {
         }
         updateStreamingMessage(msgIdx, assistantMsg);
     } finally {
-        state.isStreaming = false;
-        state.abortController = null;
-        dom.stopBtn.classList.add('hidden');
-        dom.sendBtn.classList.remove('hidden');
-        noteGenerationOutcome(assistantMsg);
-        chat.updatedAt = Date.now();
-        saveState();
-        renderChatList();
-        renderMessages();
+        // Si hemos encadenado una segunda vuelta por una llamada a herramienta,
+        // el cierre lo hará esa llamada: aquí no se toca nada o dejaríamos la UI
+        // desbloqueada con una generación todavía en curso.
+        if (!handedOffToToolFollowUp) {
+            state.isStreaming = false;
+            state.abortController = null;
+            dom.stopBtn.classList.add('hidden');
+            dom.sendBtn.classList.remove('hidden');
+            noteGenerationOutcome(assistantMsg);
+            chat.updatedAt = Date.now();
+            saveState();
+            renderChatList();
+            renderMessages();
 
-        // Auto-generate title after first successful exchange
-        if (chat.messages.length >= 2 && !chat.autoTitled && typeof autoTitleChat === 'function') {
-            autoTitleChat(chat.id);
+            // Auto-generate title after first successful exchange
+            if (chat.messages.length >= 2 && !chat.autoTitled && typeof autoTitleChat === 'function') {
+                autoTitleChat(chat.id);
+            }
         }
     }
 }
@@ -2161,60 +2367,201 @@ function parseDuckDuckGoLite(html) {
     return out;
 }
 
+// ─── Presupuesto de contexto ────────────────
+// Antes se enviaba SIEMPRE el historial completo más todos los documentos del
+// proyecto íntegros. En cuanto la conversación crecía —o el proyecto tenía una
+// base de conocimiento de cierto tamaño— se desbordaba la ventana del modelo:
+// unos proveedores devolvían un 400 críptico y otros truncaban por su cuenta
+// (perdiendo justo el principio, que es donde vive el system prompt). Ahora se
+// calcula un presupuesto y se recorta de forma explícita y visible.
+
+/** Ventana de contexto del modelo activo, en tokens. */
+function getModelContextWindow() {
+    const providerId = state.settings.provider;
+    const modelId = state.settings.model;
+
+    if (providerId === 'webgpu') {
+        const def = WEBGPU_MODELS.find(m => m.id === modelId)
+            || (typeof getWebGPUCustomModels === 'function' ? getWebGPUCustomModels().find(m => m.id === modelId) : null);
+        return Number(def?.context) > 0 ? Number(def.context) : 8192;
+    }
+
+    const meta = (state.rawModels || []).find(m => m.name === modelId || m.id === modelId);
+    const ctx = Number(meta?.context ?? meta?.context_length);
+    // Sin metadatos fiables se asume 8K: pasarse por abajo degrada la calidad,
+    // pasarse por arriba rompe la petición. Se prefiere lo primero.
+    return Number.isFinite(ctx) && ctx > 0 ? ctx : 8192;
+}
+
+/** Tokens disponibles para el prompt, dejando sitio para la respuesta. */
+function getPromptTokenBudget() {
+    const context = getModelContextWindow();
+    const reserveForAnswer = parseInt(state.settings.maxTokens || 4096) || 4096;
+    return Math.max(1024, context - reserveForAnswer - CONTEXT_SAFETY_MARGIN_TOKENS);
+}
+
+// Como mucho la mitad del presupuesto se gasta en la base de conocimiento: el
+// resto tiene que quedar para el system prompt y la conversación real.
+const PROJECT_DOCS_BUDGET_RATIO = 0.5;
+
+/**
+ * buildSystemContext — system prompt global + del proyecto + base de
+ * conocimiento, recortada al presupuesto. Compartida por los cuatro
+ * constructores (antes cada uno duplicaba esta lógica con textos distintos).
+ */
+function buildSystemContext(chat, budget) {
+    const proj = state.projects.find(p => p.id === chat.projectId) || getActiveProject();
+    let text = '';
+    if (state.settings.systemPrompt?.trim()) text += state.settings.systemPrompt.trim() + '\n\n';
+    if (proj?.systemPrompt?.trim()) text += `[INSTRUCCIONES DEL PROYECTO]: ${proj.systemPrompt.trim()}\n\n`;
+
+    const docs = (proj?.documents || []).filter(d => d?.data);
+    if (docs.length === 0) return { text: text.trim(), docsIncluded: 0, docsTotal: 0, docsTruncated: false };
+
+    // Si la recuperación por similitud ha encontrado fragmentos para esta
+    // consulta, se envían ESOS en vez de los documentos enteros. Es la
+    // diferencia entre gastar el contexto en lo que viene al caso o en las
+    // primeras páginas de cada archivo. prepareRagContext lo deja preparado
+    // antes de construir los mensajes (aquí no se puede esperar a nada async).
+    const rag = state._ragContext;
+    if (rag && rag.projectId === proj.id && rag.chunks?.length && typeof formatRagContext === 'function') {
+        return {
+            text: (text + formatRagContext(rag)).trim(),
+            docsIncluded: rag.docsMatched,
+            docsTotal: rag.docsTotal,
+            docsTruncated: false,
+            mode: 'rag',
+            chunksUsed: rag.chunks.length,
+        };
+    }
+
+    const docsBudget = Math.max(
+        256,
+        Math.floor(budget * PROJECT_DOCS_BUDGET_RATIO) - estimateTokenCount(text)
+    );
+
+    let used = 0;
+    let docsIncluded = 0;
+    let docsTruncated = false;
+    let docsText = '';
+
+    for (const doc of docs) {
+        const header = `\n--- Archivo Base: ${doc.name} ---\n`;
+        const remaining = docsBudget - used - estimateTokenCount(header);
+        if (remaining <= 64) { docsTruncated = true; break; }
+
+        const body = String(doc.data);
+        const bodyTokens = estimateTokenCount(body);
+        if (bodyTokens <= remaining) {
+            docsText += `${header}${body}\n`;
+            used += estimateTokenCount(header) + bodyTokens;
+        } else {
+            // Cabe un trozo: se incluye recortado y se dice explícitamente, para
+            // que el modelo no dé por completo lo que no lo está.
+            const slice = body.slice(0, Math.floor(remaining * CHARS_PER_TOKEN));
+            docsText += `${header}${slice}\n[…documento recortado por límite de contexto…]\n`;
+            used = docsBudget;
+            docsTruncated = true;
+        }
+        docsIncluded++;
+    }
+
+    if (docsIncluded > 0) {
+        text += '[BASE DE CONOCIMIENTO DEL PROYECTO]:\n' + docsText;
+        if (docsTruncated || docsIncluded < docs.length) {
+            text += `\n[Aviso: se han incluido ${docsIncluded} de ${docs.length} documentos, recortados para caber en el contexto del modelo.]\n`;
+        }
+        text += '\nUtiliza la información de esta base de conocimiento cuando aplique.\n\n';
+    }
+
+    return {
+        text: text.trim(),
+        docsIncluded,
+        docsTotal: docs.length,
+        docsTruncated: docsTruncated || docsIncluded < docs.length,
+    };
+}
+
+/**
+ * applyHistoryBudget — se queda con los mensajes más recientes que caben.
+ *
+ * Recorta por el principio (lo más antiguo) y nunca elimina el último turno del
+ * usuario, aunque por sí solo desborde: en ese caso el proveedor dará un error
+ * comprensible, que es mejor que enviar una conversación sin la pregunta.
+ * Devuelve además cuántos se descartaron para poder avisar en la interfaz.
+ */
+function applyHistoryBudget(entries, budget) {
+    let used = 0;
+    const kept = [];
+    for (let i = entries.length - 1; i >= 0; i--) {
+        const cost = entries[i].tokens;
+        if (kept.length > 0 && used + cost > budget) break;
+        kept.unshift(entries[i]);
+        used += cost;
+    }
+    return { kept, dropped: entries.length - kept.length, used };
+}
+
+/** Extrae de buildSystemContext lo que hay que enseñar al usuario. */
+function describeSystemContext(system) {
+    return {
+        docsIncluded: system.docsIncluded,
+        docsTotal: system.docsTotal,
+        docsTruncated: system.docsTruncated,
+        mode: system.mode || 'full',
+        chunksUsed: system.chunksUsed || 0,
+    };
+}
+
+/** Deja constancia del recorte en el mensaje en curso para poder mostrarlo. */
+function noteContextTrim(chat, info) {
+    const last = chat?.messages?.[chat.messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    if (info.droppedMessages > 0 || info.docsTruncated || info.mode === 'rag') last.contextTrim = info;
+    else delete last.contextTrim;
+}
+
 // ─── Message builders per provider type ─────
 function buildApiMessages(chat) {
-    const provType = getProviderDef(state.settings.provider).type;
-    
     // For Gemini and Anthropic, use their specific builders during streaming
     // This function is used for Ollama & OpenAI-compatible
     const messages = [];
-    const proj = state.projects.find(p => p.id === chat.projectId) || getActiveProject();
-    
-    let combinedSystem = '';
-    if (state.settings.systemPrompt.trim()) combinedSystem += state.settings.systemPrompt + '\n\n';
-    if (proj.systemPrompt && proj.systemPrompt.trim()) combinedSystem += `[INSTRUCCIONES DEL PROYECTO]: ${proj.systemPrompt}\n\n`;
-    
-    if (proj.documents && proj.documents.length > 0) {
-        combinedSystem += '[BASE DE CONOCIMIENTO PERMANENTE DEL PROYECTO]:\n';
-        proj.documents.forEach(doc => {
-            combinedSystem += `\n--- Archivo Base: ${doc.name} ---\n${doc.data}\n`;
-        });
-        combinedSystem += '\nUtiliza la información estricta de esta Base de Conocimiento si aplica.\n\n';
+    const budget = getPromptTokenBudget();
+    const system = buildSystemContext(chat, budget);
+
+    if (system.text) {
+        messages.push({ role: 'system', content: system.text });
     }
-    
-    if (combinedSystem.trim()) {
-        messages.push({ role: 'system', content: combinedSystem.trim() });
-    }
-    
+
+    const historyBudget = budget - estimateTokenCount(system.text);
+    const entries = [];
     for (const msg of chat.messages) {
         if (msg.role === 'assistant' && msg.content === '' && msg.thinking === '' && !msg.tool_calls) continue;
         const apiMsg = { role: msg.role, content: msg.content };
         if (msg.images) apiMsg.images = msg.images;
         if (msg.tool_calls) apiMsg.tool_calls = msg.tool_calls;
-        messages.push(apiMsg);
+        entries.push({ value: apiMsg, tokens: estimateTokenCount(msg.content) });
     }
+
+    const { kept, dropped } = applyHistoryBudget(entries, historyBudget);
+    kept.forEach(e => messages.push(e.value));
+    noteContextTrim(chat, { droppedMessages: dropped, ...describeSystemContext(system) });
     return messages;
 }
 
 function buildGeminiMessages(chat) {
-    const proj = state.projects.find(p => p.id === chat.projectId) || getActiveProject();
-    
-    let systemText = '';
-    if (state.settings.systemPrompt.trim()) systemText += state.settings.systemPrompt + '\n\n';
-    if (proj.systemPrompt && proj.systemPrompt.trim()) systemText += `[INSTRUCCIONES DEL PROYECTO]: ${proj.systemPrompt}\n\n`;
-    if (proj.documents && proj.documents.length > 0) {
-        systemText += '[BASE DE CONOCIMIENTO]:\n';
-        proj.documents.forEach(doc => { systemText += `\n--- ${doc.name} ---\n${doc.data}\n`; });
-    }
-    
-    const contents = [];
+    const budget = getPromptTokenBudget();
+    const system = buildSystemContext(chat, budget);
+    const historyBudget = budget - estimateTokenCount(system.text);
+
+    const entries = [];
     for (const msg of chat.messages) {
         if (msg.role === 'assistant' && msg.content === '' && msg.thinking === '') continue;
         if (msg.role === 'system' || msg.role === 'tool') continue;
-        
+
         const role = msg.role === 'assistant' ? 'model' : 'user';
         const parts = [];
-        
+
         if (msg.images && msg.images.length > 0) {
             msg.images.forEach(imgBase64 => {
                 const mimeType = imgBase64.startsWith('/') ? 'image/jpeg' : 'image/png';
@@ -2222,34 +2569,31 @@ function buildGeminiMessages(chat) {
             });
         }
         parts.push({ text: msg.content || '' });
-        contents.push({ role, parts });
+        entries.push({ value: { role, parts }, tokens: estimateTokenCount(msg.content) });
     }
-    
+
+    const { kept, dropped } = applyHistoryBudget(entries, historyBudget);
+    noteContextTrim(chat, { droppedMessages: dropped, ...describeSystemContext(system) });
+
     return {
-        systemInstruction: systemText.trim() ? { parts: [{ text: systemText.trim() }] } : null,
-        contents
+        systemInstruction: system.text ? { parts: [{ text: system.text }] } : null,
+        contents: kept.map(e => e.value)
     };
 }
 
 function buildAnthropicMessages(chat) {
-    const proj = state.projects.find(p => p.id === chat.projectId) || getActiveProject();
-    
-    let systemText = '';
-    if (state.settings.systemPrompt.trim()) systemText += state.settings.systemPrompt + '\n\n';
-    if (proj.systemPrompt && proj.systemPrompt.trim()) systemText += `[INSTRUCCIONES DEL PROYECTO]: ${proj.systemPrompt}\n\n`;
-    if (proj.documents && proj.documents.length > 0) {
-        systemText += '[BASE DE CONOCIMIENTO]:\n';
-        proj.documents.forEach(doc => { systemText += `\n--- ${doc.name} ---\n${doc.data}\n`; });
-    }
-    
-    const messages = [];
+    const budget = getPromptTokenBudget();
+    const system = buildSystemContext(chat, budget);
+    const historyBudget = budget - estimateTokenCount(system.text);
+
+    const entries = [];
     for (const msg of chat.messages) {
         if (msg.role === 'system' || msg.role === 'tool') continue;
         if (msg.role === 'assistant' && msg.content === '' && msg.thinking === '') continue;
-        
+
         const role = msg.role; // 'user' or 'assistant'
         const content = [];
-        
+
         if (msg.images && msg.images.length > 0) {
             msg.images.forEach(imgBase64 => {
                 const mimeType = imgBase64.startsWith('/') ? 'image/jpeg' : 'image/png';
@@ -2257,16 +2601,22 @@ function buildAnthropicMessages(chat) {
             });
         }
         content.push({ type: 'text', text: msg.content || '' });
-        messages.push({ role, content });
+        entries.push({ value: { role, content }, tokens: estimateTokenCount(msg.content) });
     }
-    
+
+    const { kept, dropped } = applyHistoryBudget(entries, historyBudget);
+    noteContextTrim(chat, { droppedMessages: dropped, ...describeSystemContext(system) });
+    const messages = kept.map(e => e.value);
+
     // Anthropic requires alternating user/assistant. Ensure first message is user.
+    // El recorte del historial puede haber dejado una respuesta del asistente en
+    // primera posición, así que esta comprobación es ahora imprescindible.
     if (messages.length > 0 && messages[0].role !== 'user') {
         messages.unshift({ role: 'user', content: [{ type: 'text', text: '.' }] });
     }
-    
+
     return {
-        system: systemText.trim() || undefined,
+        system: system.text || undefined,
         messages
     };
 }

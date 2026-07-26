@@ -224,8 +224,78 @@ async function validateCurrentProviderConnection({ persist = true } = {}) {
     return result;
 }
 
+// ─── Delegación de manejadores ──────────────
+// La app no usa NI UN atributo on*: todos los manejadores se enlazan aquí por
+// delegación. Eso permite servir una Content-Security-Policy sin
+// 'unsafe-inline' en script-src —que es lo que convierte una inyección de HTML
+// en ejecución de código— y elimina de paso la fragilidad de interpolar datos
+// del usuario dentro de una cadena JavaScript.
+
+/** Abrir y cerrar diálogos: data-close-modal / data-open-modal. */
+function bindModalDelegation() {
+    document.addEventListener('click', (event) => {
+        const closeId = event.target.closest('[data-close-modal]')?.dataset.closeModal;
+        if (closeId) {
+            document.getElementById(closeId)?.classList.add('hidden');
+            return;
+        }
+        const openId = event.target.closest('[data-open-modal]')?.dataset.openModal;
+        if (openId) document.getElementById(openId)?.classList.remove('hidden');
+    });
+}
+
+/** Acciones sobre los mensajes del chat (copiar, reintentar, marcar…). */
+function bindMessageActionDelegation() {
+    if (!dom.messagesScroll) return;
+
+    const runAction = (button) => {
+        const action = button.dataset.msgAction;
+        const idx = Number.parseInt(button.dataset.idx, 10);
+        switch (action) {
+            case 'copy':           copyFullResponse(idx, button); break;
+            case 'regenerate':     regenerateResponse(idx); break;
+            case 'edit':           editMessage(idx); break;
+            case 'bookmark':       toggleBookmark(idx); break;
+            case 'save-prompt':    saveMessageAsPrompt(idx); break;
+            case 'metrics':        showMetricsModal(idx); break;
+            case 'retry':          retryMessage(idx); break;
+            case 'apply-proposal': applyProposal(idx); break;
+            case 'fallback':       fallbackToModel(idx, button.dataset.provider, button.dataset.model); break;
+            case 'copy-url':       copyText(button.dataset.url, button); break;
+        }
+    };
+
+    dom.messagesScroll.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-msg-action]');
+        if (!button) return;
+        event.stopPropagation();
+        runAction(button);
+    });
+
+    // La chapa de métricas es un <span>: sin esto no sería accesible por teclado.
+    dom.messagesScroll.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const button = event.target.closest('[data-msg-action][role="button"]');
+        if (!button) return;
+        event.preventDefault();
+        runAction(button);
+    });
+}
+
+/** Quitar documentos de la base de conocimiento del proyecto. */
+function bindProjectDocDelegation() {
+    dom.projectDocList?.addEventListener('click', (event) => {
+        const id = event.target.closest('[data-remove-doc]')?.dataset.removeDoc;
+        if (id) removeProjectDoc(id);
+    });
+}
+
 // ─── Event Bindings ─────────────────────────
 function bindEvents() {
+    bindModalDelegation();
+    bindMessageActionDelegation();
+    bindProjectDocDelegation();
+
     // Send message. Un prompt que empieza por "+" no se envía: se encola como
     // orden pendiente para lanzarla luego (individual o toda la cola).
     dom.sendBtn.addEventListener('click', () => {
@@ -242,6 +312,16 @@ function bindEvents() {
                 sendMessage(dom.messageInput.value);
             }
         }
+    });
+
+    // Escalonado del precalentado WebGPU, de menos a más compromiso:
+    //   · foco en la caja  → runtime (barato, unos MB, sin tocar el modelo)
+    //   · empieza a teclear → modelo completo en segundo plano
+    // Al enfocar aún no sabemos si va a escribir, así que solo se adelanta lo
+    // que sirve para cualquier modelo; la descarga de pesos espera a que haya
+    // intención real.
+    dom.messageInput.addEventListener('focus', () => {
+        if (typeof scheduleWebGPUPriming === 'function') scheduleWebGPUPriming();
     });
 
     dom.messageInput.addEventListener('input', () => {
@@ -298,6 +378,9 @@ function bindEvents() {
         renderProviderOptions();
         updateStatusMeta();
         saveState();
+        // Al elegir WebGPU se adelanta el runtime: mientras el usuario termina
+        // de configurar, el coste fijo de la primera carga ya se está pagando.
+        if (typeof scheduleWebGPUPriming === 'function') scheduleWebGPUPriming();
         validateCurrentProviderConnection({ persist: false });
     });
 
@@ -464,7 +547,9 @@ function bindEvents() {
                     renderProjectSelect();
                     renderChatList();
                     if (typeof renderOrderQueue === 'function') renderOrderQueue();
-                    if (typeof renderMessages === 'function') renderMessages();
+                    // force: los chats se han sustituido en bloque; un chat
+                    // restaurado puede conservar el mismo id y contenido distinto.
+                    if (typeof renderMessages === 'function') renderMessages({ force: true });
                     alert(`Copia de seguridad restaurada: ${n} elementos. Recuerda revisar tus API keys en Ajustes.`);
                 } catch (err) {
                     alert('Error al leer la copia de seguridad: ' + err.message);
@@ -535,9 +620,11 @@ function bindEvents() {
     });
 
     if (dom.modelSearchInput) {
-        dom.modelSearchInput.addEventListener('input', () => {
+        // Debounce: cada pulsación reconstruye toda la rejilla de tarjetas
+        // (el catálogo de OpenRouter pasa de 300 modelos).
+        dom.modelSearchInput.addEventListener('input', debounce(() => {
             if (state.rawModels) populateModels(state.rawModels);
-        });
+        }, 180));
     }
 
     dom.webgpuAddModelBtn?.addEventListener('click', () => {
@@ -1449,16 +1536,19 @@ async function autoTitleChat(chatId) {
         const headers = getAuthHeaders();
         let title = '';
         
+        // Titular es accesorio: con timeout para que un motor lento no deje una
+        // petición colgada indefinidamente en segundo plano.
+        const signal = AbortSignal.timeout(12000);
         if (type === 'ollama') {
             const res = await fetch(`${url}/api/chat`, {
-                method: 'POST', headers,
+                method: 'POST', headers, signal,
                 body: JSON.stringify({ model: state.settings.model, messages: [{ role: 'user', content: titlePrompt }], stream: false, options: { num_predict: 20 } })
             });
             const data = await res.json();
             title = data.message?.content?.trim() || '';
         } else if (type === 'openai') {
             const res = await fetch(`${url}/chat/completions`, {
-                method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+                method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, signal,
                 body: JSON.stringify({ model: state.settings.model, messages: [{ role: 'user', content: titlePrompt }], max_tokens: 20 })
             });
             const data = await res.json();

@@ -89,7 +89,10 @@ function deanonymizeForDisplay(text) {
             _anonHydrating.add(chat.id);
             ensureAnonState(chat).then(() => {
                 _anonHydrating.delete(chat.id);
-                if (typeof renderMessages === 'function' && state.activeChatId === chat.id) renderMessages();
+                // force: el mapa recién descifrado cambia lo que se MUESTRA sin
+                // tocar los datos del mensaje, así que su firma no varía y el
+                // render incremental no repintaría nada.
+                if (typeof renderMessages === 'function' && state.activeChatId === chat.id) renderMessages({ force: true });
             });
         }
         return text;

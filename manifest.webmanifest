@@ -1,7 +1,7 @@
 {
-  "name": "wIA — IA local y privada",
+  "name": "wIA — IA local y privada · Private local AI",
   "short_name": "wIA",
-  "description": "Chat con IA multi-motor: modelos locales en el navegador (WebGPU), Ollama y APIs cloud. Tus datos se quedan en tu dispositivo.",
+  "description": "Chat con IA multi-motor: modelos locales en el navegador (WebGPU), Ollama y APIs cloud. Tus datos se quedan en tu dispositivo. — Multi-engine AI chat: in-browser models (WebGPU), Ollama and cloud APIs. Your data stays on your device.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

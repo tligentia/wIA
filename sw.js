@@ -2,14 +2,15 @@
    wIA Service Worker — shell offline + PWA instalable
    ------------------------------------------------------------
    Estrategia conservadora para no interferir con la inferencia:
-   - Solo intercepta GET del propio origen (+ los 2 CDN precacheados).
+   - Solo intercepta GET del propio origen (todo el shell es local: marked,
+     highlight y pdf.js viven en lib/, no en un CDN).
    - NUNCA toca /cors-proxy, las APIs de proveedores ni los modelos de
      Hugging Face (esos ya los cachea Transformers.js por su cuenta).
    - Navegación: network-first con fallback a index.html (arranque offline).
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v1';
+const CACHE = 'wia-shell-v2607.BD';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).
@@ -17,10 +18,13 @@ const CORE = [
     './', './index.html', './styles.css',
     './js/01-core.js', './js/02-state.js', './js/03-webgpu.js', './js/04-providers.js',
     './js/05-workspace.js', './js/06-chat.js', './js/07-ui.js', './js/08-anon.js',
-    './js/09-i18n.js', './js/10-docs.js',
+    './js/09-i18n.js', './js/10-docs.js', './js/11-rag.js', './js/12-pwa.js',
+    './lang/es.json', './lang/en.json',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
     './lib/anonimae-engine.js', './lib/anonimae-rules.json',
-    './lib/pdf.min.js', './Plantilla/Version.js',
+    // pdf.worker es un fichero aparte que pdf.js carga bajo demanda: sin él en
+    // caché, adjuntar un PDF fallaba justo cuando no había conexión.
+    './lib/pdf.min.js', './lib/pdf.worker.min.js', './Plantilla/Version.js',
     './secure-gate.js', './webgpu-worker.js', './agents.json',
     './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png',
 ];

@@ -35,6 +35,13 @@ const SecureGate = (() => {
         return sessionStorage.getItem(SESSION_KEY) === 'true';
     }
 
+    // crypto.subtle solo existe en contexto seguro (https, localhost o file://).
+    // Servida por HTTP desde una IP de LAN —un despliegue plausible para una app
+    // local— no está disponible.
+    function cryptoAvailable() {
+        return typeof crypto !== 'undefined' && !!crypto.subtle;
+    }
+
     async function sha256(text) {
         const data = new TextEncoder().encode(`${HASH_SALT}:${text}`);
         const digest = await crypto.subtle.digest('SHA-256', data);
@@ -51,6 +58,10 @@ const SecureGate = (() => {
             enabled: !!enabled,
             pinHash: current.pinHash || ''
         };
+
+        if (next.enabled && !cryptoAvailable()) {
+            throw new Error('El bloqueo local necesita un contexto seguro (https:// o localhost). Sírvelo por HTTPS para poder activarlo.');
+        }
 
         if (pin) {
             if (!validatePin(pin)) {
@@ -165,7 +176,7 @@ const SecureGate = (() => {
         overlay.innerHTML = `
             <div class="sg-panel">
                 <h1 class="sg-title">Bloqueo local de privacidad</h1>
-                <p class="sg-copy">Introduce tu PIN para desbloquear esta interfaz en este navegador. Este bloqueo evita accesos casuales en el dispositivo, pero no sustituye autenticación de servidor.</p>
+                <p class="sg-copy">Introduce tu PIN para desbloquear esta interfaz en este navegador. Este bloqueo evita accesos casuales en el dispositivo: <strong>no cifra el historial</strong> ni sustituye autenticación de servidor.</p>
                 <input class="sg-input" id="sgPinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN de 4-12 dígitos">
                 <div class="sg-actions">
                     <button class="sg-btn sg-btn-secondary" id="sgClearBtn" type="button">Borrar</button>
@@ -182,7 +193,13 @@ const SecureGate = (() => {
 
         async function unlock() {
             const pin = input.value.trim();
-            const hash = await sha256(pin);
+            let hash;
+            try {
+                hash = await sha256(pin);
+            } catch (e) {
+                errorEl.textContent = 'No se pudo comprobar el PIN en este contexto. Abre la app por HTTPS o localhost.';
+                return;
+            }
             if (hash !== config.pinHash) {
                 errorEl.textContent = 'PIN incorrecto.';
                 input.value = '';
@@ -218,6 +235,18 @@ const SecureGate = (() => {
         }
 
         if (isUnlocked()) {
+            onUnlock();
+            return;
+        }
+
+        // Sin crypto.subtle no hay forma de comprobar el PIN. Pintar el panel
+        // aquí dejaría la app BLOQUEADA PARA SIEMPRE (toda pulsación de
+        // "Desbloquear" fallaría y no hay otra salida). Como este bloqueo es un
+        // biombo para accesos casuales y no cifra nada —el historial sigue
+        // siendo legible desde las herramientas de desarrollo—, degradar es
+        // estrictamente mejor que dejar al usuario fuera de sus propios datos.
+        if (!cryptoAvailable()) {
+            console.warn('[SecureGate] Contexto no seguro: no se puede verificar el PIN; se continúa sin bloqueo.');
             onUnlock();
             return;
         }

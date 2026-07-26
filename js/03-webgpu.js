@@ -122,16 +122,33 @@ async function renderWebGPUMonitor() {
     const adapterLabel = [info.vendor, info.architecture].filter(Boolean).join(' · ') || info.description || (support === 'webgpu' ? 'GPU detectada' : '—');
     const modeLabel = webgpuState.executionMode === 'worker' ? 'Web Worker' : webgpuState.executionMode === 'inline' ? 'Hilo principal' : '—';
 
+    // Precalentado y última carga medida: hacen visible dónde se va el tiempo
+    // (runtime, red o compilación) en cada equipo y conexión.
+    const t = webgpuBoot.timings;
+    const primeLabel = webgpuBoot.primed
+        ? `✅ Listo${Number.isFinite(t.prime) ? ` (${(t.prime / 1000).toFixed(1)} s)` : ''}`
+        : (webgpuBoot.promise ? '⏳ Preparando…' : '— Se hará al cargar');
+    const lastLoadLabel = Number.isFinite(t.total)
+        ? `${(t.total / 1000).toFixed(1)} s · runtime ${(t.runtime / 1000).toFixed(1)} s · modelo ${(t.download / 1000).toFixed(1)} s${t.fromCache ? ' · desde caché' : ''}`
+        : 'Sin cargas en esta sesión';
+    const net = describeNetwork();
+    const netLabel = net.known
+        ? `${net.type}${Number.isFinite(net.downlink) ? ` · ${net.downlink} Mb/s` : ''}${net.saveData ? ' · ahorro de datos' : ''}`
+        : 'No informada por el navegador';
+
     grid.innerHTML = [
         ['Aceleración', deviceLabel],
         ['Adaptador', adapterLabel],
         ['Estado', `<span class="webgpu-stress ${stressCls}">${stress}</span>`],
         ['Ejecución', modeLabel],
+        ['Runtime precalentado', primeLabel],
+        ['Última carga', lastLoadLabel],
+        ['Conexión', netLabel],
         ['Modelo en memoria', loadedId ? `${loadedDef?.label || loadedId} (${loadedDef?.size || _fmtBytes(modelMB)})` : 'Ninguno'],
         ['Modelos en caché', `${webgpuState.cachedModelIds?.size || 0}`],
         ['Buffer máx. GPU', _fmtBytes((limits.maxBufferSize || 0) / 1048576)],
         ['Heap JS del navegador', heap],
-    ].map(([k, v]) => `<div class="webgpu-monitor-cell"><span class="wm-k">${k}</span><span class="wm-v">${v}</span></div>`).join('');
+    ].map(([k, v]) => `<div class="webgpu-monitor-cell"><span class="wm-k">${escapeHtml(k)}</span><span class="wm-v">${v}</span></div>`).join('');
 
     // Barra de ocupación estimada: tamaño del modelo cargado respecto a un
     // presupuesto (RAM del dispositivo si se conoce; si no, 8 GB de referencia).
@@ -205,7 +222,30 @@ function renderVisionChain() {
 }
 window.renderVisionChain = renderVisionChain;
 
-async function getCachedWebGPUModels() {
+// ─── Escaneo de caché memoizado ──────────────
+// cache.keys() recorre TODAS las entradas de la caché de modelos; con varios
+// modelos descargados son miles de ficheros de cientos de MB y la operación
+// tarda cientos de ms. Antes se ejecutaba en cada comprobación de proveedor y
+// en cada repintado del catálogo. Ahora el resultado se reutiliza durante unos
+// segundos y se invalida explícitamente cuando algo cambia.
+const WEBGPU_CACHE_SCAN_TTL_MS = 20000;
+let _cacheScanPromise = null;
+let _cacheScanAt = 0;
+
+function invalidateWebGPUCacheScan() {
+    _cacheScanPromise = null;
+    _cacheScanAt = 0;
+}
+
+async function getCachedWebGPUModels({ force = false } = {}) {
+    const fresh = _cacheScanPromise && (performance.now() - _cacheScanAt) < WEBGPU_CACHE_SCAN_TTL_MS;
+    if (!force && fresh) return _cacheScanPromise;
+    _cacheScanAt = performance.now();
+    _cacheScanPromise = _scanCachedWebGPUModels();
+    return _cacheScanPromise;
+}
+
+async function _scanCachedWebGPUModels() {
     const cachedModels = new Set();
     try {
         if (typeof caches === 'undefined') return cachedModels;
@@ -242,7 +282,13 @@ async function deleteWebGPUModelCache(modelId) {
         let deletedCount = 0;
         for (const request of keys) {
             const url = decodeURIComponent(request.url);
-            if (url.includes(modelId)) {
+            // Coincidencia por repositorio EXACTO (mismo criterio que
+            // getCachedWebGPUModels). Antes se usaba url.includes(modelId), que
+            // podía borrar por error las entradas de otro modelo cuyo id
+            // contuviera a éste como prefijo (p. ej. «…/Llama-3» dentro de
+            // «…/Llama-3.2»).
+            const match = url.match(/huggingface\.co\/(?:api\/resolve-cache\/models\/)?([^\/]+\/[^\/]+)/);
+            if (match && match[1] === modelId) {
                 await cache.delete(request);
                 deletedCount++;
             }
@@ -258,7 +304,8 @@ async function deleteWebGPUModelCache(modelId) {
             webgpuWorker.dispose();
         }
         // Refresh cache status and UI
-        webgpuState.cachedModelIds = await getCachedWebGPUModels();
+        invalidateWebGPUCacheScan();
+        webgpuState.cachedModelIds = await getCachedWebGPUModels({ force: true });
         if (state.rawModels) populateModels(state.rawModels);
         updateStatusMeta();
         return true;
@@ -302,6 +349,101 @@ function adaptDtypesToDevice(dtypeCandidates, device, fp16Supported) {
     const degraded = { q4f16: 'q4', fp16: 'fp32', q8f16: 'q8' };
     return Array.from(new Set(dtypeCandidates.map(d => degraded[d] || d)));
 }
+
+// ─── Condiciones del entorno ─────────────────
+/**
+ * describeNetwork — lo que el navegador sabe de la conexión. Determina si
+ * conviene priorizar la variante más pequeña del modelo por encima de la de
+ * mejor calidad: en una conexión lenta, la descarga domina por completo el
+ * tiempo hasta la primera respuesta.
+ */
+function describeNetwork() {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!conn) return { known: false, slow: false, saveData: false, type: 'desconocida' };
+    const effectiveType = conn.effectiveType || '';
+    const slow = conn.saveData === true || /(^|-)2g$/.test(effectiveType) || effectiveType === '3g'
+        || (typeof conn.downlink === 'number' && conn.downlink > 0 && conn.downlink < 2);
+    return {
+        known: true,
+        slow,
+        saveData: conn.saveData === true,
+        type: effectiveType || 'desconocida',
+        downlink: conn.downlink,
+    };
+}
+
+// Peso relativo de cada cuantización: sirve para ordenar por tamaño de descarga.
+const DTYPE_WEIGHT = { q4f16: 1, q4: 1.1, q8f16: 1.9, q8: 2, fp16: 4, fp32: 8 };
+
+/**
+ * prioritizeDtypesForConditions — reordena los candidatos según el entorno.
+ *
+ * Con conexión lenta o ahorro de datos activo, primero el más ligero: bajar
+ * 400 MB en lugar de 700 puede ser la diferencia entre esperar uno o tres
+ * minutos. Con conexión buena se respeta el orden del catálogo, que prioriza
+ * calidad. No se inventan variantes: solo se reordenan las ya declaradas.
+ */
+function prioritizeDtypesForConditions(candidates, network = describeNetwork()) {
+    if (!network.slow || candidates.length < 2) return candidates;
+    return [...candidates].sort((a, b) => (DTYPE_WEIGHT[a] ?? 3) - (DTYPE_WEIGHT[b] ?? 3));
+}
+
+// ─── Precalentado del runtime ────────────────
+// Toda carga paga un coste FIJO antes de bajar un solo byte de pesos: importar
+// Transformers.js desde el CDN, instanciar onnxruntime con sus binarios WASM y
+// negociar el adaptador WebGPU. En un portátil son 1-3 s; en móvil, más. Ese
+// coste no depende del modelo elegido, así que se adelanta a tiempo ocioso: al
+// enviar el primer mensaje solo queda la descarga real.
+const webgpuBoot = {
+    primed: false,
+    promise: null,
+    timings: {},        // fases medidas de la última carga, para el monitor
+};
+
+async function primeWebGPURuntime() {
+    if (webgpuBoot.primed) return true;
+    if (webgpuBoot.promise) return webgpuBoot.promise;
+
+    webgpuBoot.promise = (async () => {
+        const startedAt = performance.now();
+        try {
+            const mode = await decideWebGPUExecutionMode();
+            if (mode === 'worker' && !webgpuWorker.broken) {
+                // 45 s: en una conexión mala, importar el runtime tarda. Si se
+                // agota no pasa nada — la carga real lo reintentará.
+                await webgpuWorker.call({ type: 'prime' }, {}, 45000);
+            } else {
+                webgpuState.hfModule = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
+                if (typeof configureOnnxRuntime === 'function') configureOnnxRuntime(webgpuState.hfModule.env);
+            }
+            webgpuBoot.primed = true;
+            webgpuBoot.timings.prime = Math.round(performance.now() - startedAt);
+            console.log(`[WebGPU] runtime precalentado en ${webgpuBoot.timings.prime} ms (${mode})`);
+            return true;
+        } catch (e) {
+            // Silencioso a propósito: es una optimización, no un requisito.
+            console.warn('[WebGPU] no se pudo precalentar el runtime (se hará al cargar):', e);
+            return false;
+        } finally {
+            webgpuBoot.promise = null;
+        }
+    })();
+
+    return webgpuBoot.promise;
+}
+window.primeWebGPURuntime = primeWebGPURuntime;
+
+/**
+ * scheduleWebGPUPriming — lanza el precalentado en cuanto el navegador esté
+ * ocioso, si el motor activo es WebGPU. Idempotente y sin coste si ya se hizo.
+ */
+function scheduleWebGPUPriming() {
+    if (state.settings.provider !== 'webgpu') return;
+    if (webgpuBoot.primed || webgpuBoot.promise) return;
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 800));
+    idle(() => { primeWebGPURuntime(); }, { timeout: 3000 });
+}
+window.scheduleWebGPUPriming = scheduleWebGPUPriming;
 
 /**
  * configureOnnxRuntime — acelera onnxruntime-web: activa el máximo de hilos
@@ -347,7 +489,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
     try {
         const progressUiState = { ts: 0, pct: -1, file: '', completedFiles: new Set() };
         // Transformers.js v3 dynamic import from CDN
-        const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+        const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
         webgpuState.hfModule = hf;
         const { pipeline, env } = hf;
         if (webgpuState.cancelRequested) throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
@@ -366,14 +508,14 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
         const device = deviceSupport === 'webgpu' ? 'webgpu' : 'wasm';
 
         const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
-        const dtypeCandidates = adaptDtypesToDevice(
+        const dtypeCandidates = prioritizeDtypesForConditions(adaptDtypesToDevice(
             Array.from(new Set([
                 modelDef?.dtype || 'q4f16',
                 ...((Array.isArray(modelDef?.fallbackDtypes) ? modelDef.fallbackDtypes : []))
             ])),
             device,
             webgpuState.fp16Supported
-        );
+        ));
         const sourceUrl = buildWebGPURepoUrl(modelId);
 
         dom.statusDot.className = 'status-dot loading';
@@ -512,7 +654,7 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
     }
 
     const progressUiState = { ts: 0, pct: -1, file: '', completedFiles: new Set() };
-    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
     webgpuState.hfModule = hf;
     const { pipeline, env } = hf;
 
@@ -568,7 +710,7 @@ async function loadWebGPUImageAssistPipeline(onProgress) {
 // Corren inline (no worker) porque usan clases de modelo específicas, no el
 // pipeline estándar. El resultado (texto) alimenta la cadena visión → chat.
 async function _prepareHfEnv() {
-    const hf = webgpuState.hfModule || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js');
+    const hf = webgpuState.hfModule || await import(TRANSFORMERS_MODULE_URL);
     webgpuState.hfModule = hf;
     const { env } = hf;
     env.allowLocalModels = false; env.allowRemoteModels = true; env.useBrowserCache = true;
@@ -1113,10 +1255,12 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
 
     try {
         const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
-        const dtypeCandidates = Array.from(new Set([
+        // El worker degrada f16 por su cuenta (tiene su propio adaptador); aquí
+        // solo se ordena por tamaño cuando la conexión lo aconseja.
+        const dtypeCandidates = prioritizeDtypesForConditions(Array.from(new Set([
             modelDef?.dtype || 'q4f16',
             ...((Array.isArray(modelDef?.fallbackDtypes) ? modelDef.fallbackDtypes : []))
-        ]));
+        ])));
 
         dom.statusDot.className = 'status-dot loading';
         dom.statusText.textContent = (typeof t==='function'?t('status.preparing'):'Preparando...');
@@ -1312,10 +1456,12 @@ async function analyzeImagesForWebGPUViaWorker(imageMetaList = [], onProgress) {
         sourceUrl: buildWebGPURepoUrl(getVisionAssistDef().id)
     });
     try {
+        const assistDef = getVisionAssistDef();
         const done = await webgpuWorker.call({
             type: 'caption',
-            assistModelId: getVisionAssistDef().id,
-            assistTask: getVisionAssistDef().task,
+            assistModelId: assistDef.id,
+            assistTask: assistDef.task,
+            dtypeCandidates: [assistDef.dtype, ...(Array.isArray(assistDef.fallbackDtypes) ? assistDef.fallbackDtypes : [])].filter(Boolean),
             images: normalized.map(img => ({
                 dataUrl: `data:${img.mimeType || inferMimeTypeFromBase64(img.data)};base64,${img.data}`,
                 name: img.name
@@ -1335,40 +1481,103 @@ async function analyzeImagesForWebGPUViaWorker(imageMetaList = [], onProgress) {
 // antes hacía que la segunda recibiera null por la guarda isLoading).
 let _webgpuLoadPromise = null;
 let _webgpuLoadKey = null;
+// Fan-out de progreso: la carga en vuelo (una sola) reparte sus eventos a TODOS
+// los llamadores que piden el mismo modelo. Antes, cuando la precarga en 2º
+// plano (al teclear) y el envío coincidían, el segundo compartía la promesa
+// pero su onProgress se descartaba: la burbuja del chat quedaba en «Preparando…»
+// sin barra durante toda la descarga.
+let _webgpuLoadListeners = new Set();
+let _webgpuLastProgress = null;   // {pct, progress} para reproducir al recién llegado
+
+function _emitWebgpuLoadProgress(pct, progress) {
+    _webgpuLastProgress = { pct, progress };
+    for (const cb of _webgpuLoadListeners) {
+        try { cb(pct, progress); } catch (e) { /* un listener no debe romper a los demás */ }
+    }
+}
 
 async function loadWebGPUModel(modelId, onProgress, task = 'text-generation') {
     const key = `${modelId}|${task}`;
+    // Ya hay una carga idéntica en vuelo: engancharse a ella y a su progreso.
     if (_webgpuLoadPromise && _webgpuLoadKey === key) {
-        return _webgpuLoadPromise;
+        if (onProgress) {
+            _webgpuLoadListeners.add(onProgress);
+            // Reproducir el último progreso conocido para que la UI del recién
+            // llegado no arranque en blanco mientras la descarga ya va por la mitad.
+            if (_webgpuLastProgress) {
+                try { onProgress(_webgpuLastProgress.pct, _webgpuLastProgress.progress); } catch (e) {}
+            }
+        }
+        try {
+            return await _webgpuLoadPromise;
+        } finally {
+            if (onProgress) _webgpuLoadListeners.delete(onProgress);
+        }
     }
-    const p = _loadWebGPUModelUncoalesced(modelId, onProgress, task);
+    // Nueva carga: reinicia listeners y usa el emisor fan-out como onProgress.
+    _webgpuLoadListeners = new Set();
+    if (onProgress) _webgpuLoadListeners.add(onProgress);
+    _webgpuLastProgress = null;
+    const p = _loadWebGPUModelUncoalesced(modelId, _emitWebgpuLoadProgress, task);
     _webgpuLoadPromise = p;
     _webgpuLoadKey = key;
     try {
         return await p;
     } finally {
-        if (_webgpuLoadPromise === p) { _webgpuLoadPromise = null; _webgpuLoadKey = null; }
+        if (_webgpuLoadPromise === p) {
+            _webgpuLoadPromise = null;
+            _webgpuLoadKey = null;
+            _webgpuLoadListeners.clear();
+            _webgpuLastProgress = null;
+        }
     }
 }
 
 async function _loadWebGPUModelUncoalesced(modelId, onProgress, task = 'text-generation') {
     const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
     if (modelDef?.omnimodal) return loadWebGPUOmnimodalModel(modelId, onProgress);
+
+    // Telemetría por fases: sin esto es imposible saber si una carga lenta se
+    // fue en el runtime, en la red o en compilar shaders, y por tanto tampoco
+    // se puede saber si una optimización sirve de algo. Se muestra en el monitor.
+    const startedAt = performance.now();
+    const network = describeNetwork();
+    webgpuBoot.timings.model = modelId;
+    webgpuBoot.timings.network = network.known ? `${network.type}${network.saveData ? ' · ahorro de datos' : ''}` : 'desconocida';
+    webgpuBoot.timings.fromCache = webgpuState.cachedModelIds?.has(modelId) === true;
+
+    // El precalentado ya puede estar hecho (arranque ocioso); si no, se hace
+    // aquí y se mide aparte para distinguirlo de la descarga de pesos.
+    const primeStart = performance.now();
+    await primeWebGPURuntime();
+    webgpuBoot.timings.runtime = Math.round(performance.now() - primeStart);
+
+    const downloadStart = performance.now();
+    const finish = (result) => {
+        webgpuBoot.timings.download = Math.round(performance.now() - downloadStart);
+        webgpuBoot.timings.total = Math.round(performance.now() - startedAt);
+        console.log('[WebGPU] carga completada', webgpuBoot.timings);
+        try { renderWebGPUMonitor(); } catch (e) {}
+        return result;
+    };
+
     const mode = await decideWebGPUExecutionMode();
+    webgpuBoot.timings.mode = mode;
     if (mode === 'worker') {
         try {
-            return await loadWebGPUModelViaWorker(modelId, onProgress, task);
+            return finish(await loadWebGPUModelViaWorker(modelId, onProgress, task));
         } catch (e) {
             // Si el propio worker se rompe (no el modelo), reintenta inline
             if (webgpuWorker.broken) {
                 console.warn('[WebGPU] worker roto, reintentando en hilo principal');
                 webgpuState.executionMode = 'inline';
-                return loadWebGPUModelInline(modelId, onProgress, task);
+                webgpuBoot.timings.mode = 'inline (respaldo)';
+                return finish(await loadWebGPUModelInline(modelId, onProgress, task));
             }
             throw e;
         }
     }
-    return loadWebGPUModelInline(modelId, onProgress, task);
+    return finish(await loadWebGPUModelInline(modelId, onProgress, task));
 }
 
 /**

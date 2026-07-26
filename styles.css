@@ -5442,3 +5442,54 @@ body.mobile-device .webgpu-mobile-note {
     background: var(--accent-subtle);
     box-shadow: inset 0 0 0 1px var(--accent-primary);
 }
+
+/* Aviso de recorte de contexto: la conversación no cabía entera en la ventana
+   del modelo y se ha enviado solo lo más reciente. Deliberadamente discreto
+   (tono de advertencia, no de error): no ha fallado nada, pero el usuario
+   necesita saberlo para interpretar una respuesta que "olvida" lo anterior. */
+.context-trim-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--warning, #d97706);
+    background: rgba(217, 119, 6, 0.1);
+    border: 1px solid rgba(217, 119, 6, 0.3);
+    border-radius: 999px;
+    cursor: help;
+}
+
+/* Insignia de recuperación (RAG): a diferencia del aviso de recorte ✂️, aquí no
+   ha fallado nada — el sistema ha elegido a propósito qué partes de los
+   documentos enviar. Tono informativo, no de advertencia. */
+.context-rag-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent-secondary, #0891b2);
+    background: rgba(8, 145, 178, 0.1);
+    border: 1px solid rgba(8, 145, 178, 0.3);
+    border-radius: 999px;
+    cursor: help;
+}
+
+.rag-index-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.rag-index-status {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+}

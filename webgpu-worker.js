@@ -5,6 +5,7 @@
 
    Protocolo (mensajes con `id` reciben respuesta con el mismo `id`):
      → {id, type:'probe'}                                → {id, type:'done', device, fp16}
+     → {id, type:'prime'}                                → {id, type:'done', device, fp16, primed}
      → {id, type:'load', modelId, task, dtypeCandidates} → {id, type:'progress', ...}* + {id, type:'done', dtype, device}
      → {id, type:'generate', input, options}             → {id, type:'token', text}* + {id, type:'done', text, tokenCount}
      → {id, type:'caption', images:[{dataUrl,name}]}     → {id, type:'progress', ...}* + {id, type:'done', captions}
@@ -111,8 +112,10 @@ async function handleLoad(msg) {
     const { id, modelId, task, dtypeCandidates } = msg;
     workerState.cancelRequested = false;
 
-    const hf = await getHF();
-    const { device, fp16 } = await detectDevice();
+    // El import del runtime (~20 MB) y la detección de adaptador son
+    // independientes: en paralelo se solapa el coste en vez de encadenarlo.
+    const [hf, dev] = await Promise.all([getHF(), detectDevice()]);
+    const { device, fp16 } = dev;
     const candidates = adaptDtypes(dtypeCandidates && dtypeCandidates.length ? dtypeCandidates : ['q4f16'], device, fp16);
 
     if (workerState.loadedModelId === modelId && workerState.loadedTask === task && workerState.pipe) {
@@ -232,16 +235,36 @@ function serializeResult(result) {
 
 async function handleCaption(msg) {
     const { id, images } = msg;
-    const hf = await getHF();
-    const { device } = await detectDevice();
+    const [hf, dev] = await Promise.all([getHF(), detectDevice()]);
+    const { device, fp16 } = dev;
 
     if (!workerState.assistPipe || workerState.assistModelId !== msg.assistModelId) {
-        workerState.assistPipe = await hf.pipeline(msg.assistTask || 'image-to-text', msg.assistModelId, {
-            device,
-            progress_callback: (progress) => {
-                postMessage({ id, type: 'progress', ...pickProgressFields(progress) });
+        // Igual que handleLoad: respetar el dtype del catálogo (q4/q8…). Sin
+        // esto, en WebGPU el pipeline usa fp32 por defecto y descarga una
+        // variante mucho más pesada del modelo de visión, duplicando la
+        // descarga respecto a la ruta inline.
+        const candidates = adaptDtypes(
+            msg.dtypeCandidates && msg.dtypeCandidates.length ? msg.dtypeCandidates : ['q4'],
+            device, fp16
+        );
+        const progress_callback = (progress) => {
+            postMessage({ id, type: 'progress', ...pickProgressFields(progress) });
+        };
+        let assistPipe = null;
+        let lastError = null;
+        for (let i = 0; i < candidates.length; i++) {
+            try {
+                assistPipe = await hf.pipeline(msg.assistTask || 'image-to-text', msg.assistModelId, {
+                    device, dtype: candidates[i], progress_callback
+                });
+                break;
+            } catch (err) {
+                lastError = err;
+                if (i === candidates.length - 1 || !looksLikeRuntimeInitFailure(err)) throw err;
             }
-        });
+        }
+        if (!assistPipe && lastError) throw lastError;
+        workerState.assistPipe = assistPipe;
         workerState.assistModelId = msg.assistModelId;
     }
 
@@ -263,6 +286,13 @@ self.onmessage = async (event) => {
         if (msg.type === 'probe') {
             const { device, fp16 } = await detectDevice();
             postMessage({ id: msg.id, type: 'done', device, fp16 });
+        } else if (msg.type === 'prime') {
+            // Adelanta el coste FIJO de cualquier carga —importar el runtime de
+            // Transformers.js y sus binarios WASM, y negociar el adaptador— sin
+            // saber todavía qué modelo se usará. Cuando llega el primer mensaje,
+            // solo queda descargar los pesos.
+            const [, dev] = await Promise.all([getHF(), detectDevice()]);
+            postMessage({ id: msg.id, type: 'done', device: dev.device, fp16: dev.fp16, primed: true });
         } else if (msg.type === 'load') {
             await handleLoad(msg);
         } else if (msg.type === 'generate') {

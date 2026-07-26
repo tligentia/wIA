@@ -56,16 +56,24 @@ async function handleProjectFiles(files) {
                 data: textData
             });
         } else {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                persistProjectDocument(proj, {
+            if (file.size > MAX_PROJECT_DOC_BYTES) {
+                alert(`«${file.name}» ocupa ${formatBytes(file.size)} y supera el límite de ${formatBytes(MAX_PROJECT_DOC_BYTES)} por documento. Divídelo en partes más pequeñas.`);
+                continue;
+            }
+            // await en serie: `reader.onload` sin esperar lanzaba varias
+            // escrituras concurrentes a IndexedDB sobre el mismo proyecto, y la
+            // última en resolver podía pisar a las anteriores.
+            try {
+                const data = await readFileAsText(file);
+                await persistProjectDocument(proj, {
                     id: crypto.randomUUID(),
                     name: file.name,
                     type: file.type,
-                    data: e.target.result
+                    data
                 });
-            };
-            reader.readAsText(file);
+            } catch (e) {
+                alert(`No se pudo leer «${file.name}»: ${e?.message || e}`);
+            }
         }
     }
     dom.projectFileUpload.value = '';
@@ -77,7 +85,7 @@ function renderProjectDocList() {
     dom.projectDocList.innerHTML = proj.documents.map(d => `
         <div class="attachment-item" style="max-width: 100%; justify-content: space-between;">
             <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📝 ${escapeHtml(d.name)}</span>
-            <button class="btn-icon" onclick="removeProjectDoc('${d.id}')" style="width:20px;height:20px;color:var(--danger)">✕</button>
+            <button class="btn-icon" data-remove-doc="${escapeHtml(d.id)}" style="width:20px;height:20px;color:var(--danger)">✕</button>
         </div>
     `).join('');
 }
@@ -90,9 +98,82 @@ window.removeProjectDoc = (id) => {
 };
 
 // ─── Attachments Logic ──────────────────────
+// Límites de adjuntos. Sin ellos, una foto de móvil (4-12 MB) se guardaba en
+// base64 dentro del chat en IndexedDB y se reenviaba ENTERA en cada turno de la
+// conversación: cuota agotada, peticiones enormes y coste multiplicado en los
+// motores de pago. Se comprime en el navegador antes de guardarla.
+const IMAGE_MAX_DIMENSION = 1568;   // el lado largo tras redimensionar
+const IMAGE_TARGET_QUALITY = 0.85;  // calidad JPEG del reescalado
+const MAX_TEXT_ATTACHMENT_BYTES = 2 * 1024 * 1024;   // 2 MB de texto por archivo
+const MAX_PROJECT_DOC_BYTES = 4 * 1024 * 1024;       // 4 MB por documento del proyecto
+
+function formatBytes(bytes) {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${bytes} B`;
+}
+
+/**
+ * compressImageFile — redimensiona al lado largo máximo y recodifica a JPEG.
+ * Devuelve { base64, mimeType, width, height }. Si el navegador no puede
+ * decodificar la imagen, se degrada al fichero original sin tocarlo.
+ */
+async function compressImageFile(file) {
+    const readAsDataUrl = () => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+
+    try {
+        // PNG con transparencia y GIF animados se dejan intactos si ya son
+        // pequeños: recodificar a JPEG les pondría un fondo negro o los aplanaría.
+        const keepAsIs = /image\/(gif|svg\+xml)/.test(file.type);
+        const bitmap = keepAsIs ? null : await createImageBitmap(file);
+
+        if (!bitmap || (bitmap.width <= IMAGE_MAX_DIMENSION && bitmap.height <= IMAGE_MAX_DIMENSION && file.size <= 900 * 1024)) {
+            bitmap?.close?.();
+            const dataUrl = await readAsDataUrl();
+            return { base64: dataUrl.split(',')[1], mimeType: file.type || 'image/png' };
+        }
+
+        const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+        const width = Math.round(bitmap.width * scale);
+        const height = Math.round(bitmap.height * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        // Fondo blanco: JPEG no tiene alfa y sin esto las zonas transparentes
+        // salen negras.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close?.();
+
+        const dataUrl = canvas.toDataURL('image/jpeg', IMAGE_TARGET_QUALITY);
+        return { base64: dataUrl.split(',')[1], mimeType: 'image/jpeg', width, height };
+    } catch (e) {
+        console.warn('[Adjuntos] No se pudo comprimir la imagen; se usa el original:', e);
+        const dataUrl = await readAsDataUrl();
+        return { base64: dataUrl.split(',')[1], mimeType: file.type || 'image/png' };
+    }
+}
+
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+    });
+}
+
 async function handleFiles(files) {
     if (!files.length) return;
-    
+
     for (const file of files) {
         if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             const textData = await extractTextFromPDF(file);
@@ -112,24 +193,37 @@ async function handleFiles(files) {
             alert(`El modelo seleccionado (${state.settings.model}) no soporta imágenes.`);
             continue;
         }
-        
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const data = e.target.result;
+
+        if (isImage) {
+            const { base64, mimeType } = await compressImageFile(file);
+            state.attachments.push({
+                id: crypto.randomUUID(),
+                name: file.name,
+                type: mimeType,
+                isImage: true,
+                data: base64
+            });
+            renderAttachmentPreview();
+            continue;
+        }
+
+        if (file.size > MAX_TEXT_ATTACHMENT_BYTES) {
+            alert(`«${file.name}» ocupa ${formatBytes(file.size)} y supera el límite de ${formatBytes(MAX_TEXT_ATTACHMENT_BYTES)} por archivo adjunto.\n\nPara textos grandes, añádelo como documento del proyecto: así se reparte y se recorta al contexto del modelo en vez de enviarse entero en cada mensaje.`);
+            continue;
+        }
+
+        try {
+            const data = await readFileAsText(file);
             state.attachments.push({
                 id: crypto.randomUUID(),
                 name: file.name,
                 type: file.type,
-                isImage: isImage,
-                data: isImage ? data.split(',')[1] : data
+                isImage: false,
+                data
             });
             renderAttachmentPreview();
-        };
-        
-        if (isImage) {
-            reader.readAsDataURL(file);
-        } else {
-            reader.readAsText(file);
+        } catch (e) {
+            alert(`No se pudo leer «${file.name}»: ${e?.message || e}`);
         }
     }
     dom.fileUpload.value = '';
@@ -172,10 +266,14 @@ function renderAttachmentPreview() {
 // puede fijar identidad (emoji, descripción), motor propio (proveedor, modelo,
 // temperatura) e iniciadores de conversación para la pantalla de bienvenida.
 
+// Atajo de traducción con respaldo: 09-i18n.js se carga DESPUÉS que este
+// módulo, así que `t` puede no existir todavía cuando se define algo aquí; se
+// comprueba en cada llamada, no al cargar.
+const tr = (key, fallback) => (typeof t === 'function' ? t(key, fallback) : fallback);
+
 // Iniciadores por defecto, traducibles: se resuelven en el idioma activo cada
 // vez que se pintan (renderWelcomeStarters se re-ejecuta al cambiar de idioma).
 function getDefaultWelcomeStarters() {
-    const tr = (k, fb) => (typeof t === 'function' ? t(k, fb) : fb);
     return [
         { icon: '🚀', title: tr('starter.explore.title', 'Explorar capacidades'), desc: tr('starter.explore.desc', ''), prompt: tr('starter.explore.prompt', '') },
         { icon: '✨', title: tr('starter.improve.title', 'Mejora este Prompt'), desc: tr('starter.improve.desc', ''), prompt: tr('starter.improve.prompt', '') },
@@ -248,7 +346,9 @@ function renderWelcomeStarters() {
     if (subtitleEl) {
         subtitleEl.innerHTML = isAgent
             ? escapeHtml(proj.description || 'Agente personalizado')
-            : 'Tu hub de IA multimotor — <strong>Local y Cloud</strong>';
+            // El subtítulo se reescribe desde JS en cada render, así que aquí no
+            // basta con marcar el HTML: hay que resolver la traducción a mano.
+            : `${escapeHtml(tr('app.tagline', 'Tu hub de IA multimotor —'))} <strong>${escapeHtml(tr('app.tagline.accent', 'Local y Cloud'))}</strong>`;
     }
 
     // Trunca por límite de palabra (no a media palabra) y añade … si sobra texto.
@@ -642,18 +742,18 @@ function buildChatItemHtml(chat) {
                 <div class="chat-item-date">${formatDate(chat.updatedAt)}</div>
             </div>
             <div class="chat-item-actions">
-                <button class="btn-icon star-chat-btn ${isStarred ? 'star-active' : ''}" data-id="${chat.id}" title="${isStarred ? 'Quitar de favoritos' : 'Añadir a favoritos'}">
+                <button class="btn-icon star-chat-btn ${isStarred ? 'star-active' : ''}" data-id="${chat.id}" title="${escapeHtml(isStarred ? tr('chat.unfavorite', 'Quitar de favoritos') : tr('chat.favorite', 'Añadir a favoritos'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? 'var(--star-color)' : 'none'}" stroke="${isStarred ? 'var(--star-color)' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                     </svg>
                 </button>
-                <button class="btn-icon export-chat-btn" data-id="${chat.id}" title="Exportar">
+                <button class="btn-icon export-chat-btn" data-id="${chat.id}" title="${escapeHtml(tr('chat.export', 'Exportar'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 </button>
-                <button class="btn-icon move-chat-btn" data-id="${chat.id}" title="Mover a otro Proyecto">
+                <button class="btn-icon move-chat-btn" data-id="${chat.id}" title="${escapeHtml(tr('chat.move', 'Mover a otro Proyecto'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 </button>
-                <button class="btn-icon delete-chat-btn" data-id="${chat.id}" title="Eliminar">
+                <button class="btn-icon delete-chat-btn" data-id="${chat.id}" title="${escapeHtml(tr('chat.delete', 'Eliminar'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     </svg>
