@@ -98,6 +98,7 @@ Cuando generes código:
             gemini:        { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            chatgpt_local: { url: 'http://127.0.0.1:10531/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             // maxTokens contenido por defecto: los modelos pequeños de navegador
             // tienden a divagar sin emitir fin-de-secuencia, y 4096 tokens de
@@ -426,7 +427,7 @@ function getOrderedProviderEntries() {
         .filter(id => validIds.has(id));
     const fallbackOrder = [
         'webgpu', 'ollama', 'lmstudio', 'localai', 'ollama_remote', 'ollama_cloud',
-        'groq', 'openrouter', 'gemini', 'claude', 'openai', 'nvidia',
+        'groq', 'openrouter', 'gemini', 'claude', 'openai', 'chatgpt_local', 'nvidia',
     ];
     const rank = (list, id) => {
         const index = list.indexOf(id);
@@ -1370,6 +1371,7 @@ function getCompactProviderLabel(providerId = state.settings.provider) {
         gemini: 'Gemini',
         claude: 'Claude',
         openai: 'OpenAI',
+        chatgpt_local: 'ChatGPT',
         nvidia: 'Nvidia'
     };
     return map[providerId] || getProviderDef(providerId).name;

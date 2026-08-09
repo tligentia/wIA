@@ -86,6 +86,12 @@ function configureConnectionHelp(failure = {}) {
             ['1. Inicia el servidor local', 'En LM Studio abre Developer/Local Server, carga un modelo y arranca el servidor.'],
             ['2. Revisa el endpoint y CORS', `La URL suele terminar en /v1 (actual: ${escapeHtml(endpoint)}). Habilita las peticiones desde navegador en la configuración del servidor.`]
         );
+    } else if (baseId === 'chatgpt_local') {
+        items.push(
+            ['1. Arranca la pasarela local', `wIA no habla con OpenAI en este motor: se conecta a una pasarela que corre en tu equipo y expone la suscripción de ChatGPT como API compatible con OpenAI. Arráncala y déjala abierta.<code class="connection-help-command">npx openai-oauth@latest</code>Debe quedar escuchando en ${escapeHtml(endpoint)}.`],
+            ['2. Inicia sesión una vez', 'Si nunca lo hiciste, la pasarela pedirá autorizar con tu cuenta de ChatGPT en el navegador.<code class="connection-help-command">npx openai-oauth login</code>Tus credenciales se quedan en tu máquina; wIA solo ve el endpoint local.'],
+            ['3. Ten en cuenta los términos', 'Estas pasarelas son proyectos NO oficiales, sin relación con OpenAI, y usan el flujo de su cliente Codex. El uso de tu suscripción por esta vía queda sujeto a los términos de OpenAI y bajo tu responsabilidad. Si prefieres la vía respaldada, usa el motor «OpenAI» con una API Key.']
+        );
     } else if (baseId === 'localai') {
         items.push(
             ['1. Arranca LocalAI', `Comprueba que el contenedor o binario está en marcha y responde en ${escapeHtml(endpoint)}. La API es compatible con OpenAI y suele colgar de /v1.`],
@@ -765,7 +771,7 @@ function getModelFunctionKeys(model, providerId = state.settings.provider) {
 
     // Por motor base, para que un clon de Groq/OpenAI/... conserve el soporte
     // de herramientas de su original.
-    if (['gemini', 'openai', 'nvidia', 'openrouter', 'groq', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
+    if (['gemini', 'openai', 'chatgpt_local', 'nvidia', 'openrouter', 'groq', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
         keys.add('tools');
     }
 

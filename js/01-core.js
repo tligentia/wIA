@@ -293,6 +293,13 @@ const PROVIDERS = {
     // usa como respaldo, con lo que la app arranca con un modelo distinto al anunciado.
     claude:        { name: 'Claude (Anthropic)',  type: 'anthropic',  auth: 'apikey',           defaultUrl: 'https://api.anthropic.com/v1',                            defaultModel: 'claude-sonnet-5',           icon: '🟣' },
     openai:        { name: 'OpenAI',              type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.openai.com/v1',                               defaultModel: 'gpt-4.1',                   icon: '🤖' },
+    // Suscripción de ChatGPT en vez de créditos de API. wIA NO habla con OpenAI
+    // aquí: se conecta a una pasarela local (openai-oauth, Hermes y similares)
+    // que el usuario arranca en su equipo y que expone un endpoint compatible
+    // con OpenAI. El inicio de sesión lo hace esa pasarela con el flujo de
+    // Codex, que exige una redirección a loopback y un backend sin CORS —
+    // imposible desde una pestaña—, así que aquí no se puede replicar.
+    chatgpt_local: { name: 'ChatGPT (suscripción)', type: 'openai',   auth: 'none',             defaultUrl: 'http://127.0.0.1:10531/v1',                               defaultModel: '',                          icon: '🎫' },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
     webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', icon: '🧠' },
 };

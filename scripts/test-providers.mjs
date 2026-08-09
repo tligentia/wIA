@@ -112,6 +112,20 @@ const urlsDivergentes = run(`(() => {
 check('cada motor arranca con su endpoint oficial en la configuración',
     urlsDivergentes.length === 0, urlsDivergentes.join(', '));
 
+// ChatGPT por suscripción: wIA habla con una pasarela LOCAL, no con OpenAI.
+// Si esta entrada apuntara a api.openai.com mandaría la petición al sitio
+// equivocado, y sin API key devolvería 401 sin explicar por qué.
+check('el motor de suscripción apunta a una pasarela local, no a OpenAI', run(`(() => {
+    const url = PROVIDERS.chatgpt_local?.defaultUrl || '';
+    return /^http:\\/\\/(127\\.0\\.0\\.1|localhost):/.test(url) && !/openai\\.com/.test(url);
+})()`) === true, run(`PROVIDERS.chatgpt_local?.defaultUrl`));
+check('y no pide API Key, porque la pasarela ya está autenticada',
+    run(`PROVIDERS.chatgpt_local?.auth`) === 'none', run(`PROVIDERS.chatgpt_local?.auth`));
+check('habla el dialecto de OpenAI', run(`PROVIDERS.chatgpt_local?.type`) === 'openai');
+check('no se confunde con el motor OpenAI de API Key',
+    run(`PROVIDERS.openai.defaultUrl`) === 'https://api.openai.com/v1' &&
+    run(`PROVIDERS.openai.auth`) === 'apikey');
+
 console.log('\n2. Clonar una conexión\n');
 
 // El escenario real: un Ollama ya configurado a mano al que se le saca copia.
@@ -201,7 +215,7 @@ check('y sus copias lo heredan', run(`(() => {
 })()`) === true);
 // No se anuncia OAuth donde el proveedor no lo publica para terceros: un botón
 // que lleva a una página de error es peor que no tener botón.
-const oauthIndebido = run(`['openai','claude','groq','nvidia','gemini','ollama','lmstudio','localai','webgpu']
+const oauthIndebido = run(`['openai','claude','groq','nvidia','gemini','ollama','lmstudio','localai','webgpu','chatgpt_local']
     .filter(id => supportsProviderOAuth(id))`);
 check('no se anuncia en los motores que no lo publican', oauthIndebido.length === 0, oauthIndebido.join(', '));
 
