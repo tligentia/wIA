@@ -130,6 +130,116 @@ function prepareModelPanelForProvider(providerId = state.settings.provider) {
     updateSettingsActiveContext();
 }
 
+// ─── OAuth con el proveedor (PKCE) ──────────
+// El estado del intercambio vive en sessionStorage, no en localStorage: solo
+// tiene que sobrevivir a la ida y vuelta al proveedor en ESTA pestaña, y así no
+// queda un verificador olvidado en el disco si el usuario abandona a medias.
+const OAUTH_PENDING_KEY = 'wia_oauth_pending';
+
+function readPendingOAuth() {
+    try {
+        const raw = sessionStorage.getItem(OAUTH_PENDING_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+}
+
+function clearPendingOAuth() {
+    try { sessionStorage.removeItem(OAUTH_PENDING_KEY); } catch (_) {}
+}
+
+// URL de retorno: el propio origen y ruta, SIN query ni hash. Debe ser estable
+// (la registra el proveedor en el redirect) y no arrastrar parámetros viejos.
+function oauthCallbackUrl() {
+    return `${window.location.origin}${window.location.pathname}`;
+}
+
+/**
+ * startProviderOAuth — manda al usuario al proveedor a autorizar.
+ * Guarda a qué motor volver, porque al regresar la app arranca de cero y el
+ * código hay que aplicarlo a la conexión concreta desde la que se pidió (que
+ * puede ser una copia, no el motor de serie).
+ */
+async function startProviderOAuth(providerId = state.settings.provider) {
+    const oauth = getProviderOAuth(providerId);
+    if (!oauth) return false;
+
+    const verifier = createPkceVerifier();
+    const challenge = await createPkceChallenge(verifier);
+    if (!challenge) {
+        alert(tr('oauth.insecureContext', 'Tu navegador no permite el cifrado necesario para este inicio de sesión. Abre wIA por HTTPS (o en localhost) e inténtalo de nuevo.'));
+        return false;
+    }
+
+    try {
+        sessionStorage.setItem(OAUTH_PENDING_KEY, JSON.stringify({
+            provider: providerId, verifier, startedAt: Date.now(),
+        }));
+    } catch (_) {
+        alert(tr('oauth.noStorage', 'No se pudo iniciar el proceso: este navegador tiene bloqueado el almacenamiento de sesión.'));
+        return false;
+    }
+
+    const url = new URL(oauth.authUrl);
+    url.searchParams.set('callback_url', oauthCallbackUrl());
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+    window.location.assign(url.toString());
+    return true;
+}
+
+/**
+ * finishProviderOAuth — al volver del proveedor, canjea el código por la clave.
+ *
+ * Se llama en el arranque. El `code` se retira de la barra de direcciones antes
+ * de nada: es de un solo uso, pero no debe quedarse en el historial, en los
+ * marcadores ni en el `Referer` de la siguiente petición.
+ */
+async function finishProviderOAuth() {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return false;
+
+    const pending = readPendingOAuth();
+    try {
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete('code');
+        window.history.replaceState({}, '', clean.pathname + clean.search + clean.hash);
+    } catch (_) {}
+
+    // Sin verificador no se puede completar: o la pestaña no es la que inició
+    // el proceso, o alguien ha llegado con un `code` de fuera. No se canjea.
+    if (!pending?.verifier || !pending.provider) { clearPendingOAuth(); return false; }
+    const oauth = getProviderOAuth(pending.provider);
+    if (!oauth || !PROVIDERS[pending.provider]) { clearPendingOAuth(); return false; }
+
+    try {
+        const res = await fetch(oauth.exchangeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, code_verifier: pending.verifier, code_challenge_method: 'S256' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data?.key) throw new Error('la respuesta no incluye ninguna clave');
+
+        // La clave se guarda en la conexión que inició el proceso, no en el
+        // motor activo: el usuario pudo cambiar de motor mientras autorizaba.
+        const cfg = state.settings.providerConfigs[pending.provider] || {};
+        cfg.apiKey = data.key;
+        state.settings.providerConfigs[pending.provider] = cfg;
+        state.settings.provider = pending.provider;
+        syncProviderToState();
+        saveState();
+        clearPendingOAuth();
+        return true;
+    } catch (e) {
+        clearPendingOAuth();
+        console.warn('[OAuth] no se pudo completar el inicio de sesión:', e);
+        alert(tr('oauth.failed', 'No se pudo completar el inicio de sesión con el proveedor. Puedes introducir tu API Key a mano.'));
+        return false;
+    }
+}
+
 function setConnectionValidationFeedback(kind = 'idle', message = 'Sin validar') {
     if (!dom.connectionValidationResult) return;
     dom.connectionValidationResult.className = `connection-validation-result is-${kind}`;

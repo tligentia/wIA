@@ -172,6 +172,9 @@ const dom = {
     providerCloneBtn: $('#providerCloneBtn'),
     providerRenameBtn: $('#providerRenameBtn'),
     providerDeleteBtn: $('#providerDeleteBtn'),
+    providerOauth: $('#providerOauth'),
+    providerOauthBtn: $('#providerOauthBtn'),
+    providerOauthLabel: $('#providerOauthLabel'),
     providerUrlSuggest: $('#providerUrlSuggest'),
     providerUrlSuggestBtn: $('#providerUrlSuggestBtn'),
     engineCopyModal: $('#engineCopyModal'),
@@ -326,6 +329,10 @@ async function init() {
     }
 
     await loadState();
+    // Vuelta del proveedor tras autorizar (OAuth PKCE): se canjea el código por
+    // la clave ANTES de sondear conexiones, para que el primer chequeo ya la use
+    // y el usuario no vea un «falta API Key» que acaba de resolver.
+    if (typeof finishProviderOAuth === 'function') await finishProviderOAuth();
     // Marca el dispositivo como móvil para adaptar avisos/estilos (WebGPU pesado).
     if (typeof isMobileDevice === 'function') {
         document.body.classList.toggle('mobile-device', isMobileDevice());
@@ -724,6 +731,13 @@ function updateProviderUI() {
     }
     if (dom.apiKeyInput) {
         dom.apiKeyInput.value = state.settings.apiKey || '';
+    }
+
+    // Inicio de sesión con el proveedor: solo donde hay un OAuth utilizable.
+    const oauth = typeof getProviderOAuth === 'function' ? getProviderOAuth(state.settings.provider) : null;
+    if (dom.providerOauth) dom.providerOauth.classList.toggle('hidden', !oauth);
+    if (oauth && dom.providerOauthLabel) {
+        dom.providerOauthLabel.textContent = tr('oauth.connect', 'Conectar con {name}').replace('{name}', oauth.label);
     }
 
     // Show/hide server URL (hidden for WebGPU)

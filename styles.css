@@ -1833,6 +1833,29 @@ select.setting-input {
     color: var(--text-tertiary);
 }
 
+/* Inicio de sesión con el proveedor (OAuth). Va bajo la API Key porque es la
+   alternativa a escribirla, no una opción independiente. */
+.provider-oauth {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-default);
+}
+
+.provider-oauth.hidden { display: none; }
+
+.provider-oauth-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.provider-oauth-note {
+    margin-top: 6px;
+    font-size: 0.7rem;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+}
+
 /* Propuesta del endpoint oficial. Solo aparece cuando lo escrito difiere del
    que publica el proveedor: si ya coincide, repetirlo sería ruido. */
 .provider-url-suggest {

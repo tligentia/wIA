@@ -555,6 +555,16 @@
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                         Tu API Key se guarda solo en este navegador y se envía únicamente al proveedor seleccionado al validar o consultar.
                     </p>
+                    <!-- Inicio de sesión sin clave. Solo se muestra en los motores
+                         cuyo proveedor publica un flujo OAuth utilizable desde una
+                         app estática (hoy, OpenRouter con PKCE). -->
+                    <div class="provider-oauth hidden" id="providerOauth">
+                        <button type="button" class="btn-secondary provider-oauth-btn" id="providerOauthBtn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
+                            <span id="providerOauthLabel"></span>
+                        </button>
+                        <p class="provider-oauth-note" id="providerOauthNote" data-i18n="oauth.note">Te llevará al proveedor para que autorices el acceso. wIA recibirá una clave propia de tu cuenta, que se guarda cifrada en este navegador; tu contraseña nunca pasa por aquí.</p>
+                    </div>
                 </div>
                 <div class="setting-group">
                     <label class="setting-label" title="End point HTTP/S de destino base. Especialmente útil para entornos self-hosted como LMStudio u Ollama remoto." data-i18n="field.serverUrl">URL del Servidor</label>

@@ -560,6 +560,14 @@ function bindEvents() {
         updateProviderUrlSuggestion();
     });
 
+    dom.providerOauthBtn?.addEventListener('click', async () => {
+        // Lo escrito sin guardar (URL, modelo) se persiste antes de salir: la
+        // navegación al proveedor recarga la app entera al volver.
+        saveCurrentProviderConfig();
+        saveState();
+        await startProviderOAuth(state.settings.provider);
+    });
+
     dom.providerUrlSuggestBtn?.addEventListener('click', () => {
         const official = getProviderDef(state.settings.provider).defaultUrl || '';
         if (!official || !dom.ollamaUrl) return;

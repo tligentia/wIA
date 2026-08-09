@@ -304,6 +304,64 @@ function tr(key, fallback = '') {
     return typeof t === 'function' ? t(key, fallback) : fallback;
 }
 
+// ─── Inicio de sesión OAuth de proveedores ──
+/**
+ * De los motores comerciales del catálogo, solo se soporta OAuth donde el
+ * proveedor publica un flujo utilizable desde una app estática, sin servidor
+ * propio y sin registrar un cliente por despliegue. Hoy eso es OpenRouter.
+ *
+ * Los demás quedan fuera por motivos concretos, no por falta de ganas:
+ *  · OpenAI, Anthropic, Groq y Nvidia no exponen OAuth para su API de
+ *    inferencia a terceros: la autenticación es por API key. (El OAuth de
+ *    Anthropic y OpenAI cubre sus propios clientes y sus API de administración,
+ *    no el acceso de una web ajena a /v1/messages o /v1/chat/completions.)
+ *  · Google Gemini sí admite OAuth 2.0, pero exige registrar un client_id en
+ *    Google Cloud y declarar el origen de redirección: no se puede embeber en
+ *    una app que cada cual despliega en su propio dominio. Encaja como ajuste
+ *    avanzado con client_id propio, no como botón inmediato.
+ *
+ * Añadir un proveedor aquí solo requiere describir su flujo; el resto del
+ * código lo consume por el motor base, así que sus clones lo heredan.
+ */
+const PROVIDER_OAUTH = {
+    openrouter: {
+        label: 'OpenRouter',
+        // PKCE sin registro previo de cliente: se manda al usuario a /auth con
+        // el reto y se canjea el código por una clave propia de su cuenta.
+        authUrl: 'https://openrouter.ai/auth',
+        exchangeUrl: 'https://openrouter.ai/api/v1/auth/keys',
+        docsUrl: 'https://openrouter.ai/docs/use-cases/oauth-pkce',
+    },
+};
+
+function getProviderOAuth(providerId) {
+    return PROVIDER_OAUTH[getProviderBaseId(providerId)] || null;
+}
+
+function supportsProviderOAuth(providerId) {
+    return !!getProviderOAuth(providerId);
+}
+
+// Verificador PKCE: 64 caracteres del alfabeto permitido (unreserved), sacados
+// de crypto.getRandomValues y no de Math.random, que es predecible.
+function createPkceVerifier() {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    const bytes = new Uint8Array(64);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
+
+// S256: SHA-256 del verificador en base64url (sin relleno). Si el navegador no
+// expone crypto.subtle —contexto no seguro—, se devuelve null y quien llame
+// decide; nunca se degrada a `plain` en silencio, que anularía la protección.
+async function createPkceChallenge(verifier) {
+    if (!crypto?.subtle) return null;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    let binary = '';
+    for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 // ─── Nombres personalizados de los motores ──
 // Los rótulos de fábrica se congelan aquí, ANTES de que nada los toque: aplicar
 // un nombre personalizado sobrescribe `def.name`, así que sin esta copia no

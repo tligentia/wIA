@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { resolve } from 'node:path';
+import { webcrypto } from 'node:crypto';
 
 const root = process.cwd();
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -37,7 +38,14 @@ const sandbox = {
     console: { ...console, warn() {}, error() {} },
     setTimeout, clearTimeout, setInterval, clearInterval,
     performance: { now: () => Date.now(), memory: null },
-    crypto: { randomUUID: () => 'id', subtle: null, getRandomValues: (a) => a },
+    // WebCrypto REAL, no un doble: aquí se comprueba PKCE, y un getRandomValues
+    // que devolviera el array intacto daría verificadores idénticos sin que la
+    // prueba se enterase —justo el fallo que debe detectar—.
+    crypto: {
+        randomUUID: () => webcrypto.randomUUID(),
+        subtle: webcrypto.subtle,
+        getRandomValues: (a) => webcrypto.getRandomValues(a),
+    },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     indexedDB: { open: () => ({}) },
@@ -184,7 +192,37 @@ check('una copia hereda el endpoint oficial de su base', run(`(() => {
 check('Ollama remoto no propone endpoint: el host lo pone el usuario',
     run(`PROVIDERS.ollama_remote.defaultUrl`) === '');
 
-console.log('\n5. Renombrar y eliminar\n');
+console.log('\n5. OAuth con el proveedor (PKCE)\n');
+
+check('OpenRouter ofrece inicio de sesión', run(`supportsProviderOAuth('openrouter')`) === true);
+check('y sus copias lo heredan', run(`(() => {
+    const id = cloneProvider('openrouter', 'OpenRouter OAuth');
+    return supportsProviderOAuth(id) && getProviderOAuth(id).label === 'OpenRouter';
+})()`) === true);
+// No se anuncia OAuth donde el proveedor no lo publica para terceros: un botón
+// que lleva a una página de error es peor que no tener botón.
+const oauthIndebido = run(`['openai','claude','groq','nvidia','gemini','ollama','lmstudio','localai','webgpu']
+    .filter(id => supportsProviderOAuth(id))`);
+check('no se anuncia en los motores que no lo publican', oauthIndebido.length === 0, oauthIndebido.join(', '));
+
+check('el verificador PKCE es largo y del alfabeto permitido', run(`(() => {
+    const v = createPkceVerifier();
+    return v.length >= 43 && v.length <= 128 && /^[A-Za-z0-9\\-._~]+$/.test(v);
+})()`) === true);
+check('dos verificadores seguidos no se repiten',
+    run(`createPkceVerifier() !== createPkceVerifier()`) === true);
+check('el reto es base64url sin relleno', await run(`(async () => {
+    const c = await createPkceChallenge('verificador-de-prueba');
+    return typeof c === 'string' && c.length > 0 && !/[+/=]/.test(c);
+})()`) === true);
+check('el mismo verificador da siempre el mismo reto (S256)', await run(`(async () => {
+    const a = await createPkceChallenge('abc');
+    const b = await createPkceChallenge('abc');
+    const c = await createPkceChallenge('abd');
+    return a === b && a !== c;
+})()`) === true);
+
+console.log('\n6. Renombrar y eliminar\n');
 
 check('renombrar cambia el rótulo…', run(`(() => {
     renameCustomProvider('${cloneId}', 'Ollama Sede');
@@ -251,7 +289,7 @@ check('los proyectos que lo usaban caen a su motor base, no a un id fantasma',
     run(`state.projects[0].agentProvider`) === 'ollama');
 check('las demás copias sobreviven al borrado', run(`!!PROVIDERS['${cloneId}']`) === true);
 
-console.log('\n6. Persistencia entre sesiones\n');
+console.log('\n7. Persistencia entre sesiones\n');
 
 check('registrar es idempotente: no duplica al repetirse', run(`(() => {
     const antes = Object.keys(PROVIDERS).length;
