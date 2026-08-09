@@ -74,18 +74,25 @@ function configureConnectionHelp(failure = {}) {
         items.push(['Usa un endpoint compatible', 'Sirve el motor mediante HTTPS o abre wIA desde un origen HTTP/local de confianza.']);
     }
 
-    if (providerId === 'ollama') {
+    const baseId = getProviderBaseId(providerId);
+    if (baseId === 'ollama') {
         items.push(
             ['1. Comprueba Ollama', `Confirma que Ollama está abierto y responde en ${escapeHtml(endpoint)}. Una conexión rechazada no es un error CORS.`],
             ['2. Autoriza el origen de wIA', 'Si Ollama responde fuera de wIA pero el navegador lo bloquea, configura OLLAMA_ORIGINS y reinicia completamente Ollama.<code class="connection-help-command">launchctl setenv OLLAMA_ORIGINS "*"</code><code class="connection-help-command">[System.Environment]::SetEnvironmentVariable(\'OLLAMA_ORIGINS\', \'*\', \'User\')</code>'],
             ['3. Reintenta', 'Vuelve a wIA después de reiniciar Ollama. Si continúa, revisa que la URL y el puerto sean correctos.']
         );
-    } else if (providerId === 'lmstudio') {
+    } else if (baseId === 'lmstudio') {
         items.push(
             ['1. Inicia el servidor local', 'En LM Studio abre Developer/Local Server, carga un modelo y arranca el servidor.'],
             ['2. Revisa el endpoint y CORS', `La URL suele terminar en /v1 (actual: ${escapeHtml(endpoint)}). Habilita las peticiones desde navegador en la configuración del servidor.`]
         );
-    } else if (providerId === 'ollama_remote') {
+    } else if (baseId === 'localai') {
+        items.push(
+            ['1. Arranca LocalAI', `Comprueba que el contenedor o binario está en marcha y responde en ${escapeHtml(endpoint)}. La API es compatible con OpenAI y suele colgar de /v1.`],
+            ['2. Permite el origen de wIA', 'LocalAI solo acepta peticiones de navegador con CORS habilitado: arráncalo con <code class="connection-help-command">CORS=true</code> y, si lo restringes, añade el origen de wIA en <code class="connection-help-command">CORS_ALLOW_ORIGINS</code>.'],
+            ['3. Clave solo si la exiges', 'Deja la API Key vacía salvo que hayas arrancado LocalAI con API_KEY; en ese caso ponla aquí y viajará como Bearer.']
+        );
+    } else if (baseId === 'ollama_remote') {
         items.push(
             ['1. Verifica alcance y protocolo', 'Comprueba que el host remoto sea accesible desde este dispositivo y usa HTTPS si wIA también se sirve por HTTPS.'],
             ['2. Configura el servidor remoto', 'Autoriza el origen de wIA con OLLAMA_ORIGINS o añade Access-Control-Allow-Origin en tu proxy inverso. No expongas Ollama directamente a Internet sin autenticación.']
@@ -488,7 +495,7 @@ async function fetchModelCapabilities(modelName) {
         return;
     }
 
-    if (['openai', 'gemini', 'anthropic'].includes(provType) || providerId === 'lmstudio') {
+    if (['openai', 'gemini', 'anthropic'].includes(provType) || getProviderBaseId(providerId) === 'lmstudio') {
         state.capabilities = inferred;
         updateToolbarVisibility();
         return;
@@ -646,7 +653,9 @@ function getModelFunctionKeys(model, providerId = state.settings.provider) {
         if (sizeMB >= 3500) keys.add('large');
     }
 
-    if (providerId === 'gemini' || providerId === 'openai' || providerId === 'nvidia' || providerId === 'openrouter' || providerId === 'groq' || providerId === 'claude' || providerId === 'lmstudio') {
+    // Por motor base, para que un clon de Groq/OpenAI/... conserve el soporte
+    // de herramientas de su original.
+    if (['gemini', 'openai', 'nvidia', 'openrouter', 'groq', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
         keys.add('tools');
     }
 

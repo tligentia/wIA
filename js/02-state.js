@@ -79,12 +79,20 @@ Cuando generes código:
         privacyLockEnabled: false,
         anonymizeOutgoing: false, // 🕶️ DLP local: anonimizar antes de enviar a la IA
         anonDisabledTypes: [],    // IDs de tipos de datos que NO se anonimizan (resto: activos)
+        // Motores clonados por el usuario: [{ id, name, icon, baseProvider }].
+        // Su URL, credencial y modelo viven en providerConfigs como los de serie.
+        customProviders: [],
+        // Nombres personalizados de los motores de serie: id → rótulo. Solo
+        // guarda los que difieren del de fábrica, para que renombrar sea
+        // reversible y los cambios del catálogo lleguen a quien no lo tocó.
+        providerNames: {},
         // Per-provider configs — memorized independently
         providerConfigs: {
             ollama:        { url: 'http://localhost:11434', model: 'gemma4:e4b', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             ollama_remote: { url: '', model: 'gemma4:e4b', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             ollama_cloud:  { url: 'https://ollama.com', model: 'qwen3-vl:235b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             lmstudio:      { url: 'http://localhost:1234/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            localai:       { url: 'http://localhost:8080/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             groq:          { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             openrouter:    { url: 'https://openrouter.ai/api/v1', model: 'google/gemma-3-27b-it', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             gemini:        { url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
@@ -161,6 +169,17 @@ const dom = {
     // Settings
     providerSelect: $('#providerSelect'),
     providerFavoriteBtn: $('#providerFavoriteBtn'),
+    providerCloneBtn: $('#providerCloneBtn'),
+    providerRenameBtn: $('#providerRenameBtn'),
+    providerDeleteBtn: $('#providerDeleteBtn'),
+    providerUrlSuggest: $('#providerUrlSuggest'),
+    providerUrlSuggestBtn: $('#providerUrlSuggestBtn'),
+    engineCopyModal: $('#engineCopyModal'),
+    engineCopyTitle: $('#engineCopyTitle'),
+    engineCopyMessage: $('#engineCopyMessage'),
+    engineCopyNameLabel: $('#engineCopyNameLabel'),
+    engineCopyName: $('#engineCopyName'),
+    engineCopyConfirm: $('#engineCopyConfirm'),
     settingsActiveProvider: $('#settingsActiveProvider'),
     settingsActiveModel: $('#settingsActiveModel'),
     settingsActiveAvailability: $('#settingsActiveAvailability'),
@@ -399,7 +418,7 @@ function getOrderedProviderEntries() {
     const history = (Array.isArray(state.settings.providerUsageHistory) ? state.settings.providerUsageHistory : [])
         .filter(id => validIds.has(id));
     const fallbackOrder = [
-        'webgpu', 'ollama', 'lmstudio', 'ollama_remote', 'ollama_cloud',
+        'webgpu', 'ollama', 'lmstudio', 'localai', 'ollama_remote', 'ollama_cloud',
         'groq', 'openrouter', 'gemini', 'claude', 'openai', 'nvidia',
     ];
     const rank = (list, id) => {
@@ -417,8 +436,125 @@ function getOrderedProviderEntries() {
         const favoriteRankDiff = rank(favorites, idA) - rank(favorites, idB);
         if (favoriteRankDiff) return favoriteRankDiff;
 
-        return rank(fallbackOrder, idA) - rank(fallbackOrder, idB);
+        // Un clon no está en fallbackOrder: hereda el puesto de su base para
+        // quedar justo debajo de ella (el +0.5 evita empatar y perder el orden).
+        const baseRank = (id) => rank(fallbackOrder, getProviderBaseId(id)) + (isCustomProvider(id) ? 0.5 : 0);
+        return baseRank(idA) - baseRank(idB);
     });
+}
+
+// ─── Clonado de motores ─────────────────────
+// Registra en PROVIDERS los clones guardados y purga de settings los que ya no
+// se pueden reconstruir (su base desapareció), para que no se acumulen huérfanos
+// en localStorage ni reaparezcan si algún día vuelve un id de motor retirado.
+function syncCustomProviders() {
+    const registered = registerCustomProviders(state.settings.customProviders);
+    state.settings.customProviders = registered;
+    // Después de registrar, no antes: una copia recién creada no debe heredar
+    // el nombre personalizado que hubiera bajo el id de su base.
+    applyProviderNames(state.settings.providerNames);
+    return registered;
+}
+
+/**
+ * renameProvider — cambia el rótulo de CUALQUIER motor, de serie o copia.
+ *
+ * En una copia el nombre vive en customProviders; en un motor de serie se
+ * guarda aparte, en providerNames, y solo si difiere del de fábrica. Así el
+ * renombrado es reversible (nombre vacío o igual al original ⇒ se restaura) y
+ * quien no lo haya tocado sigue recibiendo los cambios del catálogo.
+ *
+ * El id nunca cambia: es la clave de providerConfigs, favoritos, historial y
+ * del motor fijado en proyectos y agentes.
+ */
+function renameProvider(providerId, name) {
+    if (!PROVIDERS[providerId]) return false;
+    const label = String(name || '').trim();
+    if (isCustomProvider(providerId)) return renameCustomProvider(providerId, label);
+
+    if (!state.settings.providerNames || typeof state.settings.providerNames !== 'object') {
+        state.settings.providerNames = {};
+    }
+    if (!label || label === getDefaultProviderName(providerId)) {
+        delete state.settings.providerNames[providerId];
+    } else {
+        state.settings.providerNames[providerId] = label;
+    }
+    applyProviderNames(state.settings.providerNames);
+    return true;
+}
+
+// ¿Lleva este motor un rótulo distinto al de fábrica?
+function hasCustomProviderName(providerId) {
+    if (isCustomProvider(providerId)) return true;
+    return !!state.settings.providerNames?.[providerId];
+}
+
+/**
+ * cloneProvider — duplica un motor con nombre propio.
+ *
+ * Copia la configuración ACTUAL del origen (URL, credencial, modelo y
+ * parámetros), no los valores por defecto del catálogo: clonar sirve justo para
+ * partir de una conexión que ya funciona y cambiarle una cosa —otro host, otra
+ * clave, otro modelo—. La API key se copia porque vive en la misma bóveda
+ * cifrada que la del origen y nunca sale del navegador.
+ */
+function cloneProvider(sourceId, name) {
+    if (!isCloneableProvider(sourceId)) return null;
+    const baseId = getProviderBaseId(sourceId);
+    const source = getProviderDef(sourceId);
+    const label = String(name || '').trim() || `${source.name} (copia)`;
+    const id = buildCustomProviderId(baseId, label);
+
+    const list = Array.isArray(state.settings.customProviders) ? state.settings.customProviders : [];
+    state.settings.customProviders = [...list, { id, name: label, icon: source.icon, baseProvider: baseId }];
+    syncCustomProviders();
+    if (!PROVIDERS[id]) return null;
+
+    const src = state.settings.providerConfigs[sourceId] || {};
+    state.settings.providerConfigs[id] = {
+        url: src.url ?? source.defaultUrl,
+        model: src.model ?? source.defaultModel,
+        apiKey: src.apiKey || '',
+        temperature: src.temperature ?? 0.8,
+        topP: src.topP ?? 0.9,
+        topK: src.topK ?? 40,
+        maxTokens: src.maxTokens ?? 4096,
+    };
+    return id;
+}
+
+function renameCustomProvider(providerId, name) {
+    const label = String(name || '').trim();
+    if (!label || !isCustomProvider(providerId)) return false;
+    const entry = (state.settings.customProviders || []).find(p => p.id === providerId);
+    if (!entry) return false;
+    // El id no cambia al renombrar: es la clave de providerConfigs, de favoritos,
+    // del historial y del motor fijado en cada proyecto/agente. Renombrarlo
+    // convertiría todas esas referencias en punteros rotos.
+    entry.name = label;
+    syncCustomProviders();
+    return true;
+}
+
+function deleteCustomProvider(providerId) {
+    if (!isCustomProvider(providerId)) return false;
+    const baseId = getProviderBaseId(providerId);
+    state.settings.customProviders = (state.settings.customProviders || []).filter(p => p.id !== providerId);
+    delete state.settings.providerConfigs[providerId];
+    state.settings.favoriteProviders = (state.settings.favoriteProviders || []).filter(id => id !== providerId);
+    state.settings.providerUsageHistory = (state.settings.providerUsageHistory || []).filter(id => id !== providerId);
+    state.settings.modelSuccessHistory = (state.settings.modelSuccessHistory || []).filter(e => e?.provider !== providerId);
+    delete state.providerAvailability[providerId];
+    // Proyectos y agentes que apuntaban al clon vuelven a su motor base en vez
+    // de quedarse con un id inexistente (que caería al Ollama por defecto).
+    (state.projects || []).forEach(p => { if (p.agentProvider === providerId) p.agentProvider = baseId; });
+    syncCustomProviders();
+    if (state.settings.provider === providerId) {
+        state.settings.provider = baseId;
+        syncProviderToState();
+    }
+    return true;
 }
 
 function markProviderUsed(providerId) {
@@ -451,6 +587,25 @@ function renderProviderOptions() {
         dom.providerFavoriteBtn.title = isFavorite
             ? `Quitar ${providerName} de favoritos`
             : `Marcar ${providerName} como favorito`;
+    }
+
+    // Clonar solo tiene sentido en motores con endpoint propio; renombrar y
+    // eliminar, solo sobre copias (un motor de serie no se puede borrar).
+    const cloneable = isCloneableProvider(selectedProvider);
+    const isCopy = isCustomProvider(selectedProvider);
+    if (dom.providerCloneBtn) {
+        dom.providerCloneBtn.hidden = !cloneable;
+        dom.providerCloneBtn.title = tr('engine.clone.title', 'Clonar {name} con otro nombre').replace('{name}', getProviderDef(selectedProvider).name);
+    }
+    // Renombrar vale para cualquier motor, no solo para las copias.
+    if (dom.providerRenameBtn) {
+        dom.providerRenameBtn.hidden = false;
+        dom.providerRenameBtn.title = tr('engine.rename.title', 'Renombrar {name}')
+            .replace('{name}', getProviderDef(selectedProvider).name);
+    }
+    if (dom.providerDeleteBtn) {
+        dom.providerDeleteBtn.hidden = !isCopy;
+        dom.providerDeleteBtn.title = tr('engine.delete.title', 'Eliminar {name}').replace('{name}', getProviderDef(selectedProvider).name);
     }
 }
 
@@ -502,8 +657,8 @@ function getAuthHeaders() {
         headers['Authorization'] = `Bearer ${apiKey}`;
     }
     
-    // OpenRouter requires extra headers
-    if (state.settings.provider === 'openrouter') {
+    // OpenRouter requires extra headers (también en sus clones)
+    if (getProviderBaseId(state.settings.provider) === 'openrouter') {
         const origin = window.location.origin && window.location.origin !== 'null' ? window.location.origin : 'https://wia-local.tligent.com';
         headers['HTTP-Referer'] = origin;
         headers['X-Title'] = 'wIA Chat';
@@ -584,14 +739,17 @@ function updateProviderUI() {
 
     // URL Placeholder and behavior
     if (dom.ollamaUrl) {
-        if (state.settings.provider === 'ollama') {
+        const baseId = getProviderBaseId(state.settings.provider);
+        if (baseId === 'ollama') {
             dom.ollamaUrl.placeholder = 'http://localhost:11434';
-        } else if (state.settings.provider === 'ollama_remote') {
+        } else if (baseId === 'ollama_remote') {
             dom.ollamaUrl.placeholder = 'https://dominio-remoto.com';
         } else {
             dom.ollamaUrl.placeholder = prov.defaultUrl || 'http://...';
         }
     }
+    updateProviderUrlSuggestion();
+
     // Dynamic text/title for refresh button
     if (dom.refreshModels) {
         if (isWebGPU) {
@@ -623,6 +781,32 @@ function updateProviderUI() {
     }
     
     updateInputDisclaimer();
+}
+
+/**
+ * updateProviderUrlSuggestion — ofrece el endpoint que publica el proveedor.
+ *
+ * Los motores comerciales ya arrancan con su URL puesta, pero en cuanto se
+ * edita (o se vacía, o se duplica la conexión y se toca) no había forma de
+ * recuperarla sin buscarla en la documentación del proveedor. La propuesta solo
+ * se muestra cuando lo escrito difiere del endpoint oficial; si coinciden,
+ * repetirlo sería ruido. Los motores sin endpoint publicado —Ollama remoto,
+ * que es el host del usuario— no proponen nada.
+ */
+function updateProviderUrlSuggestion() {
+    const box = dom.providerUrlSuggest;
+    if (!box) return;
+    const prov = getProviderDef(state.settings.provider);
+    const official = String(prov.defaultUrl || '').trim();
+    const current = String(dom.ollamaUrl?.value ?? state.settings.ollamaUrl ?? '').trim();
+    const normalize = (url) => url.replace(/\/+$/, '').toLowerCase();
+
+    const worthOffering = !!official && prov.type !== 'webgpu' && normalize(current) !== normalize(official);
+    box.classList.toggle('hidden', !worthOffering);
+    if (worthOffering && dom.providerUrlSuggestBtn) {
+        dom.providerUrlSuggestBtn.textContent = official;
+        dom.providerUrlSuggestBtn.title = tr('field.serverUrl.officialUse', 'Usar {url}').replace('{url}', official);
+    }
 }
 
 function updateInputDisclaimer() {
@@ -952,6 +1136,17 @@ async function loadState() {
                 state.activeProjectId = parsed.activeProjectId;
             }
         }
+        // Los motores clonados se registran ANTES de cualquier lectura de
+        // PROVIDERS: syncProviderToState, hydrateSecrets y la UI de arranque
+        // consultan el catálogo, y si el clon activo aún no existiera se caería
+        // al Ollama por defecto perdiendo la conexión que el usuario dejó puesta.
+        syncCustomProviders();
+        // Si el clon activo ya no se pudo registrar, se cae a su motor base
+        // (el prefijo del id) en lugar de al Ollama por defecto.
+        if (!PROVIDERS[state.settings.provider]) {
+            const base = String(state.settings.provider || '').split('~')[0];
+            state.settings.provider = PROVIDERS[base] ? base : 'ollama';
+        }
         if (window.SecureGate?.getConfig) {
             state.settings.privacyLockEnabled = !!window.SecureGate.getConfig().enabled;
         }
@@ -1146,12 +1341,16 @@ function formatTokens(n) {
 }
 
 function getCompactProviderLabel(providerId = state.settings.provider) {
+    // Un motor renombrado (o una copia) manda sobre las abreviaturas de abajo:
+    // si el usuario le puso nombre, es el que debe verse en la barra de estado.
+    if (hasCustomProviderName(providerId)) return getProviderDef(providerId).name;
     const map = {
         webgpu: 'WebGPU',
         ollama: 'Ollama',
         ollama_remote: 'Ollama remoto',
         ollama_cloud: 'Ollama cloud',
         lmstudio: 'LM Studio',
+        localai: 'LocalAI',
         groq: 'Groq',
         openrouter: 'OpenRouter',
         gemini: 'Gemini',

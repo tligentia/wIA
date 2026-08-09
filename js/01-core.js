@@ -282,6 +282,9 @@ const PROVIDERS = {
     ollama_remote: { name: 'Ollama (Remoto)',    type: 'ollama',     auth: 'optional_bearer',  defaultUrl: '',                                                        defaultModel: 'gemma4:e4b',                icon: '🌐' },
     ollama_cloud:  { name: 'Ollama Cloud',      type: 'ollama',     auth: 'apikey',           defaultUrl: 'https://ollama.com',                            defaultModel: 'qwen3-vl:235b-instruct',    icon: '☁️' },
     lmstudio:      { name: 'LM Studio',          type: 'openai',     auth: 'none',             defaultUrl: 'http://localhost:1234/v1',                                 defaultModel: '',                          icon: '💻' },
+    // LocalAI expone una API compatible con OpenAI (por defecto en :8080/v1) y
+    // la clave es opcional: solo la exige si se arranca con API_KEY definida.
+    localai:       { name: 'LocalAI',            type: 'openai',     auth: 'optional_bearer',  defaultUrl: 'http://localhost:8080/v1',                                 defaultModel: '',                          icon: '🧩' },
     groq:          { name: 'Groq',               type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.groq.com/openai/v1',                          defaultModel: 'llama-3.3-70b-versatile',   icon: '⚡' },
     openrouter:    { name: 'OpenRouter',          type: 'openai',     auth: 'apikey',           defaultUrl: 'https://openrouter.ai/api/v1',                            defaultModel: 'google/gemma-3-27b-it',     icon: '🔀' },
     gemini:        { name: 'Google Gemini',       type: 'gemini',     auth: 'apikey',           defaultUrl: 'https://generativelanguage.googleapis.com/v1beta',        defaultModel: 'gemini-2.5-flash',          icon: '✨' },
@@ -293,6 +296,112 @@ const PROVIDERS = {
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
     webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', icon: '🧠' },
 };
+
+// Atajo de traducción con respaldo, compartido por todos los módulos:
+// 09-i18n.js se carga DESPUÉS que este, así que `t` puede no existir cuando se
+// define algo aquí; se comprueba en cada llamada, no al cargar.
+function tr(key, fallback = '') {
+    return typeof t === 'function' ? t(key, fallback) : fallback;
+}
+
+// ─── Nombres personalizados de los motores ──
+// Los rótulos de fábrica se congelan aquí, ANTES de que nada los toque: aplicar
+// un nombre personalizado sobrescribe `def.name`, así que sin esta copia no
+// habría forma de volver al original.
+const PROVIDER_DEFAULT_NAMES = Object.fromEntries(
+    Object.entries(PROVIDERS).map(([id, def]) => [id, def.name])
+);
+
+function getDefaultProviderName(providerId) {
+    return PROVIDER_DEFAULT_NAMES[providerId] || '';
+}
+
+// Vuelca los nombres elegidos por el usuario sobre PROVIDERS. Idempotente: el
+// motor sin nombre propio vuelve al de fábrica, así que la misma función sirve
+// para renombrar y para deshacer. Las copias quedan fuera: su nombre lo llevan
+// en customProviders, que es donde nacen.
+function applyProviderNames(names) {
+    for (const [id, def] of Object.entries(PROVIDERS)) {
+        if (def.custom) continue;
+        const custom = names && typeof names[id] === 'string' ? names[id].trim() : '';
+        def.name = custom || PROVIDER_DEFAULT_NAMES[id] || def.name;
+    }
+}
+
+// ─── Motores clonados por el usuario ────────
+// Un clon es una entrada más de PROVIDERS (mismo `type` y `auth` que su base,
+// nombre y configuración propios), para poder tener varios Ollama, varios
+// LocalAI, etc., cada uno con su URL, credencial y modelo memorizados.
+//
+// Se REGISTRAN MUTANDO PROVIDERS en vez de mantener un registro paralelo: así
+// todo el código existente (`PROVIDERS[id]`, `Object.entries(PROVIDERS)`,
+// `getProviderDef`) los ve sin cambios. Los definidos por el usuario llevan
+// `custom: true` y `baseProvider`, que es lo que distingue un clon de un motor
+// de serie y lo que permite deshacer el registro al recargar.
+
+// Los motores sin endpoint propio (WebGPU corre dentro de esta pestaña) no
+// tienen nada que clonar: dos entradas apuntarían al mismo runtime.
+function isCloneableProvider(providerId) {
+    const def = PROVIDERS[providerId];
+    return !!def && def.type !== 'webgpu';
+}
+
+// Id del motor de serie del que deriva `providerId` (él mismo si no es un clon).
+// Necesario en todo sitio que decida por id —cabeceras de OpenRouter, ayuda de
+// diagnóstico, topes de tokens— y que de otro modo ignoraría a los clones.
+function getProviderBaseId(providerId) {
+    return PROVIDERS[providerId]?.baseProvider || providerId;
+}
+
+function isCustomProvider(providerId) {
+    return !!PROVIDERS[providerId]?.custom;
+}
+
+// Id estable y legible a partir del nombre elegido: `ollama~oficina`. El `~` no
+// aparece en ningún id de serie, así que separa base y sufijo sin ambigüedad.
+function buildCustomProviderId(baseId, name) {
+    const slug = String(name || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        .slice(0, 32) || 'copia';
+    let id = `${baseId}~${slug}`;
+    let n = 2;
+    while (PROVIDERS[id]) id = `${baseId}~${slug}-${n++}`;
+    return id;
+}
+
+// Vuelca `state.settings.customProviders` sobre PROVIDERS. Idempotente: primero
+// retira los clones ya registrados, de modo que sirve igual para el arranque y
+// para refrescar tras crear, renombrar o borrar uno.
+function registerCustomProviders(list) {
+    for (const id of Object.keys(PROVIDERS)) {
+        if (PROVIDERS[id].custom) delete PROVIDERS[id];
+    }
+    const defs = Array.isArray(list) ? list : [];
+    const registered = [];
+    for (const def of defs) {
+        const baseId = def?.baseProvider;
+        const base = PROVIDERS[baseId];
+        // Un clon huérfano (base retirada del catálogo) se descarta: heredar de
+        // la nada dejaría un motor sin `type` que rompería el envío al primer uso.
+        if (!def?.id || !base || PROVIDERS[def.id] || !isCloneableProvider(baseId)) continue;
+        PROVIDERS[def.id] = {
+            name: def.name || `${base.name} (copia)`,
+            // type/auth/defaults se heredan en cada arranque en lugar de
+            // copiarse al crear el clon: si un motor de serie cambia de dialecto
+            // o de URL por defecto, sus clones lo recogen sin migración.
+            type: base.type,
+            auth: base.auth,
+            defaultUrl: base.defaultUrl,
+            defaultModel: base.defaultModel,
+            icon: def.icon || base.icon,
+            custom: true,
+            baseProvider: baseId,
+        };
+        registered.push(def);
+    }
+    return registered;
+}
 
 // ─── Salvaguarda WebGPU en móvil ─────────────
 // En teléfonos la RAM/VRAM y (sobre todo en iOS) el límite de memoria por

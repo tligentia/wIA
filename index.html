@@ -524,7 +524,16 @@
                         <button type="button" class="provider-favorite-btn" id="providerFavoriteBtn"
                             aria-pressed="false" aria-label="Marcar motor como favorito"
                             title="Marcar motor como favorito">★</button>
+                        <button type="button" class="provider-action-btn" id="providerCloneBtn"
+                            aria-label="Clonar este motor" title="Clonar este motor con otro nombre">⧉</button>
+                        <button type="button" class="provider-action-btn" id="providerRenameBtn" hidden
+                            aria-label="Renombrar este motor" title="Renombrar este motor">✎</button>
+                        <button type="button" class="provider-action-btn is-danger" id="providerDeleteBtn" hidden
+                            aria-label="Eliminar esta copia" title="Eliminar esta copia">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                        </button>
                     </div>
+                    <p class="provider-clone-hint" id="providerCloneHint" data-i18n="field.engine.cloneHint">Puedes renombrar cualquier motor y duplicarlo para tener varias conexiones del mismo tipo (por ejemplo, dos Ollama en máquinas distintas), cada una con su URL, credencial y modelo.</p>
                     <div id="corsWarningBadge" class="hidden" style="margin-top: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); border-radius: var(--radius-sm);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round"><path d="m12 8 4 4-4 4"/><path d="M8 12h7"/><path d="M22 12A10 10 0 1 1 12 2a10 10 0 0 1 10 10Z"/></svg>
                         <span id="corsWarningText" style="font-size: 0.75rem; color: var(--warning); font-weight: 600;">No se pudo acceder al motor · Ver diagnóstico</span>
@@ -550,6 +559,10 @@
                 <div class="setting-group">
                     <label class="setting-label" title="End point HTTP/S de destino base. Especialmente útil para entornos self-hosted como LMStudio u Ollama remoto." data-i18n="field.serverUrl">URL del Servidor</label>
                     <input type="text" class="setting-input" id="ollamaUrl" value="http://localhost:11434">
+                    <p class="provider-url-suggest hidden" id="providerUrlSuggest">
+                        <span data-i18n="field.serverUrl.official">Endpoint oficial del proveedor:</span>
+                        <button type="button" class="provider-url-suggest-btn" id="providerUrlSuggestBtn"></button>
+                    </p>
                 </div>
                 <div class="setting-group connection-validation-card">
                     <div class="connection-validation-copy">
@@ -1070,6 +1083,36 @@
                     style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
                     <button class="btn-secondary close-move-modal">Cancelar</button>
                     <button class="btn-primary" id="confirmMove">Mover</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Duplicar / renombrar / eliminar una conexión de motor.
+         Diálogo propio en vez de prompt()/confirm(): el navegador los ignora en
+         silencio cuando la app va embebida en un iframe (portal) o si el usuario
+         marcó alguna vez «impedir que esta página cree más diálogos», y el botón
+         parecía no hacer nada. Además se sitúa por encima de Ajustes, desde
+         donde se invoca. -->
+    <div class="modal-overlay hidden" id="engineCopyModal">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h2 id="engineCopyTitle" data-i18n="engine.clone.action">Duplicar conexión</h2>
+                <button class="btn-icon close-engine-copy-modal" title="Cerrar" aria-label="Cerrar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="engineCopyMessage"></p>
+                <label class="setting-label" id="engineCopyNameLabel" for="engineCopyName" data-i18n="engine.copy.nameLabel">Nombre de la conexión</label>
+                <input type="text" class="setting-input" id="engineCopyName" autocomplete="off" maxlength="40">
+                <div class="modal-actions"
+                    style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                    <button class="btn-secondary close-engine-copy-modal" data-i18n="engine.copy.cancel">Cancelar</button>
+                    <button class="btn-primary" id="engineCopyConfirm" data-i18n="engine.copy.confirm">Aceptar</button>
                 </div>
             </div>
         </div>

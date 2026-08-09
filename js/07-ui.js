@@ -395,6 +395,147 @@ function bindEvents() {
         saveState();
     });
 
+    // ─── Clonar / renombrar / eliminar conexiones ───
+    // El diálogo es propio de la app (#engineCopyModal). prompt()/confirm() no
+    // valen aquí: el navegador los ignora SIN avisar cuando la página va dentro
+    // de un iframe sin allow-modals (el portal) o si el usuario marcó alguna vez
+    // «impedir que esta página cree más diálogos», y el botón parecía muerto.
+    let engineCopyMode = null;   // 'clone' | 'rename' | 'delete'
+    let engineCopyTarget = null;
+
+    function closeEngineCopyModal() {
+        engineCopyMode = null;
+        engineCopyTarget = null;
+        dom.engineCopyModal?.classList.add('hidden');
+    }
+
+    function openEngineCopyModal(mode, providerId) {
+        if (!dom.engineCopyModal) return;
+        engineCopyMode = mode;
+        engineCopyTarget = providerId;
+        const name = getProviderDef(providerId).name;
+        const asksName = mode !== 'delete';
+
+        if (dom.engineCopyTitle) {
+            dom.engineCopyTitle.textContent = mode === 'clone'
+                ? tr('engine.clone.action', 'Duplicar conexión')
+                : (mode === 'rename' ? tr('engine.rename.action', 'Renombrar motor')
+                                     : tr('engine.delete.action', 'Eliminar copia'));
+        }
+        if (dom.engineCopyMessage) {
+            const template = mode === 'clone'
+                ? tr('engine.clone.intro', 'Se creará una conexión nueva partiendo de «{name}», con su misma URL, credencial y modelo. Podrás cambiarlos sin afectar al original.')
+                : (mode === 'rename'
+                    ? (isCustomProvider(providerId)
+                        ? tr('engine.rename.introCopy', 'Cambia el nombre con el que aparece «{name}» en la lista de motores.')
+                        : tr('engine.rename.intro', 'Cambia el nombre con el que aparece «{name}» en la lista de motores. Déjalo vacío para recuperar el nombre de fábrica.'))
+                    : tr('engine.delete.confirm', '¿Eliminar la copia «{name}»? Se borrarán su URL, su credencial y su modelo memorizados. Los motores de serie no se tocan.'));
+            dom.engineCopyMessage.textContent = template.replace('{name}', name);
+        }
+        if (dom.engineCopyName) {
+            dom.engineCopyName.value = mode === 'clone' ? `${name} 2` : name;
+            dom.engineCopyName.placeholder = mode === 'rename' && !isCustomProvider(providerId)
+                ? getDefaultProviderName(providerId)
+                : '';
+            dom.engineCopyName.hidden = !asksName;
+        }
+        if (dom.engineCopyNameLabel) dom.engineCopyNameLabel.hidden = !asksName;
+        if (dom.engineCopyConfirm) {
+            dom.engineCopyConfirm.textContent = mode === 'delete'
+                ? tr('engine.delete.action', 'Eliminar copia')
+                : tr('engine.copy.confirm', 'Aceptar');
+            dom.engineCopyConfirm.className = mode === 'delete' ? 'btn-danger' : 'btn-primary';
+        }
+
+        dom.engineCopyModal.classList.remove('hidden');
+        if (asksName) {
+            dom.engineCopyName?.focus();
+            dom.engineCopyName?.select();
+        } else {
+            dom.engineCopyConfirm?.focus();
+        }
+    }
+
+    // Refresca los controles de Ajustes tras cambiar de motor activo.
+    function refreshConnectionPanel({ revalidate = true } = {}) {
+        prepareModelPanelForProvider(state.settings.provider);
+        if (dom.ollamaUrl) dom.ollamaUrl.value = state.settings.ollamaUrl;
+        if (dom.apiKeyInput) dom.apiKeyInput.value = state.settings.apiKey || '';
+        if (dom.modelSelect) {
+            const model = state.settings.model || '';
+            dom.modelSelect.innerHTML = `<option value="${escapeHtml(model)}" selected>${escapeHtml(model)}</option>`;
+        }
+        updateProviderUI();
+        renderProviderOptions();
+        updateStatusMeta();
+        saveState();
+        if (revalidate) validateCurrentProviderConnection({ persist: false });
+    }
+
+    function applyEngineCopyModal() {
+        const mode = engineCopyMode;
+        const providerId = engineCopyTarget;
+        const name = dom.engineCopyName?.value || '';
+        if (!mode || !providerId) return;
+
+        if (mode === 'clone') {
+            // Se guarda la config del origen ANTES de clonar: lo que el usuario
+            // tenga escrito en URL/clave sin guardar debe viajar a la copia.
+            saveCurrentProviderConfig();
+            const newId = cloneProvider(providerId, name);
+            if (!newId) return;
+            closeEngineCopyModal();
+            // Se salta directamente a la copia: es lo que va a editar a
+            // continuación, y el original queda intacto.
+            state.settings.provider = newId;
+            syncProviderToState();
+            refreshConnectionPanel();
+            return;
+        }
+
+        if (mode === 'rename') {
+            // renameProvider acepta también los motores de serie, y con el
+            // nombre vacío les devuelve el de fábrica.
+            if (!renameProvider(providerId, name)) return;
+            closeEngineCopyModal();
+            renderProviderOptions();
+            updateProviderUI();
+            updateStatusMeta();
+            saveState();
+            return;
+        }
+
+        deleteCustomProvider(providerId);
+        closeEngineCopyModal();
+        refreshConnectionPanel();
+    }
+
+    dom.providerCloneBtn?.addEventListener('click', () => {
+        const sourceId = state.settings.provider;
+        if (!isCloneableProvider(sourceId)) return;
+        openEngineCopyModal('clone', sourceId);
+    });
+
+    dom.providerRenameBtn?.addEventListener('click', () => {
+        openEngineCopyModal('rename', state.settings.provider);
+    });
+
+    dom.providerDeleteBtn?.addEventListener('click', () => {
+        if (!isCustomProvider(state.settings.provider)) return;
+        openEngineCopyModal('delete', state.settings.provider);
+    });
+
+    dom.engineCopyConfirm?.addEventListener('click', applyEngineCopyModal);
+    dom.engineCopyName?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        applyEngineCopyModal();
+    });
+    $$('.close-engine-copy-modal').forEach(btn => btn.addEventListener('click', closeEngineCopyModal));
+    dom.engineCopyModal?.addEventListener('click', (event) => {
+        if (event.target === dom.engineCopyModal) closeEngineCopyModal();
+    });
+
     document.getElementById('modelEngineChangeBtn')?.addEventListener('click', () => {
         activateSettingsSection('connection', { focusNav: true });
         dom.providerSelect?.focus();
@@ -413,7 +554,23 @@ function bindEvents() {
     });
 
     dom.apiKeyInput?.addEventListener('input', markConnectionValidationPending);
-    dom.ollamaUrl?.addEventListener('input', markConnectionValidationPending);
+    dom.ollamaUrl?.addEventListener('input', () => {
+        markConnectionValidationPending();
+        // La propuesta aparece o desaparece según se aleje o vuelva al oficial.
+        updateProviderUrlSuggestion();
+    });
+
+    dom.providerUrlSuggestBtn?.addEventListener('click', () => {
+        const official = getProviderDef(state.settings.provider).defaultUrl || '';
+        if (!official || !dom.ollamaUrl) return;
+        dom.ollamaUrl.value = official;
+        state.settings.ollamaUrl = official;
+        saveCurrentProviderConfig();
+        markConnectionValidationPending();
+        updateProviderUrlSuggestion();
+        dom.ollamaUrl.focus();
+        saveState();
+    });
 
     [dom.apiKeyInput, dom.ollamaUrl].forEach((input) => {
         input?.addEventListener('keydown', (event) => {
@@ -778,6 +935,10 @@ Cuando generes código:
         state.settings.privacyLockEnabled = false;
         state.settings.favoriteProviders = [];
         state.settings.providerUsageHistory = [];
+        // Los motores vuelven a llamarse como de fábrica; las copias creadas por
+        // el usuario NO se borran aquí (para eso está su propio botón eliminar).
+        state.settings.providerNames = {};
+        applyProviderNames(state.settings.providerNames);
         state.incognitoSessionActive = false;
         state.settings.topP = 0.9;
         state.settings.topK = 40;

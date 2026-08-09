@@ -266,11 +266,6 @@ function renderAttachmentPreview() {
 // puede fijar identidad (emoji, descripción), motor propio (proveedor, modelo,
 // temperatura) e iniciadores de conversación para la pantalla de bienvenida.
 
-// Atajo de traducción con respaldo: 09-i18n.js se carga DESPUÉS que este
-// módulo, así que `t` puede no existir todavía cuando se define algo aquí; se
-// comprueba en cada llamada, no al cargar.
-const tr = (key, fallback) => (typeof t === 'function' ? t(key, fallback) : fallback);
-
 // Iniciadores por defecto, traducibles: se resuelven en el idioma activo cada
 // vez que se pintan (renderWelcomeStarters se re-ejecuta al cambiar de idioma).
 function getDefaultWelcomeStarters() {

@@ -1793,6 +1793,76 @@ select.setting-input {
     background: rgba(245, 179, 1, 0.12);
 }
 
+/* Clonar / renombrar / eliminar la conexión seleccionada */
+.provider-action-btn {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 1.05rem;
+    /* Centra por igual los rótulos de texto (⧉, ✎) y el SVG de la papelera. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.provider-action-btn:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
+.provider-action-btn.is-danger:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+/* [hidden] pierde ante `display:flex/block` de otras reglas; se refuerza aquí
+   porque estos botones solo existen cuando el motor activo es una copia. */
+.provider-action-btn[hidden] { display: none; }
+
+.provider-clone-hint {
+    margin-top: 8px;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+}
+
+/* Propuesta del endpoint oficial. Solo aparece cuando lo escrito difiere del
+   que publica el proveedor: si ya coincide, repetirlo sería ruido. */
+.provider-url-suggest {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+}
+
+.provider-url-suggest.hidden { display: none; }
+
+.provider-url-suggest-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--accent-primary);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-all;
+    text-align: left;
+}
+
+.provider-url-suggest-btn:hover { opacity: 0.8; }
+
 .setting-range {
     width: 100%;
     accent-color: var(--accent-primary);

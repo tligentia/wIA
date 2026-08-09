@@ -1922,7 +1922,7 @@ async function sendMessage(content, autoSendBody = null) {
             
             let maxTok = parseInt(state.settings.maxTokens || 4096);
             // Cap max_tokens for Groq (hard limit usually 8192 for output tokens)
-            if (state.settings.provider === 'groq' && maxTok > 8192) {
+            if (getProviderBaseId(state.settings.provider) === 'groq' && maxTok > 8192) {
                 maxTok = 8192;
             }
 
@@ -1942,7 +1942,7 @@ async function sendMessage(content, autoSendBody = null) {
             }
             
             // Only include stream_options if exactly OpenAI (many others fail or rate-limit on this)
-            if (state.settings.provider === 'openai') {
+            if (getProviderBaseId(state.settings.provider) === 'openai') {
                 reqBody.stream_options = { include_usage: true };
             }
             
