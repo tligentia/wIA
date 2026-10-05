@@ -227,5 +227,15 @@
   "webgpu.fail.arch": "architecture not supported by the runtime",
   "webgpu.fail.files": "files missing from the repository",
   "webgpu.fail.template": "the model has no chat template",
-  "webgpu.fail.gated": "the repository requires signing in"
+  "webgpu.fail.gated": "the repository requires signing in",
+  "agent.anon.label": "🕶️ Always anonymize with this agent",
+  "agent.anon.help": "Activating the agent turns on anonymization of sensitive data; going back to an agent without its own settings restores what you had.",
+  "agent.anon.chip": "anonymizes",
+  "agent.anon.chip.title": "This agent always anonymizes sensitive data",
+  "agent.duplicate.title": "Duplicate this agent (without its chats)",
+  "agent.duplicate.suffix": "(copy)",
+  "agent.catalog.installed": "✓ installed",
+  "agent.catalog.install": "＋ install",
+  "agent.switch.heading": "🤖 Switch agent",
+  "agent.switch.current": "current"
 }

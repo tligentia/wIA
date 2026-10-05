@@ -1,6 +1,6 @@
 {
   "_format": "wia-webgpu-catalog@1",
-  "_help": "Catálogo WebGPU ampliable. 'models' añade modelos al catálogo de la app sin tocar código (misma forma que WEBGPU_MODELS en js/01-core.js; 'verified': true solo si se ha probado de verdad). 'broken' lista los modelos PROBADOS QUE NO FUNCIONAN, con motivo, fecha y runtime. Tras editar: npm run build:data.",
+  "_help": "Catálogo WebGPU ampliable. 'models' añade modelos al catálogo de la app sin tocar código (misma forma que WEBGPU_MODELS en js/01-core.js; 'tier': quick | optional | large | omnimodal | medical | vision | uncensored; 'verified': true solo si se ha probado de verdad). 'broken' lista los modelos PROBADOS QUE NO FUNCIONAN, con motivo, fecha y runtime. Tras editar: npm run build:data.",
   "updated": "2026-10-05",
   "runtime": "Transformers.js 3.8.1",
   "models": [
@@ -9,7 +9,7 @@
       "label": "DeepSeek Coder 1.3B",
       "size": "~1.0 GB",
       "sizeBytes": 1016,
-      "tier": "balanced",
+      "tier": "optional",
       "dtype": "q4",
       "context": 16384,
       "capabilities": [
@@ -24,7 +24,7 @@
       "label": "Falcon3 1B",
       "size": "~1.3 GB",
       "sizeBytes": 1268,
-      "tier": "balanced",
+      "tier": "optional",
       "dtype": "q4f16",
       "context": 8192,
       "capabilities": [

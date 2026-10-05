@@ -470,6 +470,14 @@ check('registrar dos veces no duplica nada', (() => {
     return run(`WEBGPU_MODELS.length`) === antes + catalogFile.models.length
         && run(`WEBGPU_BROKEN_MODELS.length`) === catalogFile.broken.length;
 })());
+check('todo modelo del fichero cae en un grupo que la lista pinta',
+    catalogFile.models.every(m => run(`WEBGPU_TIERS`).includes(m.tier)), catalogFile.models.map(m => m.tier).join());
+check('un grupo mal escrito no deja el modelo invisible', (() => {
+    run(`registerWebGPUCatalog({ models: [{ id: 'prueba/grupo-raro', tier: 'balanced' }] })`);
+    const tier = run(`WEBGPU_MODELS.find(m => m.id === 'prueba/grupo-raro').tier`);
+    run(`WEBGPU_MODELS.splice(WEBGPU_MODELS.findIndex(m => m.id === 'prueba/grupo-raro'), 1)`);
+    return tier === 'optional';
+})());
 check('un id mal formado se descarta', run(`registerWebGPUCatalog({ models: [{ id: '../../etc' }, { id: 'sin-barra' }, null] }).added.length`) === 0);
 check('los rotos se reconocen sin distinguir mayúsculas',
     run(`!!getWebGPUBrokenInfo('ONNX-COMMUNITY/gemma-3-270m-it-onnx')`) === true && run(`getWebGPUBrokenInfo('onnx-community/Qwen3-0.6B-ONNX')`) === null);
@@ -519,6 +527,92 @@ check('los JSON de datos y su copia para file:// coinciden', (() => {
     return ['lang/es.json', 'agents.json', 'lib/anonimae-rules.json', 'webgpu-models.json']
         .every(f => JSON.stringify(data[f]) === JSON.stringify(JSON.parse(read(f))));
 })());
+
+console.log('\nAgentes\n');
+
+{
+    // Sin DOM: se anula el pintado y se cambia de agente por su lógica.
+    run(`
+        applySettingsToUI = () => {}; updateStatusMeta = () => {}; checkProviderStatus = () => Promise.resolve();
+        renderProjectSelect = () => {}; renderAgentsGallery = () => {}; updateAnonButtonUI = () => {};
+        globalThis.__ir = (id) => { state.activeProjectId = id; applyAgentEngine(getActiveProject()); };
+    `);
+    // Punto de partida conocido: motor general Groq, sin anonimizar.
+    run(`(() => {
+        state.projects = [
+            { id: 'general', name: 'General', systemPrompt: '', documents: [] },
+            { id: 'a-motor', name: 'Agente con motor', agentProvider: 'openai', agentModel: 'gpt-agente', agentTemperature: 0.1, documents: [] },
+            { id: 'a-plano', name: 'Agente plano', systemPrompt: 'Hola', documents: [] },
+            { id: 'a-anon', name: 'Agente confidencial', agentAnonymize: true, documents: [{ id: 'd1', name: 'doc.txt', data: 'x' }] },
+        ];
+        state.chats = [{ id: 'c1', projectId: 'a-anon', messages: [] }];
+        state.activeProjectId = 'general';
+        delete state.settings.agentBaseline;
+        state.settings.provider = 'groq'; syncProviderToState();
+        state.settings.model = 'modelo-general'; state.settings.temperature = 0.8;
+        state.settings.anonymizeOutgoing = false;
+        saveCurrentProviderConfig();
+    })()`);
+    const foto = () => run(`({ p: state.settings.provider, m: state.settings.model, t: state.settings.temperature, a: !!state.settings.anonymizeOutgoing, base: !!state.settings.agentBaseline })`);
+
+    run(`__ir('a-motor')`);
+    let f = foto();
+    check('un agente con motor propio lo aplica al activarse', f.p === 'openai' && f.m === 'gpt-agente' && f.t === 0.1, JSON.stringify(f));
+
+    run(`__ir('a-plano')`);
+    f = foto();
+    check('al pasar a un agente en «Global» vuelve el motor general', f.p === 'groq' && f.m === 'modelo-general' && f.t === 0.8 && !f.base, JSON.stringify(f));
+
+    run(`__ir('a-motor'); __ir('general')`);
+    f = foto();
+    check('y también al volver a «General»', f.p === 'groq' && f.m === 'modelo-general' && !f.base, JSON.stringify(f));
+    check('el modelo del agente no se queda memorizado en el motor general',
+        run(`state.settings.providerConfigs.groq.model`) === 'modelo-general', run(`state.settings.providerConfigs.groq.model`));
+
+    run(`__ir('a-anon')`);
+    f = foto();
+    check('«anonimizar siempre» enciende 🕶️ sin tocar el motor', f.a === true && f.p === 'groq' && f.m === 'modelo-general', JSON.stringify(f));
+    run(`__ir('general')`);
+    check('y al salir se recupera lo que hubiera', foto().a === false);
+    run(`state.settings.anonymizeOutgoing = true; __ir('a-anon'); __ir('general')`);
+    check('si el usuario ya anonimizaba, salir del agente no lo apaga', foto().a === true);
+    run(`state.settings.anonymizeOutgoing = false`);
+
+    run(`__ir('a-motor'); __ir('a-anon')`);
+    f = foto();
+    check('de un agente con ajustes a otro: se parte siempre de los generales', f.p === 'groq' && f.m === 'modelo-general' && f.a === true, JSON.stringify(f));
+    run(`__ir('general')`);
+
+    const copia = run(`(() => { const c = duplicateProject('a-anon'); return c && { id: c.id, name: c.name, anon: c.agentAnonymize, docs: c.documents.length, docId: c.documents[0].id }; })()`);
+    check('duplicar copia el agente con sus documentos y ajustes', copia && copia.id !== 'a-anon' && /copia/.test(copia.name) && copia.anon === true && copia.docs === 1 && copia.docId !== 'd1', JSON.stringify(copia));
+    check('pero no sus chats', run(`state.chats.filter(c => c.projectId === '${copia.id}').length`) === 0 && run(`state.chats.length`) === 1);
+
+    const ida = run(`serializeAgent(state.projects.find(p => p.id === 'a-anon')).agent.agentAnonymize`);
+    check('la exportación conserva «anonimizar siempre»', ida === true);
+    check('un agente importado solo activa la anonimización con true literal',
+        run(`buildAgentFromDefinition({ name: 'X', agentAnonymize: true }).project.agentAnonymize`) === true
+        && run(`buildAgentFromDefinition({ name: 'X', agentAnonymize: 'sí' }).project.agentAnonymize`) === false
+        && run(`buildAgentFromDefinition({ name: 'X' }).project.agentAnonymize`) === false);
+
+    check('«@» encuentra agentes por nombre sin tildes ni mayúsculas',
+        run(`getAgentSlashMatches('CONFIDENCIAL').map(p => p.id).join()`) .startsWith('a-anon'));
+    check('y no se activa si nada coincide', run(`getAgentSlashMatches('jesus_dp').length`) === 0);
+
+    const catalogo = JSON.parse(read('agents.json')).agents;
+    check('el catálogo de agentes es instalable de principio a fin', catalogo.every(a => {
+        sandbox.__def = a;
+        const r = run(`buildAgentFromDefinition(__def)`);
+        return r.project.name === a.name && r.warnings.length === 0 && r.project.starters.length === a.starters.length;
+    }));
+    check('el catálogo no repite nombres', new Set(catalogo.map(a => a.name)).size === catalogo.length);
+    sandbox.__def = catalogo[0];
+    check('un agente del catálogo ya instalado se reconoce', run(`(() => {
+        const { project } = installAgentDefinition(__def);
+        const antes = findInstalledCatalogAgent(__def);
+        project.catalogName = __def.name;
+        return antes === null && findInstalledCatalogAgent(__def)?.id === project.id;
+    })()`) === true);
+}
 
 console.log(failures === 0 ? '\n✔ Motores y clonado correctos.' : `\n✖ ${failures} fallo(s).`);
 process.exitCode = failures === 0 ? 0 : 1;

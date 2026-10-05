@@ -227,5 +227,15 @@
   "webgpu.fail.arch": "arquitectura no soportada por el runtime",
   "webgpu.fail.files": "faltan ficheros en el repositorio",
   "webgpu.fail.template": "el modelo no trae plantilla de chat",
-  "webgpu.fail.gated": "el repositorio exige iniciar sesión"
+  "webgpu.fail.gated": "el repositorio exige iniciar sesión",
+  "agent.anon.label": "🕶️ Anonimizar siempre con este agente",
+  "agent.anon.help": "Al activar el agente se enciende la anonimización de datos sensibles; al volver a un agente sin ajustes propios se recupera lo que tuvieras.",
+  "agent.anon.chip": "anonimiza",
+  "agent.anon.chip.title": "Este agente anonimiza siempre los datos sensibles",
+  "agent.duplicate.title": "Duplicar este agente (sin sus chats)",
+  "agent.duplicate.suffix": "(copia)",
+  "agent.catalog.installed": "✓ instalado",
+  "agent.catalog.install": "＋ instalar",
+  "agent.switch.heading": "🤖 Cambiar de agente",
+  "agent.switch.current": "actual"
 }

@@ -1101,6 +1101,7 @@ Cuando generes código:
         proj.agentModel = dom.projectModel.value.trim();
         const temp = parseFloat(dom.projectTemperature.value);
         proj.agentTemperature = Number.isNaN(temp) ? null : temp;
+        proj.agentAnonymize = !!dom.projectAnonymize?.checked;
         proj.starters = [0, 1, 2, 3].map(i => ({
             icon: dom.projectStartersEditor.querySelector(`[data-starter-icon="${i}"]`)?.value.trim() || '',
             title: dom.projectStartersEditor.querySelector(`[data-starter-title="${i}"]`)?.value.trim() || '',
@@ -1160,7 +1161,18 @@ Cuando generes código:
         if (!card) return;
         const def = state._agentCatalog?.[parseInt(card.dataset.catalogIndex, 10)];
         if (!def) return;
-        const { project } = installAgentDefinition(def, { activate: true });
+        // Ya instalado: se activa el que hay en vez de crear un duplicado.
+        const existing = findInstalledCatalogAgent(def);
+        if (existing) {
+            switchProject(existing.id);
+            renderAgentsGallery();
+            dom.agentsModal.classList.add('hidden');
+            return;
+        }
+        const { project } = installAgentDefinition(def, { activate: false });
+        project.catalogName = def.name;
+        saveState();
+        switchProject(project.id);
         dom.agentsModal.classList.add('hidden');
         alert(`Agente «${project.name}» instalado desde el catálogo y activado.`);
     });
@@ -1178,6 +1190,13 @@ Cuando generes código:
         if (exportBtn) {
             e.stopPropagation();
             exportAgentToFile(exportBtn.dataset.exportAgent);
+            return;
+        }
+        const dupBtn = e.target.closest('[data-duplicate-agent]');
+        if (dupBtn) {
+            e.stopPropagation();
+            const copy = duplicateProject(dupBtn.dataset.duplicateAgent);
+            if (copy) openProjectEditor(copy.id);
             return;
         }
         const editBtn = e.target.closest('[data-edit-agent]');
@@ -2035,6 +2054,9 @@ function handleSlashInput() {
         hideSlashDropdown();                 // oculta el de prompts
         const query = val.slice(2).toLowerCase().trim();
         showModelSlashDropdown(query);       // // → modelos del motor actual
+    } else if (val.startsWith('@') && getAgentSlashMatches(val.slice(1)).length) {
+        hideSlashDropdown();
+        showAgentSlashDropdown(val.slice(1)); // @ → cambiar de agente
     } else if (val.startsWith('/')) {
         hideModelSlashDropdown();            // oculta el de modelos/motores
         const query = val.slice(1).toLowerCase().trim();
@@ -2082,6 +2104,34 @@ function showEngineSlashDropdown(query) {
     modelSlashState.mode = 'engines';
     modelSlashState.selectedIndex = 0;
     renderEngineSlashProviders(query);
+    dom.modelSlashDropdown.classList.remove('hidden');
+}
+
+// Agentes cuyo nombre o descripción casan con lo escrito tras «@». Si nada
+// casa no se abre el desplegable: «@usuario hola» es un mensaje normal.
+function getAgentSlashMatches(query) {
+    const q = String(query || '').toLowerCase().trim();
+    const normalize = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return state.projects.filter(p => !q || normalize(p.name).includes(normalize(q)) || normalize(p.description).includes(normalize(q)));
+}
+
+function showAgentSlashDropdown(query) {
+    modelSlashState.active = true;
+    modelSlashState.mode = 'agents';
+    modelSlashState.selectedIndex = 0;
+    modelSlashState.items = getAgentSlashMatches(query).map(p => ({
+        type: 'agent', id: p.id, name: p.name, icon: p.emoji || (p.id === 'general' ? '🏠' : '🤖'), desc: p.description || '',
+    }));
+    let html = `<div class="slash-dropdown-heading">${escapeHtml(tr('agent.switch.heading', '🤖 Cambiar de agente'))}</div>`;
+    html += modelSlashState.items.map((item, i) => `<button class="slash-item ${i === modelSlashState.selectedIndex ? 'active' : ''}" data-idx="${i}">
+            <span class="slash-item-icon">${escapeHtml(item.icon)}</span>
+            <div class="slash-item-info">
+                <div class="slash-item-title">${escapeHtml(item.name)}${item.id === state.activeProjectId ? ` <span class="slash-current">· ${escapeHtml(tr('agent.switch.current', 'actual'))}</span>` : ''}</div>
+                ${item.desc ? `<div class="slash-item-desc">${escapeHtml(item.desc)}</div>` : ''}
+            </div>
+        </button>`).join('');
+    dom.modelSlashDropdownList.innerHTML = html;
+    bindModelSlashItemClicks();
     dom.modelSlashDropdown.classList.remove('hidden');
 }
 
@@ -2300,6 +2350,14 @@ async function selectModelSlashItem(idx) {
         hideModelSlashDropdown();
         dom.messageInput.focus();
         showStatusMeta && showStatusMeta(`Modelo: ${item.label}`);
+    } else if (item.type === 'agent') {
+        // Cambia de agente (@): con su motor, sus iniciadores y sus chats.
+        dom.messageInput.value = '';
+        autoResizeTextarea();
+        updateSendButton();
+        hideModelSlashDropdown();
+        switchProject(item.id);
+        dom.messageInput.focus();
     } else if (item.type === 'provider') {
         // Cambia el motor de IA (/// ).
         markProviderUsed(item.id);

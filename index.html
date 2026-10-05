@@ -970,8 +970,8 @@
                 <div class="setting-group">
                     <label class="setting-label">Motor del Agente</label>
                     <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 8px;">
-                        Si lo defines, al activar este agente wIA cambiará automáticamente a este proveedor/modelo.
-                        Déjalo en «Global» para usar la configuración general.
+                        Si lo defines, al activar este agente wIA cambiará automáticamente a este proveedor/modelo,
+                        y al salir de él recuperará el que tenías. Déjalo en «Global» para usar la configuración general.
                     </p>
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <select class="setting-input" id="projectProvider" style="flex:1; min-width:140px;"></select>
@@ -980,6 +980,13 @@
                         <input type="number" class="setting-input" id="projectTemperature" min="0" max="2" step="0.1"
                             placeholder="Temp." title="Temperatura (opcional)" style="width:80px;">
                     </div>
+                    <label class="setting-label agent-anon-option" style="display:flex; align-items:center; margin-top:10px;">
+                        <input type="checkbox" id="projectAnonymize" style="margin-right: 8px;">
+                        <span data-i18n="agent.anon.label">🕶️ Anonimizar siempre con este agente</span>
+                    </label>
+                    <p style="font-size: 0.75rem; color: var(--text-tertiary); margin: 4px 0 0;" data-i18n="agent.anon.help">
+                        Al activar el agente se enciende la anonimización de datos sensibles; al volver a un agente sin ajustes propios se recupera lo que tuvieras.
+                    </p>
                 </div>
 
                 <div class="setting-group">

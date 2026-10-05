@@ -288,24 +288,77 @@ function renderProjectSelect() {
  * configuración activa (proveedor, modelo, temperatura) igual que haría el
  * usuario desde ajustes. Sin motor definido, no toca nada (modo Global).
  */
-function applyAgentEngine(proj) {
-    if (!proj) return;
-    const wantsProvider = proj.agentProvider && PROVIDERS[proj.agentProvider];
-    if (!wantsProvider && !proj.agentModel && typeof proj.agentTemperature !== 'number') return;
+// ¿Trae este agente ajustes propios que sustituyen a los generales?
+function agentHasOverrides(proj) {
+    if (!proj) return false;
+    return !!(proj.agentProvider && PROVIDERS[proj.agentProvider]) || !!proj.agentModel
+        || (typeof proj.agentTemperature === 'number' && !Number.isNaN(proj.agentTemperature))
+        || proj.agentAnonymize === true;
+}
 
+// Devuelve a los ajustes generales lo que un agente hubiera cambiado. Sin
+// guardar ni repintar: lo hace quien llama. Devuelve true si restauró algo.
+function restoreAgentBaseline() {
+    const base = state.settings.agentBaseline;
+    if (!base) return false;
+    delete state.settings.agentBaseline;
     saveCurrentProviderConfig();
-    if (wantsProvider) {
-        state.settings.provider = proj.agentProvider;
-        markProviderUsed(proj.agentProvider);
+    if (base.provider && PROVIDERS[base.provider]) {
+        state.settings.provider = base.provider;
         syncProviderToState();
     }
-    if (proj.agentModel) state.settings.model = proj.agentModel;
-    if (typeof proj.agentTemperature === 'number' && !Number.isNaN(proj.agentTemperature)) {
-        state.settings.temperature = proj.agentTemperature;
+    // El modelo y la temperatura se reponen aparte: si el agente usaba el mismo
+    // motor, su modelo quedó memorizado en la configuración de ese motor.
+    if (base.model) state.settings.model = base.model;
+    if (typeof base.temperature === 'number') state.settings.temperature = base.temperature;
+    if (typeof base.anonymizeOutgoing === 'boolean') state.settings.anonymizeOutgoing = base.anonymizeOutgoing;
+    saveCurrentProviderConfig();
+    return true;
+}
+
+/**
+ * applyAgentEngine — pone en marcha los ajustes propios del agente activo.
+ *
+ * Un agente puede fijar motor, modelo, temperatura y «anonimizar siempre».
+ * Antes esos valores SUSTITUÍAN a los generales para siempre: tras pasar por
+ * un agente con motor propio, «General» y los agentes en «Global» se quedaban
+ * con el motor de aquel. Ahora se recuerda lo que había (agentBaseline) y se
+ * repone al cambiar a un agente sin ajustes propios, que es lo que «Global»
+ * promete en el editor.
+ */
+function applyAgentEngine(proj) {
+    if (!proj) return;
+    const restored = restoreAgentBaseline();
+    const wantsProvider = proj.agentProvider && PROVIDERS[proj.agentProvider];
+    const overrides = agentHasOverrides(proj);
+    if (!overrides && !restored) return;
+
+    if (overrides) {
+        state.settings.agentBaseline = {
+            provider: state.settings.provider,
+            model: state.settings.model,
+            temperature: state.settings.temperature,
+            anonymizeOutgoing: !!state.settings.anonymizeOutgoing,
+        };
+        saveCurrentProviderConfig();
+        if (wantsProvider) {
+            state.settings.provider = proj.agentProvider;
+            markProviderUsed(proj.agentProvider);
+            syncProviderToState();
+        }
+        if (proj.agentModel) state.settings.model = proj.agentModel;
+        if (typeof proj.agentTemperature === 'number' && !Number.isNaN(proj.agentTemperature)) {
+            state.settings.temperature = proj.agentTemperature;
+        }
+        // 🕶️ Un agente pensado para datos personales no depende de que el
+        // usuario se acuerde de activar la anonimización.
+        if (proj.agentAnonymize === true) state.settings.anonymizeOutgoing = true;
     }
     saveState();
     applySettingsToUI();
     updateStatusMeta();
+    if (typeof updateAnonButtonUI === 'function') updateAnonButtonUI();
+    if (state.settings.anonymizeOutgoing && typeof loadAnonRules === 'function') loadAnonRules();
     checkProviderStatus();
 }
 
@@ -392,10 +445,12 @@ function renderAgentsGallery() {
                         <span class="agent-chip engine">${escapeHtml(getAgentEngineLabel(p))}</span>
                         ${docsCount > 0 ? `<span class="agent-chip">📄 ${docsCount} doc${docsCount === 1 ? '' : 's'}</span>` : ''}
                         ${(p.starters || []).filter(s => s?.prompt).length > 0 ? '<span class="agent-chip">⚡ iniciadores</span>' : ''}
+                        ${p.agentAnonymize === true ? `<span class="agent-chip" title="${escapeHtml(tr('agent.anon.chip.title', 'Este agente anonimiza siempre los datos sensibles'))}">🕶️ ${escapeHtml(tr('agent.anon.chip', 'anonimiza'))}</span>` : ''}
                     </div>
                 </div>
                 <div class="agent-card-actions">
                     <button class="agent-card-edit" data-edit-agent="${p.id}" title="Editar agente">✏️</button>
+                    ${p.id === 'general' ? '' : `<button class="agent-card-edit" data-duplicate-agent="${p.id}" title="${escapeHtml(tr('agent.duplicate.title', 'Duplicar este agente (sin sus chats)'))}">⧉</button>`}
                     <button class="agent-card-edit" data-export-agent="${p.id}" title="Exportar agente a fichero">📤</button>
                 </div>
             </div>
@@ -426,11 +481,39 @@ async function renderAgentCatalog() {
                 <div class="agent-card-desc">${escapeHtml(c.description || '')}</div>
                 <div class="agent-card-meta">
                     <span class="agent-chip engine">${escapeHtml(getAgentEngineLabel({ agentProvider: c.agentProvider, agentModel: c.agentModel }))}</span>
-                    <span class="agent-chip">＋ instalar</span>
+                    ${c.agentAnonymize === true ? '<span class="agent-chip">🕶️</span>' : ''}
+                    <span class="agent-chip">${findInstalledCatalogAgent(c) ? escapeHtml(tr('agent.catalog.installed', '✓ instalado')) : escapeHtml(tr('agent.catalog.install', '＋ instalar'))}</span>
                 </div>
             </div>
         </div>
     `).join('');
+}
+
+// Agente ya instalado desde esa ficha del catálogo (para no duplicarlo).
+function findInstalledCatalogAgent(def) {
+    if (!def?.name) return null;
+    return state.projects.find(p => p.catalogName === def.name) || null;
+}
+
+/**
+ * duplicateProject — copia de un agente con todo lo que lo define (prompt,
+ * motor, iniciadores, documentos) y SIN sus chats. Para derivar variantes sin
+ * tocar el original.
+ */
+function duplicateProject(projectId) {
+    const source = state.projects.find(p => p.id === projectId);
+    if (!source) return null;
+    const copy = JSON.parse(JSON.stringify(source));
+    copy.id = crypto.randomUUID();
+    copy.name = `${source.name} ${tr('agent.duplicate.suffix', '(copia)')}`.slice(0, 60);
+    copy.createdAt = Date.now();
+    delete copy.catalogName;
+    copy.documents = (copy.documents || []).map(d => ({ ...d, id: crypto.randomUUID() }));
+    state.projects.push(copy);
+    saveState();
+    renderProjectSelect();
+    renderAgentsGallery();
+    return copy;
 }
 
 function getActiveProject() {
@@ -474,6 +557,7 @@ function openProjectEditor(projectId) {
     dom.projectDescription.value = proj.description || '';
     dom.projectModel.value = proj.agentModel || '';
     dom.projectTemperature.value = typeof proj.agentTemperature === 'number' ? proj.agentTemperature : '';
+    if (dom.projectAnonymize) dom.projectAnonymize.checked = proj.agentAnonymize === true;
 
     dom.projectProvider.innerHTML = '<option value="">— Global (ajustes generales) —</option>' +
         getOrderedProviderEntries().map(([id, def]) =>
@@ -536,6 +620,7 @@ function serializeAgent(proj) {
             agentProvider: proj.agentProvider || '',
             agentModel: proj.agentModel || '',
             agentTemperature: typeof proj.agentTemperature === 'number' ? proj.agentTemperature : null,
+            agentAnonymize: proj.agentAnonymize === true,
             starters: (proj.starters || []).filter(s => s && s.prompt).slice(0, 4).map(s => ({
                 icon: s.icon || '', title: s.title || '', prompt: s.prompt || ''
             })),
@@ -605,6 +690,9 @@ function buildAgentFromDefinition(raw) {
         agentProvider: provider,
         agentModel: _clampStr(def.agentModel, 120),
         agentTemperature: temp,
+        // Solo `true` literal: un fichero ajeno puede activar la protección, nunca
+        // desactivar la que el usuario tenga puesta.
+        agentAnonymize: def.agentAnonymize === true,
         starters,
         documents,
         createdAt: Date.now(),

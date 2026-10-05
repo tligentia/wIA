@@ -1078,6 +1078,8 @@ const WEBGPU_MODELS = [
  */
 const WEBGPU_CATALOG_URL = 'webgpu-models.json';
 const WEBGPU_BROKEN_MODELS = [];
+// Grupos en los que se pintan las tarjetas (ver populateModels, 04-providers.js).
+const WEBGPU_TIERS = ['quick', 'optional', 'large', 'omnimodal', 'medical', 'vision', 'uncensored', 'manual'];
 
 // Vuelca un catálogo externo sobre WEBGPU_MODELS / WEBGPU_BROKEN_MODELS. Se
 // MUTAN los arrays (igual que registerCustomProviders con PROVIDERS) para que
@@ -1089,6 +1091,9 @@ function registerWebGPUCatalog(catalog) {
         if (!m || typeof m.id !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(m.id)) continue;
         const entry = {
             ...m,
+            // La lista se pinta por grupos: un grupo mal escrito en el fichero
+            // dejaría el modelo invisible, así que cae a «Equilibrados».
+            tier: WEBGPU_TIERS.includes(m.tier) ? m.tier : 'optional',
             label: m.label || m.id.split('/')[1],
             repoUrl: m.repoUrl || `https://huggingface.co/${m.id}`,
             fromCatalogFile: true,

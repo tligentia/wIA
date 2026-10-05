@@ -176,6 +176,17 @@ llama directamente a los proveedores (Groq, OpenRouter, Gemini, Claude, OpenAI,
 Mistral, Cerebras, Ollama Cloud y WebGPU funcionan; Nvidia Integrate necesita el proxy porque su
 API no envía cabeceras CORS).
 
+### Agentes
+Un agente es un proyecto con identidad propia: prompt de sistema, iniciadores,
+documentos y, si quieres, su motor, modelo y temperatura. Además:
+- **Motor propio sin perder el tuyo**: al salir de un agente con motor propio se
+  recupera el motor general que tenías.
+- **Anonimizar siempre**: un agente puede encender la anonimización 🕶️ al
+  activarse (pensado para trabajar con datos personales).
+- **`@` en la caja de mensaje** cambia de agente sin abrir la galería.
+- **Duplicar** (`⧉`) crea una variante sin sus chats; el catálogo marca los ya
+  instalados y no los duplica.
+
 ### Acceso directo al anonimizador
 `…/anon` abre directamente el anonimizador: pegas un texto y obtienes la versión
 con marcadores (`[Nombre_001]`), y en la pestaña «Restaurar» deshaces los de una

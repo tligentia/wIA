@@ -148,6 +148,7 @@ const dom = {
     projectProvider: $('#projectProvider'),
     projectModel: $('#projectModel'),
     projectTemperature: $('#projectTemperature'),
+    projectAnonymize: $('#projectAnonymize'),
     projectStartersEditor: $('#projectStartersEditor'),
     agentsModal: $('#agentsModal'),
     agentsGalleryBtn: $('#agentsGalleryBtn'),
