@@ -100,6 +100,8 @@ Cuando generes código:
             openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             chatgpt_local: { url: 'http://127.0.0.1:10531/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            mistral:       { url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            cerebras:      { url: 'https://api.cerebras.ai/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             // maxTokens contenido por defecto: los modelos pequeños de navegador
             // tienden a divagar sin emitir fin-de-secuencia, y 4096 tokens de
             // bucle parecen un cuelgue de minutos.
@@ -209,6 +211,8 @@ const dom = {
     apiKeyInput: $('#apiKeyInput'),
     apiKeyGroup: $('#apiKeyGroup'),
     apiKeyToggle: $('#apiKeyToggle'),
+    apiKeyAccessNote: $('#apiKeyAccessNote'),
+    apiKeyFormatHint: $('#apiKeyFormatHint'),
     providerAuthBadge: $('#providerAuthBadge'),
     validateConnectionBtn: $('#validateConnectionBtn'),
     validateConnectionLabel: $('#validateConnectionLabel'),
@@ -428,6 +432,7 @@ function getOrderedProviderEntries() {
     const fallbackOrder = [
         'webgpu', 'ollama', 'lmstudio', 'localai', 'ollama_remote', 'ollama_cloud',
         'groq', 'openrouter', 'gemini', 'claude', 'openai', 'chatgpt_local', 'nvidia',
+        'mistral', 'cerebras',
     ];
     const rank = (list, id) => {
         const index = list.indexOf(id);
@@ -733,6 +738,8 @@ function updateProviderUI() {
     if (dom.apiKeyInput) {
         dom.apiKeyInput.value = state.settings.apiKey || '';
     }
+    updateApiKeyAccessNote();
+    updateApiKeyFormatHint();
 
     // Inicio de sesión con el proveedor: solo donde hay un OAuth utilizable.
     const oauth = typeof getProviderOAuth === 'function' ? getProviderOAuth(state.settings.provider) : null;
@@ -796,6 +803,65 @@ function updateProviderUI() {
     }
     
     updateInputDisclaimer();
+}
+
+/**
+ * updateApiKeyAccessNote — dónde se consigue la clave del motor activo.
+ *
+ * Pinta la ficha de PROVIDER_ACCESS bajo el campo: enlace a la página de claves
+ * del proveedor, la forma de la clave y lo que cuesta. Se construye con nodos,
+ * no con innerHTML: el nombre del motor lo puede haber escrito el usuario.
+ */
+function updateApiKeyAccessNote() {
+    const providerId = state.settings.provider;
+    const access = typeof getProviderAccess === 'function' ? getProviderAccess(providerId) : null;
+
+    if (dom.apiKeyInput) {
+        dom.apiKeyInput.placeholder = access?.keyExample
+            || tr('field.apiKey.placeholder', 'sk-... / gsk_... / tu-api-key');
+    }
+    const note = dom.apiKeyAccessNote;
+    if (!note) return;
+    note.classList.toggle('hidden', !access);
+    if (!access) return;
+
+    const link = document.createElement('a');
+    link.href = access.keyUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = access.keyUrl.replace(/^https?:\/\//, '');
+
+    const parts = [`🔑 ${tr('access.getKey', 'Consigue tu clave en')} `, link];
+    if (access.keyExample) parts.push(` · ${tr('access.format', 'Formato')}: ${access.keyExample}`);
+    if (access.cost) parts.push(` · ${tr(`access.cost.${getProviderBaseId(providerId)}`, access.cost)}`);
+    note.replaceChildren(...parts);
+}
+
+/**
+ * updateApiKeyFormatHint — avisa, sin bloquear, de una clave con mala pinta.
+ *
+ * Se evalúa mientras se escribe, contra lo que hay en los campos (no contra el
+ * estado guardado), para que el aviso llegue antes de pulsar «Validar».
+ */
+function updateApiKeyFormatHint() {
+    const hint = dom.apiKeyFormatHint;
+    if (!hint || typeof checkApiKeyFormat !== 'function') return;
+    const providerId = state.settings.provider;
+    const key = dom.apiKeyInput?.value ?? state.settings.apiKey;
+    const url = dom.ollamaUrl?.value || state.settings.ollamaUrl;
+    const result = checkApiKeyFormat(providerId, key, url);
+
+    hint.classList.toggle('hidden', result.ok);
+    if (result.ok) { hint.textContent = ''; return; }
+
+    let text = tr('access.formatMismatch', 'Esta clave no tiene el formato habitual de {name} ({example}).')
+        .replace('{name}', getProviderDef(providerId).name)
+        .replace('{example}', result.expected);
+    if (result.looksLike) {
+        text += ' ' + tr('access.looksLike', 'Parece una clave de {other}.')
+            .replace('{other}', getDefaultProviderName(result.looksLike) || result.looksLike);
+    }
+    hint.textContent = text + ' ' + tr('access.formatCheck', 'Puedes validarla igualmente.');
 }
 
 /**
@@ -1372,7 +1438,9 @@ function getCompactProviderLabel(providerId = state.settings.provider) {
         claude: 'Claude',
         openai: 'OpenAI',
         chatgpt_local: 'ChatGPT',
-        nvidia: 'Nvidia'
+        nvidia: 'Nvidia',
+        mistral: 'Mistral',
+        cerebras: 'Cerebras'
     };
     return map[providerId] || getProviderDef(providerId).name;
 }

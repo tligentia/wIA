@@ -160,5 +160,19 @@
   "rag.status.pending": "Will be indexed on your next message ({n} document(s)).",
   "rag.status.ready": "{docs} document(s) indexed into {chunks} passages.",
   "rag.status.error": "Could not build the index: {msg}",
-  "rag.alert.nothing": "This project has no documents that need an index."
+  "rag.alert.nothing": "This project has no documents that need an index.",
+  "field.apiKey.placeholder": "sk-... / gsk_... / your-api-key",
+  "access.getKey": "Get your key at",
+  "access.format": "Format",
+  "access.formatMismatch": "This key does not have the usual {name} format ({example}).",
+  "access.looksLike": "It looks like a {other} key.",
+  "access.formatCheck": "You can still validate it.",
+  "access.cost.groq": "Free plan with per-minute and daily limits.",
+  "access.cost.openrouter": "Free «:free» models with a daily limit; the rest are pay-as-you-go.",
+  "access.cost.gemini": "Free plan with a daily limit per model.",
+  "access.cost.claude": "Pay-as-you-go. The Pro/Max subscription does not include the API.",
+  "access.cost.openai": "Pay-as-you-go. ChatGPT Plus does not include the API.",
+  "access.cost.nvidia": "Free credits to try open models.",
+  "access.cost.mistral": "Free «Experiment» plan with limits.",
+  "access.cost.cerebras": "Free plan with daily limits."
 }

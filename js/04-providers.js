@@ -771,7 +771,7 @@ function getModelFunctionKeys(model, providerId = state.settings.provider) {
 
     // Por motor base, para que un clon de Groq/OpenAI/... conserve el soporte
     // de herramientas de su original.
-    if (['gemini', 'openai', 'chatgpt_local', 'nvidia', 'openrouter', 'groq', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
+    if (['gemini', 'openai', 'chatgpt_local', 'nvidia', 'openrouter', 'groq', 'mistral', 'cerebras', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
         keys.add('tools');
     }
 
@@ -859,6 +859,12 @@ function getProviderExploreLinks(providerId = state.settings.provider) {
         ],
         nvidia: [
             { label: '🟢 Catálogo Nvidia NIM', url: 'https://build.nvidia.com/models' }
+        ],
+        mistral: [
+            { label: '🌬️ Modelos Mistral', url: 'https://docs.mistral.ai/models' }
+        ],
+        cerebras: [
+            { label: '🚀 Modelos Cerebras', url: 'https://inference-docs.cerebras.ai/models/overview' }
         ],
         gemini: [
             { label: '✨ Modelos Gemini', url: 'https://ai.google.dev/gemini-api/docs/models' }

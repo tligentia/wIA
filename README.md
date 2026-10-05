@@ -27,6 +27,8 @@ Ideado, diseñado y desarrollado por **Jesús de Pablos** — [jesus.depablos.es
 | **OpenAI** | OpenAI nativo | API Key | `https://api.openai.com/v1` |
 | **ChatGPT (suscripción)** | OpenAI compatible | Ninguna (pasarela local) | `http://127.0.0.1:10531/v1` |
 | **Nvidia Integrate** | OpenAI compatible | API Key | `https://integrate.api.nvidia.com/v1` |
+| **Mistral** | OpenAI compatible | API Key | `https://api.mistral.ai/v1` |
+| **Cerebras** | OpenAI compatible | API Key | `https://api.cerebras.ai/v1` |
 | **WebGPU (Browser)** | Transformers.js en navegador | Ninguna | Sin servidor |
 
 ### Funcionalidades Core
@@ -150,7 +152,7 @@ Integrate) o instalaciones de Ollama sin CORS configurado. Detalles:
 Sube los archivos a cualquier hosting estático (Netlify, Vercel, GitHub Pages,
 Apache, Nginx...). No se requiere backend: al no existir `/cors-proxy`, la app
 llama directamente a los proveedores (Groq, OpenRouter, Gemini, Claude, OpenAI,
-Ollama Cloud y WebGPU funcionan; Nvidia Integrate necesita el proxy porque su
+Mistral, Cerebras, Ollama Cloud y WebGPU funcionan; Nvidia Integrate necesita el proxy porque su
 API no envía cabeceras CORS).
 
 ### Configuración inicial

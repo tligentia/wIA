@@ -301,8 +301,99 @@ const PROVIDERS = {
     // imposible desde una pestaña—, así que aquí no se puede replicar.
     chatgpt_local: { name: 'ChatGPT (suscripción)', type: 'openai',   auth: 'none',             defaultUrl: 'http://127.0.0.1:10531/v1',                               defaultModel: '',                          icon: '🎫' },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
+    // Mistral y Cerebras hablan el dialecto de OpenAI y aceptan llamadas directas
+    // desde el navegador (CORS abierto), así que funcionan también en hosting
+    // estático, sin el proxy. Cerebras renueva su catálogo a menudo: se deja sin
+    // modelo de fábrica y se elige de la lista que devuelve al validar la clave.
+    mistral:       { name: 'Mistral',             type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.mistral.ai/v1',                               defaultModel: 'mistral-small-latest',      icon: '🌬️' },
+    cerebras:      { name: 'Cerebras',            type: 'openai',     auth: 'apikey',           defaultUrl: 'https://api.cerebras.ai/v1',                              defaultModel: '',                          icon: '🚀' },
     webgpu:        { name: 'WebGPU (Browser)',    type: 'webgpu',     auth: 'none',             defaultUrl: '',                                                        defaultModel: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', icon: '🧠' },
 };
+
+// ─── Ficha de acceso de los motores con clave ──
+/**
+ * Lo que alguien necesita para estrenar un motor de pago o con registro: dónde
+ * se saca la clave, qué pinta tiene y qué cuesta. Va declarado junto al
+ * catálogo para que dar de alta un motor sea añadir su línea en PROVIDERS y,
+ * si lleva clave, su ficha aquí; la interfaz la pinta sola (02-state.js).
+ *
+ *  · keyUrl     página del proveedor donde se crea la clave.
+ *  · keyExample cómo empieza, para el placeholder y los avisos.
+ *  · keyFormat  forma de la clave. Sirve para AVISAR, nunca para bloquear: los
+ *               proveedores cambian de formato sin anunciarlo (Google pasó de
+ *               «AIza…» a «AQ.…» en 2026) y una copia del motor puede apuntar a
+ *               otro servidor con sus propias claves.
+ *  · cost       una frase sobre el precio (texto en español; la traducción
+ *               vive en lang/*.json bajo `access.cost.<id>`).
+ *
+ * Los motores sin clave (Ollama local, LM Studio, WebGPU…) no tienen ficha.
+ */
+const PROVIDER_ACCESS = {
+    ollama_cloud: { keyUrl: 'https://ollama.com/settings/keys' },
+    groq:       { keyUrl: 'https://console.groq.com/keys',               keyExample: 'gsk_…',        keyFormat: /^gsk_[A-Za-z0-9]{20,}$/,
+                  cost: 'Plan gratuito con límites por minuto y por día.' },
+    openrouter: { keyUrl: 'https://openrouter.ai/keys',                  keyExample: 'sk-or-v1-…',   keyFormat: /^sk-or-[A-Za-z0-9_-]{20,}$/,
+                  cost: 'Modelos «:free» gratuitos con límite diario; el resto, de pago por uso.' },
+    gemini:     { keyUrl: 'https://aistudio.google.com/apikey',          keyExample: 'AQ.… o AIza…', keyFormat: /^(AIza[0-9A-Za-z_-]{35}|AQ\.[0-9A-Za-z_.-]{20,})$/,
+                  cost: 'Plan gratuito con límite diario por modelo.' },
+    claude:     { keyUrl: 'https://console.anthropic.com/settings/keys', keyExample: 'sk-ant-…',     keyFormat: /^sk-ant-[A-Za-z0-9_-]{20,}$/,
+                  cost: 'De pago por uso. La suscripción Pro/Max no incluye la API.' },
+    openai:     { keyUrl: 'https://platform.openai.com/api-keys',        keyExample: 'sk-…',         keyFormat: /^sk-[A-Za-z0-9_-]{20,}$/,
+                  cost: 'De pago por uso. ChatGPT Plus no incluye la API.' },
+    nvidia:     { keyUrl: 'https://build.nvidia.com',                    keyExample: 'nvapi-…',      keyFormat: /^nvapi-[A-Za-z0-9_-]{20,}$/,
+                  cost: 'Créditos gratuitos para probar modelos abiertos.' },
+    mistral:    { keyUrl: 'https://console.mistral.ai/api-keys',         keyExample: '32 caracteres', keyFormat: /^[A-Za-z0-9]{32}$/,
+                  cost: 'Plan «Experiment» gratuito con límites.' },
+    cerebras:   { keyUrl: 'https://cloud.cerebras.ai',                   keyExample: 'csk-…',        keyFormat: /^csk-[A-Za-z0-9]{20,}$/,
+                  cost: 'Plan gratuito con límites diarios.' },
+};
+
+// Ficha del motor o, si es una copia, la de su motor base.
+function getProviderAccess(providerId) {
+    return PROVIDER_ACCESS[getProviderBaseId(providerId)] || null;
+}
+
+// Prefijos que delatan de quién es una clave, del más específico al más
+// genérico («sk-ant-» y «sk-or-» antes que «sk-»). Mistral queda fuera: sus
+// claves son 32 caracteres sin prefijo y no se distinguen de un token cualquiera.
+const _API_KEY_PREFIXES = [
+    ['sk-ant-', 'claude'], ['sk-or-', 'openrouter'], ['gsk_', 'groq'], ['nvapi-', 'nvidia'],
+    ['csk-', 'cerebras'], ['AIza', 'gemini'], ['AQ.', 'gemini'], ['sk-', 'openai'],
+];
+
+function guessProviderFromKey(key) {
+    const value = String(key || '').trim();
+    const hit = _API_KEY_PREFIXES.find(([prefix]) => value.startsWith(prefix));
+    return hit ? hit[1] : null;
+}
+
+/**
+ * checkApiKeyFormat — ¿tiene la clave la forma que usa este motor?
+ *
+ * Devuelve { ok: true } o { ok: false, expected, looksLike }. El caso que más
+ * tiempo hace perder es pegar la clave de otro proveedor: el servidor contesta
+ * un 401 genérico y no hay forma de saber qué ha fallado. `looksLike` lo dice.
+ *
+ * Solo opina cuando el motor apunta al servidor oficial: si el usuario ha
+ * cambiado la URL (un proxy propio, otro servicio compatible) las claves son
+ * las de ese servidor y aquí no se sabe nada de ellas.
+ */
+function checkApiKeyFormat(providerId, key, url) {
+    const value = String(key || '').trim();
+    const access = getProviderAccess(providerId);
+    if (!value || !access || !access.keyFormat) return { ok: true };
+
+    const official = PROVIDERS[providerId]?.defaultUrl || '';
+    const hostOf = (raw) => { try { return new URL(String(raw || '').trim()).host.toLowerCase(); } catch (_) { return ''; } };
+    if (url !== undefined && hostOf(url) !== hostOf(official)) return { ok: true };
+
+    // Encajar en el formato no basta: «sk-ant-…» también cumple el «sk-…» de
+    // OpenAI. Si el prefijo señala a otro proveedor, manda el prefijo.
+    const guess = guessProviderFromKey(value);
+    const foreign = guess && guess !== getProviderBaseId(providerId) ? guess : null;
+    if (access.keyFormat.test(value) && !foreign) return { ok: true };
+    return { ok: false, expected: access.keyExample || '', looksLike: foreign };
+}
 
 // Atajo de traducción con respaldo, compartido por todos los módulos:
 // 09-i18n.js se carga DESPUÉS que este, así que `t` puede no existir cuando se
@@ -318,7 +409,7 @@ function tr(key, fallback = '') {
  * propio y sin registrar un cliente por despliegue. Hoy eso es OpenRouter.
  *
  * Los demás quedan fuera por motivos concretos, no por falta de ganas:
- *  · OpenAI, Anthropic, Groq y Nvidia no exponen OAuth para su API de
+ *  · OpenAI, Anthropic, Groq, Nvidia, Mistral y Cerebras no exponen OAuth para su API de
  *    inferencia a terceros: la autenticación es por API key. (El OAuth de
  *    Anthropic y OpenAI cubre sus propios clientes y sus API de administración,
  *    no el acceso de una web ajena a /v1/messages o /v1/chat/completions.)
