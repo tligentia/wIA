@@ -162,5 +162,19 @@
   "rag.status.error": "No se pudo construir el índice: {msg}",
   "rag.alert.nothing": "Este proyecto no tiene documentos que necesiten índice.",
   "import.keysDropped": "El archivo cambia la URL del servidor de: {names}. Por seguridad, la API key guardada para esos motores NO se ha conservado: revisa la URL y vuelve a introducirla si confías en ella.",
-  "import.settingsRestored": "Ajustes restaurados. Tus API keys guardadas se conservan."
+  "import.settingsRestored": "Ajustes restaurados. Tus API keys guardadas se conservan.",
+  "field.apiKey.placeholder": "sk-... / gsk_... / tu-api-key",
+  "access.getKey": "Consigue tu clave en",
+  "access.format": "Formato",
+  "access.formatMismatch": "Esta clave no tiene el formato habitual de {name} ({example}).",
+  "access.looksLike": "Parece una clave de {other}.",
+  "access.formatCheck": "Puedes validarla igualmente.",
+  "access.cost.groq": "Plan gratuito con límites por minuto y por día.",
+  "access.cost.openrouter": "Modelos «:free» gratuitos con límite diario; el resto, de pago por uso.",
+  "access.cost.gemini": "Plan gratuito con límite diario por modelo.",
+  "access.cost.claude": "De pago por uso. La suscripción Pro/Max no incluye la API.",
+  "access.cost.openai": "De pago por uso. ChatGPT Plus no incluye la API.",
+  "access.cost.nvidia": "Créditos gratuitos para probar modelos abiertos.",
+  "access.cost.mistral": "Plan «Experiment» gratuito con límites.",
+  "access.cost.cerebras": "Plan gratuito con límites diarios."
 }

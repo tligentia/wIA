@@ -2367,6 +2367,24 @@ select.setting-input {
     color: var(--success);
 }
 
+.apikey-access-note,
+.apikey-format-hint {
+    margin-top: 6px;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: var(--text-tertiary);
+}
+
+.apikey-access-note a {
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.apikey-format-hint { color: var(--warning); }
+
+.apikey-access-note.hidden,
+.apikey-format-hint.hidden { display: none; }
+
 .setting-help-text {
     margin-top: 8px;
     font-size: 0.74rem;

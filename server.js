@@ -21,6 +21,8 @@ const PROXY_ALLOWED_HOSTS = [
     'api.anthropic.com',
     'api.openai.com',
     'integrate.api.nvidia.com',
+    'api.mistral.ai',
+    'api.cerebras.ai',
     'ollama.com',
     'huggingface.co',
     'hf.co',

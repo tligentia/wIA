@@ -553,9 +553,13 @@ function bindEvents() {
         validateCurrentProviderConnection();
     });
 
-    dom.apiKeyInput?.addEventListener('input', markConnectionValidationPending);
+    dom.apiKeyInput?.addEventListener('input', () => {
+        markConnectionValidationPending();
+        updateApiKeyFormatHint();
+    });
     dom.ollamaUrl?.addEventListener('input', () => {
         markConnectionValidationPending();
+        updateApiKeyFormatHint();
         // La propuesta aparece o desaparece según se aleje o vuelva al oficial.
         updateProviderUrlSuggestion();
     });
@@ -576,6 +580,7 @@ function bindEvents() {
         saveCurrentProviderConfig();
         markConnectionValidationPending();
         updateProviderUrlSuggestion();
+        updateApiKeyFormatHint();
         dom.ollamaUrl.focus();
         saveState();
     });

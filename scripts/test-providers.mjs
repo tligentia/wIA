@@ -350,5 +350,97 @@ check('cada copia aparece justo debajo de su motor base en la lista',
     orden.indexOf('ollama~ollama-orden') === orden.indexOf('ollama') + 1,
     orden.join(' › '));
 
+console.log('\nMistral y Cerebras en el catálogo\n');
+
+for (const [id, url] of [['mistral', 'https://api.mistral.ai/v1'], ['cerebras', 'https://api.cerebras.ai/v1']]) {
+    check(`${id} existe, habla el dialecto de OpenAI y pide clave`,
+        run(`PROVIDERS.${id}?.type`) === 'openai' && run(`PROVIDERS.${id}?.auth`) === 'apikey',
+        `${run(`PROVIDERS.${id}?.type`)} / ${run(`PROVIDERS.${id}?.auth`)}`);
+    check(`${id} arranca con su endpoint oficial`, run(`PROVIDERS.${id}.defaultUrl`) === url
+        && run(`state.settings.providerConfigs.${id}?.url`) === url, run(`state.settings.providerConfigs.${id}?.url`));
+    check(`el modelo de fábrica de ${id} coincide en catálogo y ajustes`,
+        run(`PROVIDERS.${id}.defaultModel === state.settings.providerConfigs.${id}.model`) === true);
+    check(`${id} se puede clonar y la copia hereda herramientas`, run(`(() => {
+        const copia = cloneProvider('${id}', 'Copia de prueba ${id}');
+        const ok = !!copia && getProviderBaseId(copia) === '${id}'
+            && getModelFunctionKeys({ name: 'modelo' }, copia).includes('tools');
+        deleteCustomProvider(copia);
+        return ok;
+    })()`) === true);
+    check(`${id} tiene enlace a su catálogo de modelos`, run(`getProviderExploreLinks('${id}').length`) > 0);
+    check(`${id} no ofrece OAuth (solo API key)`, run(`supportsProviderOAuth('${id}')`) === false);
+}
+check('salen detrás de los motores cloud que ya había', (() => {
+    const ids = run(`(() => {
+        state.settings.favoriteProviders = [];
+        state.settings.providerUsageHistory = [];
+        return getOrderedProviderEntries().map(([id]) => id).filter(id => !id.includes('~'));
+    })()`);
+    return ids.indexOf('mistral') > ids.indexOf('nvidia') && ids.indexOf('cerebras') > ids.indexOf('mistral');
+})());
+check('el proxy local los admite como destino', /'api\.mistral\.ai'/.test(read('server.js')) && /'api\.cerebras\.ai'/.test(read('server.js')));
+
+console.log('\nFicha de acceso de los motores con clave\n');
+
+const conClave = run(`Object.keys(PROVIDERS).filter(id => PROVIDERS[id].auth === 'apikey')`);
+check('todo motor que exige clave dice dónde se consigue',
+    conClave.every(id => /^https:\/\//.test(run(`getProviderAccess('${id}')?.keyUrl || ''`))),
+    conClave.filter(id => !run(`getProviderAccess('${id}')?.keyUrl`)).join(', '));
+check('los motores sin clave no tienen ficha',
+    run(`['ollama', 'lmstudio', 'webgpu', 'chatgpt_local'].every(id => getProviderAccess(id) === null)`) === true);
+check('cada coste tiene traducción en los dos idiomas', (() => {
+    const ids = run(`Object.keys(PROVIDER_ACCESS).filter(id => PROVIDER_ACCESS[id].cost)`);
+    const es = JSON.parse(read('lang/es.json')), en = JSON.parse(read('lang/en.json'));
+    return ids.length > 0 && ids.every(id => es[`access.cost.${id}`] && en[`access.cost.${id}`]);
+})());
+check('el texto de respaldo del coste coincide con el del diccionario español', (() => {
+    const es = JSON.parse(read('lang/es.json'));
+    return run(`Object.entries(PROVIDER_ACCESS).filter(([, a]) => a.cost).map(([id, a]) => [id, a.cost])`)
+        .every(([id, cost]) => es[`access.cost.${id}`] === cost);
+})());
+
+const CLAVES = {
+    groq: 'gsk_' + 'a1B2'.repeat(8),
+    openrouter: 'sk-or-v1-' + 'a1b2'.repeat(10),
+    claude: 'sk-ant-api03-' + 'a1B2'.repeat(8),
+    openai: 'sk-proj-' + 'a1B2'.repeat(8),
+    nvidia: 'nvapi-' + 'a1B2'.repeat(8),
+    cerebras: 'csk-' + 'a1b2'.repeat(8),
+    mistral: 'a1B2'.repeat(8),
+};
+check('cada motor reconoce una clave con su formato',
+    Object.entries(CLAVES).every(([id, k]) => run(`checkApiKeyFormat('${id}', '${k}').ok`) === true),
+    Object.entries(CLAVES).filter(([id, k]) => !run(`checkApiKeyFormat('${id}', '${k}').ok`)).map(([id]) => id).join(', '));
+check('Gemini acepta las claves antiguas (AIza…) y las nuevas (AQ.…)',
+    run(`checkApiKeyFormat('gemini', 'AIza' + 'a'.repeat(35)).ok`) === true
+    && run(`checkApiKeyFormat('gemini', 'AQ.' + 'Ab1_'.repeat(10)).ok`) === true);
+
+const ajena = run(`checkApiKeyFormat('openai', '${CLAVES.groq}')`);
+check('una clave de otro proveedor se detecta', ajena.ok === false, JSON.stringify(ajena));
+check('y se dice de quién parece', ajena.looksLike === 'groq', String(ajena.looksLike));
+check('«sk-ant-» se atribuye a Claude y «sk-or-» a OpenRouter, no a OpenAI',
+    run(`guessProviderFromKey('${CLAVES.claude}')`) === 'claude'
+    && run(`guessProviderFromKey('${CLAVES.openrouter}')`) === 'openrouter'
+    && run(`guessProviderFromKey('${CLAVES.openai}')`) === 'openai');
+check('una clave de Claude en el motor OpenAI no pasa por buena aunque empiece por «sk-»', (() => {
+    const r = run(`checkApiKeyFormat('openai', '${CLAVES.claude}')`);
+    return r.ok === false && r.looksLike === 'claude';
+})());
+check('una clave sin prefijo conocido no se atribuye a nadie', run(`guessProviderFromKey('${CLAVES.mistral}')`) === null);
+check('sin clave no hay aviso', run(`checkApiKeyFormat('groq', '').ok`) === true);
+check('un motor sin formato declarado no opina', run(`checkApiKeyFormat('ollama_cloud', 'lo-que-sea').ok`) === true
+    && run(`checkApiKeyFormat('localai', 'lo-que-sea').ok`) === true);
+check('con el endpoint oficial se revisa el formato',
+    run(`checkApiKeyFormat('openai', 'clave-rara', 'https://api.openai.com/v1').ok`) === false);
+check('si el motor apunta a otro servidor, sus claves no se juzgan',
+    run(`checkApiKeyFormat('openai', 'clave-rara', 'https://mi-proxy.example/v1').ok`) === true);
+check('una copia se rige por la ficha de su motor base', run(`(() => {
+    const copia = cloneProvider('groq', 'Groq ficha');
+    const ficha = getProviderAccess(copia) === PROVIDER_ACCESS.groq;
+    const mal = checkApiKeyFormat(copia, '${CLAVES.openai}');
+    deleteCustomProvider(copia);
+    return ficha && mal.ok === false && mal.looksLike === 'openai';
+})()`) === true);
+
 console.log(failures === 0 ? '\n✔ Motores y clonado correctos.' : `\n✖ ${failures} fallo(s).`);
 process.exitCode = failures === 0 ? 0 : 1;
