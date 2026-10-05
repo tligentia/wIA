@@ -130,6 +130,17 @@ open index.html
 xdg-open index.html
 ```
 
+> **Sin Node ni ningún otro motor.** wIA es HTML, CSS y JavaScript: basta el
+> navegador. Abierta como fichero (`file://`) funciona el chat, los motores, los
+> agentes, la guía y el anonimizador; no hay service worker (sin modo offline
+> instalable) y la inferencia WebGPU corre en el hilo principal. Como el
+> navegador no deja leer JSON locales con `fetch`, la app usa `data-bundle.js`,
+> una copia empaquetada de sus ficheros de datos. Si editas alguno de esos JSON
+> (traducciones, `agents.json`, `webgpu-models.json`, reglas del anonimizador),
+> regénerala con `npm run build:data` — es el único paso que usa Node, y solo
+> al desarrollar. Cualquier servidor estático vale igual:
+> `python3 -m http.server 8765`.
+
 ### Opción 2: Servidor local incluido (recomendado)
 ```bash
 node server.js
@@ -164,6 +175,23 @@ Apache, Nginx...). No se requiere backend: al no existir `/cors-proxy`, la app
 llama directamente a los proveedores (Groq, OpenRouter, Gemini, Claude, OpenAI,
 Mistral, Cerebras, Ollama Cloud y WebGPU funcionan; Nvidia Integrate necesita el proxy porque su
 API no envía cabeceras CORS).
+
+### Acceso directo al anonimizador
+`…/anon` abre directamente el anonimizador: pegas un texto y obtienes la versión
+con marcadores (`[Nombre_001]`), y en la pestaña «Restaurar» deshaces los de una
+respuesta. Todo ocurre en el navegador. `…/?anon` y `…/#anon` hacen lo mismo y
+funcionan en cualquier hosting (y con `file://`); la ruta `/anon` necesita que
+el servidor devuelva `index.html`, cosa que ya hacen `server.js`, `.htaccess` y
+`vercel.json`.
+
+### Catálogo WebGPU ampliable
+Los modelos de navegador se amplían sin tocar código en `webgpu-models.json`:
+`models` añade modelos y `broken` lista los **probados que no funcionan**, con
+motivo, fecha y versión del runtime. En Ajustes → Modelos, «🔎 Buscar novedades»
+consulta en Hugging Face los repos recientes compatibles con Transformers.js.
+Cada tarjeta dice qué se sabe del modelo: *Probado*, *Probado aquí*, *Falló
+aquí*, *No funciona* o *Sin probar*; wIA anota en tu navegador el resultado de
+cada modelo que uses.
 
 ### Configuración inicial
 1. Abre la aplicación en tu navegador.

@@ -201,6 +201,7 @@ const dom = {
     webgpuManualAdd: $('#webgpuManualAdd'),
     webgpuManualModelInput: $('#webgpuManualModelInput'),
     webgpuAddModelBtn: $('#webgpuAddModelBtn'),
+    webgpuDiscoverBtn: $('#webgpuDiscoverBtn'),
     temperature: $('#temperature'),
     tempValue: $('#tempValue'),
     systemPrompt: $('#systemPrompt'),
@@ -333,6 +334,9 @@ async function init() {
         });
     }
 
+    // El catálogo WebGPU ampliable se lee antes de restaurar el estado: el
+    // modelo guardado puede ser uno de los que solo existen en ese fichero.
+    if (typeof loadWebGPUCatalogFile === 'function') await loadWebGPUCatalogFile();
     await loadState();
     // Vuelta del proveedor tras autorizar (OAuth PKCE): se canjea el código por
     // la clave ANTES de sondear conexiones, para que el primer chequeo ya la use

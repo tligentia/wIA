@@ -924,6 +924,65 @@ function createWebGPUModelEntry(modelId, overrides = {}) {
     };
 }
 
+// ─── Estado de prueba de un modelo WebGPU ────
+// Lo que le ha pasado a ESTE navegador con cada modelo. Se guarda con los
+// ajustes; no se envía a ningún sitio.
+function recordWebGPUModelReport(modelId, status, detail = '') {
+    if (!modelId || (status !== 'ok' && status !== 'fail')) return;
+    const reports = { ...(state.settings.webgpuModelReports || {}) };
+    reports[modelId] = {
+        status,
+        at: new Date().toISOString().slice(0, 10),
+        runtime: typeof TRANSFORMERS_VERSION !== 'undefined' ? TRANSFORMERS_VERSION : '',
+        ...(status === 'fail' ? { detail: describeWebGPULoadFailure(detail) } : {}),
+    };
+    state.settings.webgpuModelReports = reports;
+    saveState();
+}
+
+function clearWebGPUModelReport(modelId) {
+    if (!state.settings.webgpuModelReports?.[modelId]) return;
+    const reports = { ...state.settings.webgpuModelReports };
+    delete reports[modelId];
+    state.settings.webgpuModelReports = reports;
+    saveState();
+}
+
+/**
+ * getWebGPUModelStatus — qué se sabe de si un modelo funciona.
+ *
+ * Devuelve { kind, label, title }. Orden de fiabilidad: lo que ha pasado en
+ * este equipo manda sobre lo que diga el catálogo, porque depende de la GPU y
+ * del navegador; después, el catálogo; y si nadie lo ha probado, se dice.
+ *   ok-here · failed-here · broken · verified · untested
+ */
+function getWebGPUModelStatus(model) {
+    const id = model?.name || model?.id || '';
+    const report = state.settings.webgpuModelReports?.[id];
+    const broken = getWebGPUBrokenInfo(id);
+    const when = (date, runtime) => [date, runtime ? `Transformers.js ${runtime}` : ''].filter(Boolean).join(' · ');
+    if (report?.status === 'ok') {
+        return { kind: 'ok-here', label: tr('webgpu.status.okHere', '✅ Probado aquí'),
+            title: tr('webgpu.status.okHere.title', 'Ha cargado y respondido en este equipo ({when}).').replace('{when}', when(report.at, report.runtime)) };
+    }
+    if (report?.status === 'fail') {
+        return { kind: 'failed-here', label: tr('webgpu.status.failedHere', '⛔ Falló aquí'),
+            title: tr('webgpu.status.failedHere.title', 'No funcionó en este equipo ({when}): {why}. Puedes volver a intentarlo.')
+                .replace('{when}', when(report.at, report.runtime)).replace('{why}', report.detail || '') };
+    }
+    if (broken) {
+        return { kind: 'broken', label: tr('webgpu.status.broken', '⛔ No funciona'),
+            title: tr('webgpu.status.broken.title', 'Probado y no funciona ({when}): {why}.')
+                .replace('{when}', when(broken.tested, broken.runtime.replace(/^Transformers\.js\s*/i, ''))).replace('{why}', broken.reason) };
+    }
+    if (model?.verified) {
+        return { kind: 'verified', label: tr('webgpu.status.verified', '✅ Probado'),
+            title: tr('webgpu.status.verified.title', 'Probado: carga e infiere correctamente en WebGPU') };
+    }
+    return { kind: 'untested', label: tr('webgpu.status.untested', '⚠️ Sin probar'),
+        title: tr('webgpu.status.untested.title', 'Nadie lo ha probado todavía: puede tardar o no funcionar en tu equipo') };
+}
+
 function getWebGPUCustomModels() {
     const custom = state.settings.providerConfigs?.webgpu?.customModels;
     return Array.isArray(custom) ? custom : [];
@@ -943,6 +1002,12 @@ function addManualWebGPUModel(inputValue) {
 
     const current = getWebGPUCustomModels();
     const alreadyExists = WEBGPU_MODELS.some(m => m.id === modelId) || current.some(m => m.id === modelId);
+    const broken = getWebGPUBrokenInfo(modelId);
+    if (broken && !alreadyExists) {
+        const msg = tr('webgpu.add.brokenConfirm', 'Este modelo ya se probó y NO funcionó ({when}):\n\n{why}\n\n¿Añadirlo de todos modos para probarlo en tu equipo?')
+            .replace('{when}', [broken.tested, broken.runtime].filter(Boolean).join(' · ')).replace('{why}', broken.reason);
+        if (!confirm(msg)) return false;
+    }
     if (alreadyExists) {
         state.settings.model = modelId;
         getActiveProviderConfig().model = modelId;
@@ -1127,8 +1192,11 @@ function renderModelCard(m, { isWebGPU }) {
         if (isVisionAssist && isActive) statusBadge = '<span class="model-status-badge loaded" title="Es el asistente visual que describe tus imágenes adjuntas">👁 En uso</span>';
         else if (isLoaded) statusBadge = '<span class="model-status-badge loaded" title="Modelo cargado en memoria">● Cargado</span>';
         else if (isCached) statusBadge = `<span class="model-status-badge cached" title="Guardado en la caché del navegador">💾 En caché <button class="model-card-delete-cache-btn" data-model-action="delete-cache" title="Borrar de la caché">🗑️</button></span>`;
-        else if (m.verified) statusBadge = '<span class="model-status-badge verified" title="Probado: carga e infiere correctamente en WebGPU">✅ Probado</span>';
-        else statusBadge = '<span class="model-status-badge untested" title="Sin verificar: puede tardar o no funcionar en tu equipo">⚠️ Sin verificar</span>';
+        else {
+            const st = getWebGPUModelStatus(m);
+            const cls = { 'ok-here': 'verified', verified: 'verified', 'failed-here': 'broken', broken: 'broken', untested: 'untested' }[st.kind];
+            statusBadge = `<span class="model-status-badge ${cls}" title="${escapeHtml(st.title)}">${escapeHtml(st.label)}</span>`;
+        }
     } else if (isActive) {
         statusBadge = '<span class="model-status-badge loaded">✓ Activo</span>';
     }
@@ -1146,6 +1214,96 @@ function renderModelCard(m, { isWebGPU }) {
         <div class="model-card-tags">${renderModelTagsHtml(tags)}</div>
         ${repoLink ? `<div class="model-card-actions">${repoLink}</div>` : ''}
     </div>`;
+}
+
+// ─── Novedades de Hugging Face y modelos que no funcionan ──
+// Consulta pública (sin clave) de los repos que declaran compatibilidad con
+// Transformers.js. Solo se hace cuando el usuario pulsa «Buscar novedades».
+const WEBGPU_DISCOVER_URL = 'https://huggingface.co/api/models?pipeline_tag=text-generation&filter=transformers.js&sort=lastModified&direction=-1&limit=60&full=true';
+const webgpuDiscovery = { state: 'idle', items: [], error: '' };
+
+// De la respuesta de HF a lo que se enseña: fuera lo que ya está en el
+// catálogo o añadido, lo privado/gated y lo que claramente no es un chat.
+function filterDiscoveredWebGPUModels(apiModels) {
+    const known = new Set([...WEBGPU_MODELS, ...getWebGPUCustomModels()].map(m => m.id.toLowerCase()));
+    const notChat = /tiny-random|-base(-|$)|embedding|rerank|whisper|tts|-mlx$|gguf/i;
+    return (Array.isArray(apiModels) ? apiModels : [])
+        .filter(m => m && typeof m.id === 'string' && !m.private && !m.gated)
+        .filter(m => !known.has(m.id.toLowerCase()) && !notChat.test(m.id))
+        .map(m => ({
+            id: m.id,
+            updated: String(m.lastModified || '').slice(0, 10),
+            downloads: Number(m.downloads) || 0,
+            broken: getWebGPUBrokenInfo(m.id),
+        }))
+        .slice(0, 30);
+}
+
+async function discoverWebGPUModels() {
+    webgpuDiscovery.state = 'loading';
+    renderWebGPUCatalogExtras();
+    try {
+        const res = await fetch(WEBGPU_DISCOVER_URL, { signal: AbortSignal.timeout(12000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        webgpuDiscovery.items = filterDiscoveredWebGPUModels(await res.json());
+        webgpuDiscovery.state = 'ready';
+    } catch (e) {
+        webgpuDiscovery.state = 'error';
+        webgpuDiscovery.error = String(e?.message || e);
+    }
+    renderWebGPUCatalogExtras();
+}
+
+// Pinta, bajo las tarjetas, lo encontrado en HF y la lista de «no funcionan».
+function renderWebGPUCatalogExtras() {
+    const box = document.getElementById('webgpuCatalogExtras');
+    if (!box) return;
+    const isWebGPU = state.settings.provider === 'webgpu';
+    box.classList.toggle('hidden', !isWebGPU);
+    if (!isWebGPU) return;
+
+    let html = '';
+    if (webgpuDiscovery.state === 'loading') {
+        html += `<p class="setting-help-text">${escapeHtml(tr('webgpu.discover.loading', 'Consultando Hugging Face…'))}</p>`;
+    } else if (webgpuDiscovery.state === 'error') {
+        html += `<p class="setting-help-text">${escapeHtml(tr('webgpu.discover.error', 'No se pudo consultar Hugging Face: {msg}').replace('{msg}', webgpuDiscovery.error))}</p>`;
+    } else if (webgpuDiscovery.state === 'ready') {
+        const rows = webgpuDiscovery.items.map(m => {
+            const status = m.broken
+                ? `<span class="model-status-badge broken" title="${escapeHtml(m.broken.reason)}">${escapeHtml(tr('webgpu.status.broken', '⛔ No funciona'))}</span>`
+                : `<span class="model-status-badge untested">${escapeHtml(tr('webgpu.status.untested', '⚠️ Sin probar'))}</span>`;
+            return `<div class="webgpu-extra-row">
+                <a href="https://huggingface.co/${escapeHtml(m.id)}" target="_blank" rel="noopener noreferrer" class="webgpu-extra-name">${escapeHtml(m.id)}</a>
+                <span class="webgpu-extra-meta">${escapeHtml(m.updated)}</span>
+                ${status}
+                <button type="button" class="filter-pill" data-webgpu-add="${escapeHtml(m.id)}">${escapeHtml(tr('webgpu.discover.add', 'Añadir'))}</button>
+            </div>`;
+        }).join('');
+        html += `<details class="webgpu-extra-group" open>
+            <summary>${escapeHtml(tr('webgpu.discover.title', '🆕 Novedades en Hugging Face ({n})').replace('{n}', webgpuDiscovery.items.length))}</summary>
+            <p class="setting-help-text">${escapeHtml(tr('webgpu.discover.help', 'Repos recientes que declaran compatibilidad con Transformers.js y aún no están en tu catálogo. Nadie los ha probado aquí: al usarlos, wIA anotará si funcionan en tu equipo.'))}</p>
+            ${rows || `<p class="setting-help-text">${escapeHtml(tr('webgpu.discover.none', 'No hay repos nuevos que no tengas ya.'))}</p>`}
+        </details>`;
+    }
+
+    if (WEBGPU_BROKEN_MODELS.length) {
+        const rows = WEBGPU_BROKEN_MODELS.map(b => `<div class="webgpu-extra-row">
+                <a href="https://huggingface.co/${escapeHtml(b.id)}" target="_blank" rel="noopener noreferrer" class="webgpu-extra-name">${escapeHtml(b.id)}</a>
+                <span class="webgpu-extra-meta">${escapeHtml([b.tested, b.runtime].filter(Boolean).join(' · '))}</span>
+                <span class="webgpu-extra-reason">${escapeHtml(b.reason)}</span>
+            </div>`).join('');
+        html += `<details class="webgpu-extra-group">
+            <summary>${escapeHtml(tr('webgpu.broken.title', '⛔ Probados: no funcionan ({n})').replace('{n}', WEBGPU_BROKEN_MODELS.length))}</summary>
+            <p class="setting-help-text">${escapeHtml(tr('webgpu.broken.help', 'Modelos que se han probado y no cargan o no sirven para chatear con el runtime indicado. Se listan para ahorrarte la descarga; una versión nueva del runtime puede arreglarlos.'))}</p>
+            ${rows}
+        </details>`;
+    }
+    box.innerHTML = html;
+    box.querySelectorAll('[data-webgpu-add]').forEach(btn => btn.addEventListener('click', () => {
+        if (!addManualWebGPUModel(btn.dataset.webgpuAdd)) return;
+        webgpuDiscovery.items = webgpuDiscovery.items.filter(m => m.id !== btn.dataset.webgpuAdd);
+        checkProviderStatus();
+    }));
 }
 
 function getFunctionalGroup(model) {
@@ -1335,6 +1493,8 @@ function populateModels(models) {
         const firstSelectable = state.rawModels.find(m => m.selectable !== false && !m.visionAssist) || state.rawModels[0];
         if (firstSelectable) dom.modelSelect.value = firstSelectable.name;
     }
+
+    renderWebGPUCatalogExtras();
 
     // Model manager button visibility
     const prov = getProviderDef(state.settings.provider);

@@ -799,6 +799,8 @@ function bindEvents() {
         checkProviderStatus();
     });
 
+    dom.webgpuDiscoverBtn?.addEventListener('click', () => discoverWebGPUModels());
+
     dom.webgpuManualModelInput?.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         e.preventDefault();

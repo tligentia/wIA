@@ -40,7 +40,7 @@ const CORE = [
     // misma caché la primera vez que se usa, así que el offline con PDF sigue
     // funcionando a partir de entonces.
     './lib/pdf.min.js', './Plantilla/Version.js',
-    './secure-gate.js', './webgpu-worker.js', './agents.json',
+    './secure-gate.js', './webgpu-worker.js', './agents.json', './webgpu-models.json',
     './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png',
 ];
 

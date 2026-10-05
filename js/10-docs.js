@@ -30,9 +30,8 @@ function loadDocs(lang) {
     if (_docsLoading[lang]) return _docsLoading[lang];
     _docsLoading[lang] = (async () => {
         try {
-            const res = await fetch(`lang/docs/${lang}.json`, { cache: 'no-cache' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const pack = await res.json();
+            const pack = await loadLocalJson(`lang/docs/${lang}.json`);
+            if (!pack) throw new Error('no disponible');
             DOCS_CONTENT[lang] = Array.isArray(pack.sections) ? pack.sections : [];
             _docsFootNote[lang] = pack.footNote || '';
         } catch (e) {

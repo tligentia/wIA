@@ -674,9 +674,12 @@
                         <div class="webgpu-manual-add" id="webgpuManualAdd" style="display:none;">
                             <input type="text" id="webgpuManualModelInput" class="search-input webgpu-manual-input" placeholder="Pega un repo o URL de Hugging Face. Ej: onnx-community/Qwen2.5-Coder-7B-Instruct">
                             <button type="button" class="filter-pill" id="webgpuAddModelBtn">Agregar modelo</button>
+                            <button type="button" class="filter-pill" id="webgpuDiscoverBtn" data-i18n="webgpu.discover.btn" data-i18n-title="webgpu.discover.btn.title" title="Consulta en Hugging Face los repos recientes compatibles con Transformers.js">🔎 Buscar novedades</button>
                         </div>
                         <!-- Visual model cards panel -->
                         <div id="modelCardsContainer" class="model-cards-container"></div>
+                        <!-- Novedades de Hugging Face y modelos probados que no funcionan (solo WebGPU) -->
+                        <div id="webgpuCatalogExtras" class="webgpu-catalog-extras hidden"></div>
                         <!-- Hidden native select, kept for save-settings compatibility -->
                         <select class="setting-input-premium hidden-model-select" id="modelSelect" style="display:none;">
                             <option value="">Cargando catálogo...</option>

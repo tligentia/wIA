@@ -156,7 +156,9 @@ function looksLikeRuntimeInitFailure(error) {
         detail.includes('allocation') ||
         detail.includes('failed to create') ||
         detail.includes('webgpu') ||
-        detail.includes('onnxruntime');
+        detail.includes('onnxruntime') ||
+        // El repo no publica esa cuantización: otra variante puede existir.
+        detail.includes('could not locate file');
 }
 
 // Solo campos clonables y relevantes del evento de progreso de Transformers.js

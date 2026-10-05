@@ -10,6 +10,8 @@
     "check:handlers": "node scripts/check-handlers.mjs",
     "check:csp": "node scripts/check-csp.mjs",
     "check:i18n": "node scripts/check-i18n.js",
+    "build:data": "node scripts/build-data-bundle.mjs",
+    "check:data": "node scripts/build-data-bundle.mjs --check",
     "test:boot": "node scripts/test-boot.mjs",
     "test:context": "node scripts/test-context-budget.mjs",
     "test:storage": "node scripts/test-storage.mjs",
@@ -20,6 +22,6 @@
     "test:providers": "node scripts/test-providers.mjs",
     "test:webgpu": "node scripts/test-webgpu-load.mjs",
     "test:server": "node scripts/test-server.mjs",
-    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:i18n && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:server"
+    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:i18n && npm run check:data && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:server"
   }
 }

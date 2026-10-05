@@ -411,12 +411,8 @@ async function renderAgentCatalog() {
     const wrap = document.getElementById('agentCatalog');
     if (!wrap) return;
     if (state._agentCatalog === undefined) {
-        try {
-            const res = await fetch('agents.json', { cache: 'no-cache' });
-            state._agentCatalog = res.ok ? (await res.json()).agents || [] : [];
-        } catch (e) {
-            state._agentCatalog = [];
-        }
+        const pack = await loadLocalJson('agents.json');
+        state._agentCatalog = Array.isArray(pack?.agents) ? pack.agents : [];
     }
     const catalog = state._agentCatalog;
     const section = document.getElementById('agentCatalogSection');

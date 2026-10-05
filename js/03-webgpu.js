@@ -515,10 +515,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
 
         const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
         const dtypeCandidates = prioritizeDtypesForConditions(adaptDtypesToDevice(
-            Array.from(new Set([
-                modelDef?.dtype || 'q4f16',
-                ...((Array.isArray(modelDef?.fallbackDtypes) ? modelDef.fallbackDtypes : []))
-            ])),
+            webgpuDtypeCandidates(modelId),
             device,
             webgpuState.fp16Supported
         ));
@@ -604,17 +601,7 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
                 lastError = err;
                 const detail = formatErrorDetail(err).toLowerCase();
                 const isLastAttempt = i === dtypeCandidates.length - 1;
-                const isOpaqueNumericFailure = /^\d+$/.test(formatErrorDetail(err));
-                const looksLikeRuntimeInitFailure =
-                    isOpaqueNumericFailure ||
-                    detail.includes('device lost') ||
-                    detail.includes('out of memory') ||
-                    detail.includes('oom') ||
-                    detail.includes('allocate') ||
-                    detail.includes('allocation') ||
-                    detail.includes('failed to create') ||
-                    detail.includes('webgpu') ||
-                    detail.includes('onnxruntime');
+                const looksLikeRuntimeInitFailure = isRetryableWebGPULoadError(detail);
 
                 if (isLastAttempt || !looksLikeRuntimeInitFailure) {
                     throw err;
@@ -1263,10 +1250,7 @@ async function loadWebGPUModelViaWorker(modelId, onProgress, task = 'text-genera
         const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
         // El worker degrada f16 por su cuenta (tiene su propio adaptador); aquí
         // solo se ordena por tamaño cuando la conexión lo aconseja.
-        const dtypeCandidates = prioritizeDtypesForConditions(Array.from(new Set([
-            modelDef?.dtype || 'q4f16',
-            ...((Array.isArray(modelDef?.fallbackDtypes) ? modelDef.fallbackDtypes : []))
-        ])));
+        const dtypeCandidates = prioritizeDtypesForConditions(webgpuDtypeCandidates(modelId));
 
         dom.statusDot.className = 'status-dot loading';
         dom.statusText.textContent = (typeof t==='function'?t('status.preparing'):'Preparando...');

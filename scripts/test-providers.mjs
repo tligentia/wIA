@@ -442,5 +442,83 @@ check('una copia se rige por la ficha de su motor base', run(`(() => {
     return ficha && mal.ok === false && mal.looksLike === 'openai';
 })()`) === true);
 
+console.log('\nCatálogo WebGPU ampliable y estado de prueba\n');
+
+const catalogFile = JSON.parse(read('webgpu-models.json'));
+{
+    const idOk = (id) => /^[\w.-]+\/[\w.-]+$/.test(id);
+    const serie = run(`WEBGPU_MODELS.map(m => m.id)`);
+    check('webgpu-models.json: todos los ids son repos de Hugging Face',
+        [...catalogFile.models, ...catalogFile.broken].every(m => idOk(m.id)));
+    check('cada modelo roto lleva motivo y fecha de la prueba', catalogFile.broken.every(b => b.reason && /^\d{4}-\d{2}-\d{2}$/.test(b.tested)));
+    check('el fichero declara el runtime con el que se probó', /Transformers\.js \d/.test(catalogFile.runtime));
+    check('un modelo no puede estar a la vez en «models» y en «broken»',
+        !catalogFile.models.some(m => catalogFile.broken.some(b => b.id.toLowerCase() === m.id.toLowerCase())));
+    check('ningún modelo de serie figura como roto',
+        !catalogFile.broken.some(b => serie.some(id => id.toLowerCase() === b.id.toLowerCase())),
+        catalogFile.broken.filter(b => serie.includes(b.id)).map(b => b.id).join(', '));
+    check('un modelo marcado como probado indica cuándo', catalogFile.models.filter(m => m.verified).every(m => m.tested));
+}
+
+sandbox.__catalog = catalogFile;
+const antes = run(`WEBGPU_MODELS.length`);
+const registro = run(`registerWebGPUCatalog(__catalog)`);
+check('los modelos del fichero entran en el catálogo', run(`WEBGPU_MODELS.length`) === antes + catalogFile.models.length
+    && registro.added.length === catalogFile.models.length, `${antes} → ${run(`WEBGPU_MODELS.length`)}`);
+check('registrar dos veces no duplica nada', (() => {
+    run(`registerWebGPUCatalog(__catalog)`);
+    return run(`WEBGPU_MODELS.length`) === antes + catalogFile.models.length
+        && run(`WEBGPU_BROKEN_MODELS.length`) === catalogFile.broken.length;
+})());
+check('un id mal formado se descarta', run(`registerWebGPUCatalog({ models: [{ id: '../../etc' }, { id: 'sin-barra' }, null] }).added.length`) === 0);
+check('los rotos se reconocen sin distinguir mayúsculas',
+    run(`!!getWebGPUBrokenInfo('ONNX-COMMUNITY/gemma-3-270m-it-onnx')`) === true && run(`getWebGPUBrokenInfo('onnx-community/Qwen3-0.6B-ONNX')`) === null);
+
+check('un modelo del catálogo usa solo las cuantizaciones que declara',
+    JSON.stringify(run(`webgpuDtypeCandidates('onnx-community/SmolLM2-135M-Instruct-ONNX-MHA')`)) === '["q4f16"]');
+check('uno añadido a mano prueba también q4 y q8',
+    JSON.stringify(run(`webgpuDtypeCandidates('alguien/modelo-desconocido')`)) === '["q4f16","q4","q8"]');
+check('«no encuentro el fichero» permite probar otra variante', run(`isRetryableWebGPULoadError('Could not locate file: model_q4f16.onnx')`) === true
+    && run(`isRetryableWebGPULoadError('12356408')`) === true && run(`isRetryableWebGPULoadError('Unsupported model type: falcon_h1')`) === false);
+
+{
+    const estado = (expr) => run(`getWebGPUModelStatus(${expr}).kind`);
+    run(`state.settings.webgpuModelReports = {}`);
+    check('modelo de serie verificado → probado', estado(`{ name: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA', verified: true }`) === 'verified');
+    check('modelo desconocido → sin probar', estado(`{ name: 'alguien/nuevo' }`) === 'untested');
+    check('modelo del registro de rotos → no funciona', estado(`{ name: 'onnx-community/gemma-3-270m-it-ONNX' }`) === 'broken');
+    run(`recordWebGPUModelReport('alguien/nuevo', 'fail', '12356408')`);
+    check('tras fallar en este equipo → falló aquí', estado(`{ name: 'alguien/nuevo' }`) === 'failed-here');
+    check('y se guarda un motivo legible, con fecha y runtime', (() => {
+        const r = run(`state.settings.webgpuModelReports['alguien/nuevo']`);
+        return /runtime/.test(r.detail) && /^\d{4}-\d{2}-\d{2}$/.test(r.at) && r.runtime === run(`TRANSFORMERS_VERSION`);
+    })());
+    run(`recordWebGPUModelReport('alguien/nuevo', 'ok')`);
+    check('si después funciona → probado aquí', estado(`{ name: 'alguien/nuevo' }`) === 'ok-here');
+    run(`recordWebGPUModelReport('onnx-community/gemma-3-270m-it-ONNX', 'ok')`);
+    check('lo que pasa en este equipo manda sobre el registro de rotos', estado(`{ name: 'onnx-community/gemma-3-270m-it-ONNX' }`) === 'ok-here');
+    run(`state.settings.webgpuModelReports = {}`);
+}
+
+{
+    const hallados = run(`filterDiscoveredWebGPUModels([
+        { id: 'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA' },
+        { id: 'onnx-community/gemma-3-270m-it-ONNX', lastModified: '2026-03-13T10:00:00Z' },
+        { id: 'alguien/Modelo-Nuevo-ONNX', lastModified: '2026-10-01T00:00:00Z', downloads: 12 },
+        { id: 'alguien/privado', private: true }, { id: 'alguien/con-acceso', gated: 'auto' },
+        { id: 'onnx-community/tiny-random-gpt2-ONNX' }, { id: 'alguien/cosa-GGUF' }, null,
+    ])`);
+    check('la búsqueda descarta lo ya catalogado, lo privado y lo que no es chat',
+        hallados.map(m => m.id).join() === 'onnx-community/gemma-3-270m-it-ONNX,alguien/Modelo-Nuevo-ONNX', hallados.map(m => m.id).join());
+    check('y marca los que ya constan como rotos', !!hallados[0].broken && hallados[1].broken === null);
+}
+
+check('los JSON de datos y su copia para file:// coinciden', (() => {
+    const bundle = read('data-bundle.js');
+    const data = JSON.parse(bundle.slice(bundle.indexOf('window.WIA_DATA = ') + 18).replace(/;\s*$/, ''));
+    return ['lang/es.json', 'agents.json', 'lib/anonimae-rules.json', 'webgpu-models.json']
+        .every(f => JSON.stringify(data[f]) === JSON.stringify(JSON.parse(read(f))));
+})());
+
 console.log(failures === 0 ? '\n✔ Motores y clonado correctos.' : `\n✖ ${failures} fallo(s).`);
 process.exitCode = failures === 0 ? 0 : 1;

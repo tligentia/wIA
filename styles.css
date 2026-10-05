@@ -5639,3 +5639,14 @@ body.mobile-device .webgpu-mobile-note {
     .anon-tool-grid { grid-template-columns: 1fr; }
     .anon-tool-text { min-height: 150px; }
 }
+
+/* ── Catálogo WebGPU: novedades y modelos que no funcionan ─── */
+.model-status-badge.broken { color: var(--error, #ef4444); border-color: currentColor; }
+.webgpu-catalog-extras { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.webgpu-catalog-extras.hidden { display: none; }
+.webgpu-extra-group { border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25)); border-radius: 12px; padding: 10px 12px; }
+.webgpu-extra-group > summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+.webgpu-extra-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border-color, rgba(128, 128, 128, 0.15)); font-size: 0.74rem; }
+.webgpu-extra-name { font-family: var(--font-mono); color: var(--accent-primary); word-break: break-all; }
+.webgpu-extra-meta { color: var(--text-tertiary); white-space: nowrap; }
+.webgpu-extra-reason { flex-basis: 100%; color: var(--text-secondary); }

@@ -29,9 +29,9 @@ function loadTranslations() {
     if (_i18nLoaded) return _i18nLoaded;
     _i18nLoaded = Promise.all(I18N_SUPPORTED.map(async (lang) => {
         try {
-            const res = await fetch(`lang/${lang}.json`, { cache: 'no-cache' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            I18N_STRINGS[lang] = await res.json();
+            const dict = await loadLocalJson(`lang/${lang}.json`);
+            if (!dict) throw new Error('no disponible');
+            I18N_STRINGS[lang] = dict;
         } catch (e) {
             console.warn(`[i18n] No se pudo cargar lang/${lang}.json:`, e);
         }

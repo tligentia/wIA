@@ -77,6 +77,47 @@
 })();
 
 
+// ─── Datos locales (JSON) con respaldo para file:// ──
+/**
+ * La app lee varios ficheros de datos junto a ella: traducciones, guía,
+ * catálogo de agentes, reglas del anonimizador y catálogo WebGPU. Servida por
+ * HTTP (cualquier hosting estático) se piden con fetch. Abierta con doble clic
+ * (file://) el navegador prohíbe fetch sobre ficheros locales, y antes todo
+ * eso se quedaba vacío: sin inglés, sin agentes, sin guía y sin anonimizador.
+ *
+ * Para ese caso existe `data-bundle.js`: los mismos JSON empaquetados como un
+ * script (que file:// sí deja cargar). Se genera con `npm run build:data` y
+ * `npm run check:data` vigila que no se quede atrás. Solo se carga si fetch
+ * falla, así que servida por HTTP no cuesta nada.
+ *
+ * Devuelve el JSON ya interpretado, o null si no se pudo obtener.
+ */
+const LOCAL_DATA_BUNDLE_URL = 'data-bundle.js';
+let _dataBundlePromise = null;
+function loadLocalDataBundle() {
+    if (typeof window !== 'undefined' && window.WIA_DATA) return Promise.resolve(window.WIA_DATA);
+    if (!_dataBundlePromise) {
+        _dataBundlePromise = new Promise((resolve) => {
+            if (typeof document === 'undefined' || !document.head) return resolve(null);
+            const script = document.createElement('script');
+            script.src = LOCAL_DATA_BUNDLE_URL;
+            script.onload = () => resolve(window.WIA_DATA || null);
+            script.onerror = () => resolve(null);
+            document.head.appendChild(script);
+        });
+    }
+    return _dataBundlePromise;
+}
+
+async function loadLocalJson(path, { cache = 'no-cache' } = {}) {
+    try {
+        const res = await fetch(path, { cache });
+        if (res.ok) return await res.json();
+    } catch (_) { /* file:// o sin red: se prueba el respaldo */ }
+    const bundle = await loadLocalDataBundle();
+    return bundle && Object.prototype.hasOwnProperty.call(bundle, path) ? bundle[path] : null;
+}
+
 // ─── Runtime de inferencia local (Transformers.js) ──
 // El runtime se sirve desde el PROPIO ORIGEN (lib/) para que el service worker
 // pueda cachearlo: así la inferencia WebGPU funciona sin conexión y no depende
@@ -1017,6 +1058,114 @@ const WEBGPU_MODELS = [
     // · gemma-3 (270m/1b), LFM2 (350M/700M), Qwen3-1.7B → fallo de runtime al cargar.
     // · DeepSeek-R1 7B/8B → repos pasaron a gated (401).
 ];
+
+// ─── Catálogo WebGPU ampliable y estado de prueba ──
+/**
+ * El catálogo de arriba va en el código porque la app debe arrancar sin red.
+ * Lo que cambia con el tiempo vive en `webgpu-models.json`, un fichero de datos
+ * junto a la app que se lee al arrancar:
+ *
+ *   · `models`  modelos nuevos (misma forma que una entrada de WEBGPU_MODELS).
+ *               Dar de alta uno es añadir su ficha ahí, sin tocar código.
+ *   · `broken`  modelos PROBADOS QUE NO FUNCIONAN, con el motivo, la fecha y el
+ *               runtime de la prueba. Se enseñan como tales para que nadie
+ *               pierda una descarga en redescubrirlo; la fecha y el runtime
+ *               importan porque una versión nueva de Transformers.js puede
+ *               arreglarlos.
+ *
+ * Además cada navegador anota lo que le ha pasado a él con cada modelo
+ * (`state.settings.webgpuModelReports`): «probado aquí» o «falló aquí».
+ */
+const WEBGPU_CATALOG_URL = 'webgpu-models.json';
+const WEBGPU_BROKEN_MODELS = [];
+
+// Vuelca un catálogo externo sobre WEBGPU_MODELS / WEBGPU_BROKEN_MODELS. Se
+// MUTAN los arrays (igual que registerCustomProviders con PROVIDERS) para que
+// el resto del código los vea sin cambios. Idempotente.
+function registerWebGPUCatalog(catalog) {
+    const added = [];
+    const models = Array.isArray(catalog?.models) ? catalog.models : [];
+    for (const m of models) {
+        if (!m || typeof m.id !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(m.id)) continue;
+        const entry = {
+            ...m,
+            label: m.label || m.id.split('/')[1],
+            repoUrl: m.repoUrl || `https://huggingface.co/${m.id}`,
+            fromCatalogFile: true,
+        };
+        const at = WEBGPU_MODELS.findIndex(x => x.id === m.id);
+        if (at === -1) { WEBGPU_MODELS.push(entry); added.push(m.id); }
+        // Una ficha del fichero puede corregir a la de serie (p. ej. `verified`).
+        else WEBGPU_MODELS[at] = { ...WEBGPU_MODELS[at], ...entry, fromCatalogFile: !!WEBGPU_MODELS[at].fromCatalogFile };
+    }
+    const broken = Array.isArray(catalog?.broken) ? catalog.broken : [];
+    for (const b of broken) {
+        if (!b || typeof b.id !== 'string' || !b.reason) continue;
+        const entry = { id: b.id, reason: String(b.reason), tested: b.tested || '', runtime: b.runtime || catalog.runtime || '' };
+        const at = WEBGPU_BROKEN_MODELS.findIndex(x => x.id.toLowerCase() === b.id.toLowerCase());
+        if (at === -1) WEBGPU_BROKEN_MODELS.push(entry); else WEBGPU_BROKEN_MODELS[at] = entry;
+    }
+    return { added, broken: WEBGPU_BROKEN_MODELS.length };
+}
+
+// ¿Consta como «probado y no funciona»? Devuelve su ficha o null.
+function getWebGPUBrokenInfo(modelId) {
+    const id = String(modelId || '').toLowerCase();
+    return WEBGPU_BROKEN_MODELS.find(b => b.id.toLowerCase() === id) || null;
+}
+
+// Lee webgpu-models.json. Si no está (hosting parcial, file://) no pasa nada:
+// queda el catálogo de serie.
+let _webgpuCatalogPromise = null;
+function loadWebGPUCatalogFile() {
+    if (!_webgpuCatalogPromise) {
+        _webgpuCatalogPromise = loadLocalJson(WEBGPU_CATALOG_URL)
+            .then(catalog => (catalog ? registerWebGPUCatalog(catalog) : null))
+            .catch(() => null);
+    }
+    return _webgpuCatalogPromise;
+}
+
+// Ficha de un modelo: la del catálogo o, si lo añadió el usuario, la suya.
+function getWebGPUModelDef(modelId) {
+    const curated = WEBGPU_MODELS.find(m => m.id === modelId);
+    if (curated) return curated;
+    const custom = typeof getWebGPUCustomModels === 'function' ? getWebGPUCustomModels() : [];
+    return custom.find(m => m.id === modelId) || null;
+}
+
+/**
+ * webgpuDtypeCandidates — variantes de cuantización a intentar, en orden.
+ *
+ * Los modelos del catálogo declaran las suyas. De uno añadido a mano no se
+ * sabe cuáles publica su repo: antes solo se intentaba q4f16 y, si el repo no
+ * la tenía, fallaba sin más. Ahora se prueba también q4 y q8.
+ */
+function webgpuDtypeCandidates(modelId) {
+    const def = getWebGPUModelDef(modelId);
+    const declared = Array.isArray(def?.fallbackDtypes) ? def.fallbackDtypes : [];
+    const curated = !!def && !def.custom;
+    return Array.from(new Set([def?.dtype || 'q4f16', ...declared, ...(curated ? [] : ['q4', 'q8'])]));
+}
+
+// Un fallo que otra variante puede salvar: el runtime no arranca con esa
+// cuantización, o el repo sencillamente no la publica.
+function isRetryableWebGPULoadError(detail) {
+    const text = String(detail || '').toLowerCase();
+    return /^\d+$/.test(text.trim()) || ['device lost', 'out of memory', 'oom', 'allocate', 'allocation',
+        'failed to create', 'webgpu', 'onnxruntime', 'could not locate file', 'not found', '404'].some(k => text.includes(k));
+}
+
+// Resumen legible de un error de carga, para guardarlo junto al modelo.
+function describeWebGPULoadFailure(detail) {
+    const text = String(detail || '').trim();
+    if (/^\d+$/.test(text)) return tr('webgpu.fail.runtime', 'el runtime falló al iniciar el modelo') + ` (${text})`;
+    if (/unsupported model type/i.test(text)) return tr('webgpu.fail.arch', 'arquitectura no soportada por el runtime') + ` (${text.replace(/^.*unsupported model type:?\s*/i, '')})`;
+    if (/could not locate file|404/i.test(text)) return tr('webgpu.fail.files', 'faltan ficheros en el repositorio');
+    if (/chat.?template/i.test(text)) return tr('webgpu.fail.template', 'el modelo no trae plantilla de chat');
+    if (/401|403|gated|unauthorized/i.test(text)) return tr('webgpu.fail.gated', 'el repositorio exige iniciar sesión');
+    return text.slice(0, 160);
+}
 
 // Asistente visual por defecto (si el usuario no elige otro en el catálogo).
 const WEBGPU_IMAGE_ASSIST = {

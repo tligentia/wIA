@@ -17,8 +17,7 @@ let _anonRulesPromise = null;
 function loadAnonRules() {
     if (_anonRules) return Promise.resolve(_anonRules);
     if (!_anonRulesPromise) {
-        _anonRulesPromise = fetch('lib/anonimae-rules.json')
-            .then(r => r.ok ? r.json() : null)
+        _anonRulesPromise = loadLocalJson('lib/anonimae-rules.json', { cache: 'default' })
             .then(rules => { _anonRules = rules; return rules; })
             .catch(e => { console.warn('[Anon] No se pudieron cargar las reglas:', e); return null; });
     }

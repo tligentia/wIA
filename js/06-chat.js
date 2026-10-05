@@ -412,6 +412,11 @@ function noteGenerationOutcome(msg) {
     const c = msg.content || '';
     const ok = c.trim() && !c.includes('⚠️') && !c.includes('[Generación detenida]') && !c.includes('[Operación detenida');
     if (ok) recordModelSuccess(msg.provider || state.settings.provider, msg.model || state.settings.model);
+    // Un modelo WebGPU que ha generado una respuesta queda «probado aquí».
+    const provider = msg.provider || state.settings.provider;
+    if (ok && typeof recordWebGPUModelReport === 'function' && getProviderDef(provider).type === 'webgpu') {
+        recordWebGPUModelReport(msg.model || state.settings.model, 'ok');
+    }
 }
 
 // Construye alternativas para reintentar: éxitos recientes + favoritos, y
@@ -1808,6 +1813,12 @@ async function sendMessage(content, autoSendBody = null) {
                 console.error('[WebGPU] inference error:', e);
                 const errorDetail = formatErrorDetail(e);
                 const errStr = errorDetail.toLowerCase();
+                // Queda anotado junto al modelo: la próxima vez la tarjeta dice
+                // que aquí falló y por qué (un corte de red no cuenta como fallo
+                // del modelo).
+                if (typeof recordWebGPUModelReport === 'function' && !/network|fetch|failed to load/i.test(errorDetail)) {
+                    recordWebGPUModelReport(modelId, 'fail', errorDetail);
+                }
                 
                 let errorHtml = `⚠️ **Fallo en motor WebGPU**\nHubo un problema intentando instalar o ejecutar el modelo en tu navegador.\n\n`;
                 
