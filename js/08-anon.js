@@ -41,7 +41,7 @@ async function ensureAnonState(chat) {
                 st.counters = d.counters || {};
                 st.placeholderToValue = d.map || {};
                 for (const [ph, val] of Object.entries(st.placeholderToValue)) {
-                    st.valueToPlaceholder.set(String(val).trim().toLowerCase(), ph);
+                    st.valueToPlaceholder.set(LocalPlaceholderEngine.keyFor(LocalPlaceholderEngine.categoryOf(ph), val), ph);
                 }
             }
         } catch (e) { console.warn('[Anon] No se pudo descifrar el mapa del chat:', e); }
