@@ -14,11 +14,12 @@
     "test:context": "node scripts/test-context-budget.mjs",
     "test:storage": "node scripts/test-storage.mjs",
     "test:import": "node scripts/test-import.mjs",
+    "test:anon": "node scripts/test-anon.mjs",
     "test:render": "node scripts/test-render.mjs",
     "test:rag": "node scripts/test-rag.mjs",
     "test:providers": "node scripts/test-providers.mjs",
     "test:webgpu": "node scripts/test-webgpu-load.mjs",
     "test:server": "node scripts/test-server.mjs",
-    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:i18n && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:server"
+    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:i18n && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:server"
   }
 }

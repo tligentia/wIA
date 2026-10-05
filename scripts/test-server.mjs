@@ -189,6 +189,17 @@ const raw = (path, headers, opts) => rawRequest(PORT, path, headers, opts);
     await new Promise(r => upstream.close(r));
 }
 
+// 11b. Acceso directo al anonimizador
+{
+    let r = await raw('/anon');
+    check('/anon sirve la app', r.status === 200 && /<title>/.test(r.body) && /text\/html/.test(r.headers['content-type'] || ''), `status ${r.status}`);
+    check('y con sus cabeceras de seguridad', !!r.headers['content-security-policy']);
+    r = await raw('/anon/');
+    check('/anon/ redirige a /anon (rutas relativas)', r.status === 302 && r.headers.location === '/anon', `${r.status} ${r.headers.location}`);
+    r = await raw('/anonimo');
+    check('una ruta parecida no se confunde', r.status === 404, `status ${r.status}`);
+}
+
 // 12. Despliegue con dominio propio tras un proxy inverso
 {
     const PORT2 = PORT + 2;

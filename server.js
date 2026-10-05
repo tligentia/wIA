@@ -336,6 +336,15 @@ const server = http.createServer((req, res) => {
         res.end('Bad Request');
         return;
     }
+    // Acceso directo al anonimizador: /anon sirve la propia app, que al ver la
+    // ruta abre la herramienta. Con barra final las rutas relativas de la app
+    // (styles.css, js/…) se resolverían bajo /anon/, así que se redirige.
+    if (relPath === '/anon/') {
+        res.writeHead(302, { Location: '/anon' });
+        res.end();
+        return;
+    }
+    if (relPath === '/anon') relPath = '/';
     let filePath = path.join(__dirname, relPath === '/' ? 'index.html' : relPath);
 
     // Security check: ensure filePath is within __dirname. Comparar contra

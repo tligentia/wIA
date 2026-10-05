@@ -1202,7 +1202,7 @@ function processCodeBlocks(root) {
 }
 
 async function improvePrompt() {
-    const originalText = dom.messageInput.value.trim();
+    let originalText = dom.messageInput.value.trim();
     if (!originalText || state.isStreaming) return;
 
     // Red de seguridad: esta función solo habla HTTP con el proveedor y no tiene
@@ -1219,6 +1219,20 @@ async function improvePrompt() {
     // Immediate feedback: Ensure there's a chat and show loading
     let chat = getActiveChat();
     if (!chat) chat = createChat();
+
+    // 🕶️ El texto a mejorar sale hacia el proveedor igual que un mensaje: con
+    // la anonimización activa se envía con marcadores y la propuesta se
+    // muestra ya restaurada (el render deshace los marcadores del chat).
+    if (state.settings.anonymizeOutgoing && typeof anonymizeOutgoingText === 'function') {
+        const anonRes = await anonymizeOutgoingText(originalText, chat);
+        if (anonRes.ok === false) {
+            dom.improvePromptBtn.classList.remove('active-optimization');
+            dom.improvePromptBtn.disabled = false;
+            alert(tr('anon.unavailable', 'La anonimización está activa pero no se ha podido preparar (no se cargaron las reglas). El mensaje NO se ha enviado. Reinténtalo o desactiva 🕶️ para enviarlo sin anonimizar.'));
+            return;
+        }
+        originalText = anonRes.text;
+    }
 
     const placeholderIdx = chat.messages.length;
     chat.messages.push({
@@ -1333,7 +1347,10 @@ window.applyProposal = (idx) => {
     const chat = getActiveChat();
     if (!chat || !chat.messages[idx]) return;
     
-    const text = chat.messages[idx].content;
+    // Con 🕶️ la propuesta se guardó con marcadores: a la caja vuelve con los
+    // datos reales, y al enviarla se anonimiza otra vez con el mismo mapa.
+    const raw = chat.messages[idx].content;
+    const text = typeof restoreAnonText === 'function' ? restoreAnonText(raw, chat) : raw;
     dom.messageInput.value = text;
     dom.messageInput.focus();
     autoResizeTextarea();
@@ -1348,6 +1365,18 @@ async function sendMessage(content, autoSendBody = null) {
     if (state.isStreaming) return;
 
     let isRetry = autoSendBody === 'RETRY_LAST';
+
+    // 🕶️ Con la anonimización activa no se envía nada si el anonimizador no
+    // está listo. Se comprueba aquí, antes de vaciar adjuntos y caja de texto,
+    // para que un fallo no cueste lo que el usuario había escrito.
+    if (state.settings.anonymizeOutgoing && typeof ensureAnonReady === 'function') {
+        const anonChat = getActiveChat() || createChat();
+        if (!(await ensureAnonReady(anonChat))) {
+            alert(tr('anon.unavailable', 'La anonimización está activa pero no se ha podido preparar (no se cargaron las reglas). El mensaje NO se ha enviado. Reinténtalo o desactiva 🕶️ para enviarlo sin anonimizar.'));
+            return;
+        }
+    }
+
     let reqImages = [];
     let promptAttachments = '';
     let attachedDocsNames = [];
@@ -1391,6 +1420,14 @@ async function sendMessage(content, autoSendBody = null) {
         let anonCount = 0;
         if (state.settings.anonymizeOutgoing && content.trim() && typeof anonymizeOutgoingText === 'function') {
             const anonRes = await anonymizeOutgoingText(content, chat);
+            if (anonRes.ok === false) {
+                // Fallo al sustituir: se devuelve el texto a la caja y no se envía.
+                dom.messageInput.value = content;
+                autoResizeTextarea();
+                updateSendButton();
+                alert(tr('anon.unavailable', 'La anonimización está activa pero no se ha podido preparar (no se cargaron las reglas). El mensaje NO se ha enviado. Reinténtalo o desactiva 🕶️ para enviarlo sin anonimizar.'));
+                return;
+            }
             content = anonRes.text;
             anonCount = anonRes.count;
         }
@@ -2409,7 +2446,24 @@ const PROJECT_DOCS_BUDGET_RATIO = 0.5;
  * conocimiento, recortada al presupuesto. Compartida por los cuatro
  * constructores (antes cada uno duplicaba esta lógica con textos distintos).
  */
+/**
+ * buildSystemContext — contexto de sistema listo para enviar.
+ *
+ * Con 🕶️ activo también se anonimiza: el prompt de sistema, los documentos
+ * del proyecto y los fragmentos RAG llevan los mismos datos personales que un
+ * adjunto, y antes salían tal cual aunque el mensaje del usuario fuese
+ * protegido. Usa el mapa del chat, así que un mismo dato tiene el mismo
+ * marcador en el documento y en la conversación.
+ */
 function buildSystemContext(chat, budget) {
+    const system = buildSystemContextRaw(chat, budget);
+    if (!state.settings.anonymizeOutgoing || !system?.text || typeof anonymizeTextSync !== 'function') return system;
+    const res = anonymizeTextSync(system.text, chat);
+    if (res.count && typeof persistAnonVault === 'function') persistAnonVault(chat, anonChatState[chat.id]);
+    return { ...system, text: res.text, anonCount: res.count };
+}
+
+function buildSystemContextRaw(chat, budget) {
     const proj = state.projects.find(p => p.id === chat.projectId) || getActiveProject();
     let text = '';
     if (state.settings.systemPrompt?.trim()) text += state.settings.systemPrompt.trim() + '\n\n';

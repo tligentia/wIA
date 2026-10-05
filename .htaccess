@@ -47,3 +47,14 @@
         Header set Cache-Control "no-cache"
     </FilesMatch>
 </IfModule>
+
+# Acceso directo al anonimizador: «…/anon» sirve la propia app, que al ver la
+# ruta abre la herramienta. Funciona también bajo un subpath del portal. Con
+# barra final se redirige, porque las rutas relativas de la app se romperían.
+# (Sin mod_rewrite siguen valiendo «…/?anon» y «…/#anon».)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^(.*)/anon/$
+    RewriteRule ^anon/$ %1/anon [R=302,L]
+    RewriteRule ^anon$ index.html [L]
+</IfModule>

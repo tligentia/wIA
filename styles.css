@@ -5604,3 +5604,38 @@ body.mobile-device .webgpu-mobile-note {
     color: var(--text-tertiary);
     line-height: 1.4;
 }
+
+/* ── Anonimizador como herramienta (modal /anon) ───────────── */
+.anon-tool-open { margin-top: 10px; }
+.anon-tool .modal-body { display: flex; flex-direction: column; gap: 12px; }
+.anon-tool-intro { margin: 0; }
+.anon-tool-modes { display: flex; gap: 8px; }
+.anon-tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.anon-tool-pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.anon-tool-text {
+    min-height: 240px;
+    resize: vertical;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+.anon-tool-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 24px;
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+}
+.anon-tool-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25));
+    color: var(--text-secondary);
+}
+.anon-tool-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.anon-tool-spacer { flex: 1; }
+@media (max-width: 720px) {
+    .anon-tool-grid { grid-template-columns: 1fr; }
+    .anon-tool-text { min-height: 150px; }
+}
