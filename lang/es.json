@@ -160,5 +160,7 @@
   "rag.status.pending": "Se indexará en tu próximo mensaje ({n} documento(s)).",
   "rag.status.ready": "{docs} documento(s) indexados en {chunks} fragmentos.",
   "rag.status.error": "No se pudo construir el índice: {msg}",
-  "rag.alert.nothing": "Este proyecto no tiene documentos que necesiten índice."
+  "rag.alert.nothing": "Este proyecto no tiene documentos que necesiten índice.",
+  "import.keysDropped": "El archivo cambia la URL del servidor de: {names}. Por seguridad, la API key guardada para esos motores NO se ha conservado: revisa la URL y vuelve a introducirla si confías en ella.",
+  "import.settingsRestored": "Ajustes restaurados. Tus API keys guardadas se conservan."
 }

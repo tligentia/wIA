@@ -1025,6 +1025,97 @@ function settingsWithoutSecrets(settings) {
     return clone;
 }
 
+// ─── Importación de ajustes ──────────────────
+// Origen (esquema + host + puerto) al que un motor mandaría su credencial. Los
+// clones heredan la URL por defecto de su base, que puede no estar registrada
+// todavía cuando se evalúa un fichero recién importado.
+function providerEndpointOrigin(providerId, config) {
+    const def = PROVIDERS[providerId] || PROVIDERS[String(providerId).split('~')[0]];
+    const raw = String((config && config.url) || def?.defaultUrl || '').trim();
+    try { return new URL(raw).origin; } catch (_) { return raw.toLowerCase(); }
+}
+
+/**
+ * mergeImportedSettings — funde unos ajustes importados con los actuales.
+ *
+ * Devuelve { settings, droppedKeys } sin tocar `current`.
+ *
+ * La regla que importa es la de las API keys. Los ficheros que exporta wIA no
+ * las llevan, así que al importar hay que conservar las que ya hay en este
+ * navegador… pero una clave solo vale para el servidor al que el usuario
+ * decidió dársela. Si el fichero trae OTRA URL para ese motor, conservar la
+ * clave la enviaría a ese servidor en la siguiente petición: bastaría con
+ * convencer a alguien de importar «mis ajustes» para llevarse su clave. Por
+ * eso la clave guardada se mantiene únicamente si el origen del endpoint no
+ * cambia; si cambia, se descarta y se avisa (`droppedKeys`).
+ *
+ * Una clave que venga DENTRO del fichero (exportaciones antiguas) se respeta:
+ * llega emparejada con su propia URL y no compromete las del usuario.
+ */
+function mergeImportedSettings(current, imported) {
+    const incoming = imported && typeof imported === 'object' ? imported : {};
+    const currentConfigs = current.providerConfigs || {};
+    const merged = { ...current, ...incoming };
+    if (typeof incoming.provider !== 'string' || !incoming.provider) merged.provider = current.provider;
+
+    const importedConfigs = { ...(incoming.providerConfigs && typeof incoming.providerConfigs === 'object' ? incoming.providerConfigs : {}) };
+    // Formato antiguo o escrito a mano: la conexión activa viene solo en los
+    // campos de nivel superior. Se trata como la configuración de ese motor
+    // para que pase por la misma regla que el resto.
+    if (typeof incoming.provider === 'string' && incoming.provider && !importedConfigs[incoming.provider]) {
+        const flat = {};
+        if (typeof incoming.ollamaUrl === 'string') flat.url = incoming.ollamaUrl;
+        if (typeof incoming.model === 'string') flat.model = incoming.model;
+        if (typeof incoming.apiKey === 'string') flat.apiKey = incoming.apiKey;
+        if (Object.keys(flat).length) importedConfigs[incoming.provider] = flat;
+    }
+
+    const droppedKeys = [];
+    merged.providerConfigs = { ...currentConfigs };
+    for (const [id, cfg] of Object.entries(importedConfigs)) {
+        if (!cfg || typeof cfg !== 'object') continue;
+        const prev = currentConfigs[id] || {};
+        const next = { ...prev, ...cfg };
+        if (typeof cfg.apiKey !== 'string' || !cfg.apiKey) {
+            const sameEndpoint = providerEndpointOrigin(id, prev) === providerEndpointOrigin(id, next);
+            next.apiKey = sameEndpoint ? (prev.apiKey || '') : '';
+            if (!sameEndpoint && prev.apiKey) droppedKeys.push(id);
+        }
+        merged.providerConfigs[id] = next;
+    }
+
+    // Los campos de nivel superior son un espejo del motor activo: se dejan
+    // coherentes aquí para que nunca quede una clave junto a una URL ajena.
+    const active = merged.providerConfigs[merged.provider];
+    merged.apiKey = (active && active.apiKey) || '';
+    if (active && active.url) merged.ollamaUrl = active.url;
+    return { settings: merged, droppedKeys };
+}
+
+// Aplica unos ajustes importados al estado vivo. Devuelve los ids de los
+// motores cuya clave guardada se ha descartado (ver mergeImportedSettings).
+function applyImportedSettings(imported) {
+    const { settings, droppedKeys } = mergeImportedSettings(state.settings, imported);
+    state.settings = settings;
+    // Mismo orden que en loadState: primero los clones que traiga el fichero,
+    // después se valida el motor activo y por último se sincroniza.
+    syncCustomProviders();
+    if (!PROVIDERS[state.settings.provider]) {
+        const base = String(state.settings.provider || '').split('~')[0];
+        state.settings.provider = PROVIDERS[base] ? base : 'ollama';
+    }
+    syncProviderToState();
+    return droppedKeys;
+}
+
+// Aviso para el usuario cuando una importación ha descartado claves.
+function describeDroppedKeys(droppedKeys) {
+    if (!droppedKeys || !droppedKeys.length) return '';
+    const names = droppedKeys.map((id) => getProviderDef(id).name || id).join(', ');
+    return tr('import.keysDropped', 'El archivo cambia la URL del servidor de: {names}. Por seguridad, la API key guardada para esos motores NO se ha conservado: revisa la URL y vuelve a introducirla si confías en ella.')
+        .replace('{names}', names);
+}
+
 // Persiste las keys cifradas en IndexedDB (coalescido, fire-and-forget).
 let _pendingSecretSave = null;
 function scheduleSecretPersist() {

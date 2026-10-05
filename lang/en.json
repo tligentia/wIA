@@ -160,5 +160,7 @@
   "rag.status.pending": "Will be indexed on your next message ({n} document(s)).",
   "rag.status.ready": "{docs} document(s) indexed into {chunks} passages.",
   "rag.status.error": "Could not build the index: {msg}",
-  "rag.alert.nothing": "This project has no documents that need an index."
+  "rag.alert.nothing": "This project has no documents that need an index.",
+  "import.keysDropped": "The file changes the server URL of: {names}. For safety, the API key saved for those engines has NOT been kept: check the URL and enter the key again if you trust it.",
+  "import.settingsRestored": "Settings restored. Your saved API keys are kept."
 }

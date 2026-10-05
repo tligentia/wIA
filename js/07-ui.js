@@ -604,7 +604,10 @@ function bindEvents() {
 
     if (dom.exportSettingsBtn) {
         dom.exportSettingsBtn.addEventListener('click', () => {
-            const data = JSON.stringify(state.settings, null, 2);
+            // Sin API keys, igual que la copia de seguridad completa: el
+            // fichero acaba en Descargas, en un correo o en un chat, y las
+            // claves no deben viajar en claro con él.
+            const data = JSON.stringify(settingsWithoutSecrets(state.settings), null, 2);
             const blob = new Blob([data], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -627,12 +630,13 @@ function bindEvents() {
                 try {
                     const importedSettings = JSON.parse(ev.target.result);
                     if (importedSettings && importedSettings.provider) {
-                        state.settings = { ...state.settings, ...importedSettings };
+                        const droppedKeys = applyImportedSettings(importedSettings);
                         state.incognitoSessionActive = !!state.settings.incognitoMode || state.incognitoSessionActive;
                         saveState();
                         applySettingsToUI();
                         checkProviderStatus();
-                        alert('Ajustes restaurados correctamente.');
+                        const notice = describeDroppedKeys(droppedKeys);
+                        alert(tr('import.settingsRestored', 'Ajustes restaurados. Tus API keys guardadas se conservan.') + (notice ? '\n\n' + notice : ''));
                     } else {
                         alert('El archivo no parece contener ajustes válidos de wIA.');
                     }
@@ -689,24 +693,15 @@ function bindEvents() {
                     state.projects = data.projects;
                     state.chats = data.chats;
                     state.chats.forEach(c => { if (!c.projectId) c.projectId = 'general'; });
-                    if (data.settings) {
-                        // Conserva las API keys actuales (el backup no las incluye).
-                        const keptSecrets = {};
-                        forEachSecretSlot(state.settings, (obj, slot) => { keptSecrets[slot] = obj.apiKey; });
-                        const merged = { ...state.settings, ...data.settings };
-                        if (data.settings.providerConfigs) {
-                            merged.providerConfigs = { ...state.settings.providerConfigs, ...data.settings.providerConfigs };
-                        }
-                        state.settings = merged;
-                        forEachSecretSlot(state.settings, (obj, slot) => { if (keptSecrets[slot]) obj.apiKey = keptSecrets[slot]; });
-                    }
+                    // Conserva las API keys actuales (el backup no las incluye),
+                    // salvo las de motores a los que el fichero cambia la URL.
+                    const droppedKeys = data.settings ? applyImportedSettings(data.settings) : [];
                     if (data.activeProjectId && state.projects.find(p => p.id === data.activeProjectId)) {
                         state.activeProjectId = data.activeProjectId;
                     } else if (!state.projects.find(p => p.id === state.activeProjectId)) {
                         state.activeProjectId = state.projects[0]?.id || 'general';
                     }
                     if (Array.isArray(data.orderQueue)) state.orderQueue = data.orderQueue;
-                    syncProviderToState();
                     await saveStateNow();
                     applySettingsToUI();
                     renderProjectSelect();
@@ -715,7 +710,8 @@ function bindEvents() {
                     // force: los chats se han sustituido en bloque; un chat
                     // restaurado puede conservar el mismo id y contenido distinto.
                     if (typeof renderMessages === 'function') renderMessages({ force: true });
-                    alert(`Copia de seguridad restaurada: ${n} elementos. Recuerda revisar tus API keys en Ajustes.`);
+                    const notice = describeDroppedKeys(droppedKeys);
+                    alert(`Copia de seguridad restaurada: ${n} elementos. Recuerda revisar tus API keys en Ajustes.` + (notice ? '\n\n' + notice : ''));
                 } catch (err) {
                     alert('Error al leer la copia de seguridad: ' + err.message);
                 }

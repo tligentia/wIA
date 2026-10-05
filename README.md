@@ -143,6 +143,16 @@ Integrate) o instalaciones de Ollama sin CORS configurado. Detalles:
 - **Allowlist**: el proxy solo reenvía a hosts conocidos de proveedores de IA
   y a direcciones privadas (localhost, RFC1918, `.local`). Para añadir otros:
   `CORS_PROXY_ALLOW="mi-host.com,otro.com" node server.js`.
+- **Solo atiende a la propia app**: el proxy rechaza peticiones cuyo `Host` no
+  sea `localhost`, una IP o un dominio declarado (frena el *DNS rebinding*), y
+  las que el navegador marca como ajenas (`Sec-Fetch-Site`). Si lo publicas con
+  dominio propio: `ALLOWED_HOSTS="wia.midominio.com" node server.js`. Detrás de
+  un proxy inverso que fije `X-Forwarded-Host`, añade `TRUST_PROXY=1`.
+- **Ficheros privados**: no se sirven los ocultos (`.env*`, `.git/`, `.claude/`…)
+  ni `server.js`, `scripts/`, `package.json`, `README.md` o `LICENSE`.
+- **Cortes y esperas**: al pulsar «Detener» se cierra también la petición al
+  motor. `PROXY_TIMEOUT_MS` (10 min por defecto) fija cuánto se espera a un
+  destino que no envía datos.
 - La app **detecta automáticamente** si el proxy existe (health-check); si no
   está, hace las llamadas directas.
 

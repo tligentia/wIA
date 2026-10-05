@@ -44,6 +44,47 @@ function isProxyTargetAllowed(targetUrl) {
     );
 }
 
+// Nombres de host por los que se acepta servir el proxy, además de localhost y
+// de cualquier IP literal. Imprescindible detrás de un proxy inverso con dominio
+// propio: ALLOWED_HOSTS="wia.midominio.com,otro.dominio.com".
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '')
+    .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+
+// X-Forwarded-Host lo puede escribir cualquier cliente. Solo se atiende si quien
+// despliega declara que hay un proxy inverso delante (TRUST_PROXY=1) que lo fija.
+const TRUST_PROXY = /^(1|true|yes)$/i.test(process.env.TRUST_PROXY || '');
+
+function requestHost(req) {
+    const forwarded = TRUST_PROXY ? String(req.headers['x-forwarded-host'] || '').split(',')[0].trim() : '';
+    return String(forwarded || req.headers.host || '').toLowerCase();
+}
+
+// "host:puerto" → nombre de host sin puerto (respeta los corchetes de IPv6).
+function hostnameOf(host) {
+    const ipv6 = host.match(/^(\[[^\]]+\])(?::\d+)?$/);
+    return ipv6 ? ipv6[1] : host.replace(/:\d+$/, '');
+}
+
+/**
+ * isAllowedHost — corta el DNS rebinding.
+ *
+ * Una web ajena puede apuntar su propio dominio a 127.0.0.1 y, desde ahí,
+ * llamar a este servidor "en mismo origen": el navegador no envía `Origin` (o
+ * envía uno que coincide con el `Host`), así que la comprobación de origen no
+ * lo detecta. Lo que delata el ataque es el `Host`, que lleva el dominio del
+ * atacante. Por eso solo se aceptan:
+ *   · localhost y las IP literales — una IP no se puede "rebindear": si el Host
+ *     es una IP, la página se cargó de verdad desde esa dirección;
+ *   · los nombres declarados en ALLOWED_HOSTS.
+ */
+function isAllowedHost(host) {
+    const name = hostnameOf(host);
+    if (!name) return false;
+    if (name === 'localhost') return true;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(name) || /^\[[0-9a-f:.]+\]$/.test(name)) return true;
+    return ALLOWED_HOSTS.includes(name);
+}
+
 /**
  * isSameOriginRequest — el proxy SOLO debe atender a la propia app.
  *
@@ -53,21 +94,59 @@ function isProxyTargetAllowed(targetUrl) {
  * convertía este servidor local en un SSRF de lectura hacia la red privada del
  * usuario mientras estuviera arrancado.
  *
- * El navegador añade `Origin` a toda petición cross-origin y a cualquier
- * petición no-GET/HEAD; solo las GET del mismo origen lo omiten. Por eso
- * "sin Origin" es seguro, y "con Origin" exige que coincida con este host.
+ * Tres barreras, de la más fiable a la más antigua:
+ *  1. `Host` permitido (ver isAllowedHost): frena el DNS rebinding.
+ *  2. `Sec-Fetch-Site`: el navegador lo fija y la página no puede falsearlo.
+ *     La app llama al proxy con fetch() desde su propio origen, así que
+ *     cualquier otro valor —`cross-site` de un <img> o un enlace en una web
+ *     ajena, `none` de una URL pegada en la barra— no es la app. Los GET sin
+ *     CORS no llevan `Origin`, y esta cabecera es lo único que los distingue.
+ *     Si falta (navegador antiguo, página servida por http en la LAN, curl) se
+ *     pasa a la tercera.
+ *  3. `Origin`, cuando viene, debe coincidir con el `Host`.
  */
 function isSameOriginRequest(req) {
+    const host = requestHost(req);
+    if (!isAllowedHost(host)) return false;
+
+    const fetchSite = req.headers['sec-fetch-site'];
+    if (fetchSite && fetchSite !== 'same-origin') return false;
+
     const origin = req.headers.origin;
     if (!origin) return true;
-    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase();
-    if (!host) return false;
     try {
         return new URL(origin).host.toLowerCase() === host;
     } catch (_) {
         return false;
     }
 }
+
+/**
+ * isPublicPath — qué ficheros de la carpeta se pueden servir.
+ *
+ * El servidor arranca en la raíz del repositorio, donde conviven la app y
+ * cosas que nunca deben salir por HTTP: `.env.local` (credenciales), `.git/`
+ * (historial y configuración), `.claude/`, `.vercel/`… Se rechaza todo lo que
+ * cuelgue de un nombre oculto y lo que no es parte de la app en ejecución
+ * (la misma lista que .vercelignore excluye del despliegue estático).
+ */
+const PRIVATE_TOP_LEVEL = new Set([
+    'server.js', 'scripts', 'node_modules',
+    'package.json', 'package-lock.json', 'readme.md', 'license',
+]);
+
+function isPublicPath(relPath) {
+    const segments = relPath.split(/[\\/]+/).filter(Boolean);
+    if (segments.some(seg => seg.startsWith('.'))) return false;
+    // Windows ignora puntos y espacios finales: «server.js.» abre server.js.
+    const top = (segments[0] || '').toLowerCase().replace(/[. ]+$/, '');
+    return !PRIVATE_TOP_LEVEL.has(top);
+}
+
+// Sin datos durante este tiempo se da por muerta la conexión con el destino.
+// Generoso a propósito: un motor local puede tardar minutos en cargar el modelo
+// antes de emitir el primer token.
+const PROXY_IDLE_TIMEOUT_MS = parseInt(process.env.PROXY_TIMEOUT_MS || '600000', 10);
 
 // Cabeceras de seguridad + aislamiento de origen cruzado. COOP+COEP habilitan
 // crossOriginIsolated → SharedArrayBuffer → WASM multihilo (onnxruntime-web más
@@ -102,6 +181,9 @@ const MIME_TYPES = {
     '.wasm': 'application/wasm',
 };
 
+// Hosts rechazados ya avisados en el log (acotado: lo escribe el cliente).
+const warnedHosts = new Set();
+
 const server = http.createServer((req, res) => {
     // Nada de `Access-Control-Allow-Origin: *`: la app consume este servidor
     // desde su propio origen, así que no necesita CORS y abrirlo a cualquier
@@ -119,8 +201,19 @@ const server = http.createServer((req, res) => {
     // Format: /cors-proxy?url=https://integrate.api.nvidia.com/v1/...
     if (req.url.startsWith('/cors-proxy')) {
         if (!sameOrigin) {
+            const host = requestHost(req);
+            const hostRejected = !isAllowedHost(host);
+            // Un despliegue con dominio propio cae aquí hasta que se declara el
+            // dominio: se avisa una vez en el log, porque en el navegador solo
+            // se nota que el proxy "no está".
+            if (hostRejected && warnedHosts.size < 20 && !warnedHosts.has(host)) {
+                warnedHosts.add(host);
+                console.warn(`[cors-proxy] Host no permitido: «${host}». Si es tu dominio, arranca con ALLOWED_HOSTS="${hostnameOf(host)}".`);
+            }
             res.writeHead(403, { 'Content-Type': 'text/plain' });
-            res.end('Forbidden: el proxy solo atiende peticiones del propio origen.');
+            res.end(hostRejected
+                ? 'Forbidden: host no permitido para el proxy (ver ALLOWED_HOSTS).'
+                : 'Forbidden: el proxy solo atiende peticiones del propio origen.');
             return;
         }
         const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
@@ -184,13 +277,40 @@ const server = http.createServer((req, res) => {
                 // reabran el acceso a orígenes ajenos.
                 delete responseHeaders['access-control-allow-origin'];
                 delete responseHeaders['access-control-allow-credentials'];
+                // El contenido es de un tercero pero sale por ESTE origen. Si un
+                // navegador lo abriese como documento, su HTML ejecutaría script
+                // con acceso al almacenamiento de la app (claves incluidas). Con
+                // `sandbox` queda en un origen opaco y sin script; fetch() —que
+                // es como lo consume la app— ignora la CSP de la respuesta.
+                responseHeaders['content-security-policy'] = "sandbox; default-src 'none'";
+                responseHeaders['x-content-type-options'] = 'nosniff';
+                // Una cookie del destino se guardaría para el origen de la app.
+                delete responseHeaders['set-cookie'];
 
                 res.writeHead(proxyRes.statusCode, responseHeaders);
+                proxyRes.on('error', () => res.destroy());
                 proxyRes.pipe(res, { end: true });
             });
 
+            // Si el navegador corta (botón «Detener», pestaña cerrada), se corta
+            // también la petición al motor. Sin esto el destino seguía generando
+            // —y facturando tokens u ocupando la GPU— hacia un socket sin lector.
+            res.on('close', () => {
+                if (!res.writableFinished) proxyReq.destroy();
+            });
+
+            proxyReq.setTimeout(PROXY_IDLE_TIMEOUT_MS, () => {
+                proxyReq.destroy(new Error('el destino no responde (timeout)'));
+            });
+
             proxyReq.on('error', (err) => {
-                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                // Con la respuesta ya empezada no se puede cambiar el estado:
+                // solo queda cerrar para que el cliente vea el corte.
+                if (res.headersSent) {
+                    res.destroy();
+                    return;
+                }
+                res.writeHead(502, { 'Content-Type': 'text/plain' });
                 res.end(`Proxy Error: ${err.message}`);
             });
 
@@ -203,7 +323,18 @@ const server = http.createServer((req, res) => {
     }
 
     // Static file serving
-    let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url.split('?')[0]);
+    let relPath;
+    try {
+        relPath = decodeURIComponent(req.url.split('?')[0]);
+    } catch (_) {
+        relPath = null;
+    }
+    if (relPath === null || relPath.includes('\0')) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Bad Request');
+        return;
+    }
+    let filePath = path.join(__dirname, relPath === '/' ? 'index.html' : relPath);
 
     // Security check: ensure filePath is within __dirname. Comparar contra
     // `__dirname + separador` evita que un directorio HERMANO con el mismo
@@ -213,6 +344,14 @@ const server = http.createServer((req, res) => {
     if (filePath !== __dirname && !filePath.startsWith(rootWithSep)) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
         res.end('Forbidden');
+        return;
+    }
+
+    // Dentro de la raíz, pero no todo es público. Se responde 404 —no 403—
+    // para no confirmar qué ficheros privados existen.
+    if (!isPublicPath(path.relative(__dirname, filePath))) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
         return;
     }
 
