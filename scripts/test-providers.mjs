@@ -380,6 +380,44 @@ check('salen detrás de los motores cloud que ya había', (() => {
 })());
 check('el proxy local los admite como destino', /'api\.mistral\.ai'/.test(read('server.js')) && /'api\.cerebras\.ai'/.test(read('server.js')));
 
+console.log('\nFreeLLMAPI (pasarela autoalojada)\n');
+
+check('existe, habla el dialecto de OpenAI y pide su clave unificada',
+    run(`PROVIDERS.freellmapi?.type`) === 'openai' && run(`PROVIDERS.freellmapi?.auth`) === 'apikey');
+check('apunta a la pasarela local con el modelo «auto»',
+    run(`PROVIDERS.freellmapi.defaultUrl`) === 'http://localhost:3001/v1' && run(`state.settings.providerConfigs.freellmapi.model`) === 'auto');
+check('reconoce su clave y la distingue de las de otros proveedores',
+    run(`checkApiKeyFormat('freellmapi', 'freellmapi-abc123def456').ok`) === true
+    && run(`checkApiKeyFormat('freellmapi', 'gsk_' + 'a1B2'.repeat(8)).looksLike`) === 'groq'
+    && run(`checkApiKeyFormat('openai', 'freellmapi-abc123def456').looksLike`) === 'freellmapi');
+check('aunque su URL sea localhost, NO se anuncia como IA local', run(`(() => {
+    const prev = state.settings.provider;
+    saveCurrentProviderConfig(); state.settings.provider = 'freellmapi'; syncProviderToState();
+    const loc = getAILocality();
+    state.settings.provider = prev; syncProviderToState();
+    return loc.mode === 'cloud' && /pasarela/.test(loc.detail);
+})()`) === true);
+check('lo mismo vale para la pasarela de ChatGPT', run(`(() => {
+    const prev = state.settings.provider;
+    saveCurrentProviderConfig(); state.settings.provider = 'chatgpt_local'; syncProviderToState();
+    const mode = getAILocality().mode;
+    state.settings.provider = prev; syncProviderToState();
+    return mode;
+})()`) === 'cloud');
+check('un Ollama en localhost sigue siendo IA local', run(`(() => {
+    const prev = state.settings.provider;
+    saveCurrentProviderConfig(); state.settings.provider = 'ollama'; syncProviderToState();
+    const mode = getAILocality().mode;
+    state.settings.provider = prev; syncProviderToState();
+    return mode;
+})()`) === 'local');
+check('una copia de la pasarela hereda su condición', run(`(() => {
+    const id = cloneProvider('freellmapi', 'Free de prueba');
+    const ok = PROVIDERS[id].gateway === true;
+    deleteCustomProvider(id);
+    return ok;
+})()`) === true);
+
 console.log('\nFicha de acceso de los motores con clave\n');
 
 const conClave = run(`Object.keys(PROVIDERS).filter(id => PROVIDERS[id].auth === 'apikey')`);

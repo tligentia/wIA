@@ -99,6 +99,7 @@ Cuando generes código:
             claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             chatgpt_local: { url: 'http://127.0.0.1:10531/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            freellmapi:    { url: 'http://localhost:3001/v1', model: 'auto', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             mistral:       { url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             cerebras:      { url: 'https://api.cerebras.ai/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
@@ -436,7 +437,7 @@ function getOrderedProviderEntries() {
         .filter(id => validIds.has(id));
     const fallbackOrder = [
         'webgpu', 'ollama', 'lmstudio', 'localai', 'ollama_remote', 'ollama_cloud',
-        'groq', 'openrouter', 'gemini', 'claude', 'openai', 'chatgpt_local', 'nvidia',
+        'groq', 'openrouter', 'freellmapi', 'gemini', 'claude', 'openai', 'chatgpt_local', 'nvidia',
         'mistral', 'cerebras',
     ];
     const rank = (list, id) => {
@@ -1534,6 +1535,7 @@ function getCompactProviderLabel(providerId = state.settings.provider) {
         claude: 'Claude',
         openai: 'OpenAI',
         chatgpt_local: 'ChatGPT',
+        freellmapi: 'FreeLLMAPI',
         nvidia: 'Nvidia',
         mistral: 'Mistral',
         cerebras: 'Cerebras'
@@ -1629,6 +1631,11 @@ function getAILocality() {
         return { mode: 'local', label: 'IA Local', detail: 'La inferencia se ejecuta en tu navegador (WebGPU). Nada sale de tu equipo.' };
     }
     const url = state.settings.ollamaUrl || def.defaultUrl || '';
+    // Una pasarela corre en tu equipo pero reenvía cada consulta a proveedores
+    // externos: anunciarla como «IA Local» por su URL sería engañoso.
+    if (def.gateway) {
+        return { mode: 'cloud', label: 'IA Cloud', detail: tr('locality.gateway', '{name} es una pasarela: se ejecuta en tu equipo, pero reenvía las consultas a proveedores externos.').replace('{name}', def.name) };
+    }
     try {
         const host = new URL(url).hostname;
         if (isPrivateHostname(host)) {

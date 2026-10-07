@@ -92,6 +92,12 @@ function configureConnectionHelp(failure = {}) {
             ['2. Inicia sesión una vez', 'Si nunca lo hiciste, la pasarela pedirá autorizar con tu cuenta de ChatGPT en el navegador.<code class="connection-help-command">npx openai-oauth login</code>Tus credenciales se quedan en tu máquina; wIA solo ve el endpoint local.'],
             ['3. Ten en cuenta los términos', 'Estas pasarelas son proyectos NO oficiales, sin relación con OpenAI, y usan el flujo de su cliente Codex. El uso de tu suscripción por esta vía queda sujeto a los términos de OpenAI y bajo tu responsabilidad. Si prefieres la vía respaldada, usa el motor «OpenAI» con una API Key.']
         );
+    } else if (baseId === 'freellmapi') {
+        items.push(
+            ['1. Arranca FreeLLMAPI', `wIA no habla con ningún proveedor en este motor: se conecta a la pasarela FreeLLMAPI, que debe estar en marcha y responder en ${escapeHtml(endpoint)}.<code class="connection-help-command">curl -fsSL https://freellmapi.co/install.sh | bash</code>`],
+            ['2. Usa su clave unificada', 'En el panel de FreeLLMAPI (página Keys) copia la clave que empieza por <code class="connection-help-command">freellmapi-</code> y pégala como API Key. Las claves de cada proveedor se configuran allí, no en wIA.'],
+            ['3. Si el navegador la bloquea', 'Ejecuta wIA con su servidor (node server.js): su proxy local alcanza la pasarela aunque esta no acepte llamadas directas desde el navegador.']
+        );
     } else if (baseId === 'localai') {
         items.push(
             ['1. Arranca LocalAI', `Comprueba que el contenedor o binario está en marcha y responde en ${escapeHtml(endpoint)}. La API es compatible con OpenAI y suele colgar de /v1.`],
@@ -771,7 +777,7 @@ function getModelFunctionKeys(model, providerId = state.settings.provider) {
 
     // Por motor base, para que un clon de Groq/OpenAI/... conserve el soporte
     // de herramientas de su original.
-    if (['gemini', 'openai', 'chatgpt_local', 'nvidia', 'openrouter', 'groq', 'mistral', 'cerebras', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
+    if (['gemini', 'openai', 'chatgpt_local', 'freellmapi', 'nvidia', 'openrouter', 'groq', 'mistral', 'cerebras', 'claude', 'lmstudio', 'localai'].includes(getProviderBaseId(providerId))) {
         keys.add('tools');
     }
 
@@ -859,6 +865,9 @@ function getProviderExploreLinks(providerId = state.settings.provider) {
         ],
         nvidia: [
             { label: '🟢 Catálogo Nvidia NIM', url: 'https://build.nvidia.com/models' }
+        ],
+        freellmapi: [
+            { label: '🆓 FreeLLMAPI en GitHub', url: 'https://github.com/tashfeenahmed/freellmapi' }
         ],
         mistral: [
             { label: '🌬️ Modelos Mistral', url: 'https://docs.mistral.ai/models' }

@@ -340,7 +340,14 @@ const PROVIDERS = {
     // con OpenAI. El inicio de sesión lo hace esa pasarela con el flujo de
     // Codex, que exige una redirección a loopback y un backend sin CORS —
     // imposible desde una pestaña—, así que aquí no se puede replicar.
-    chatgpt_local: { name: 'ChatGPT (suscripción)', type: 'openai',   auth: 'none',             defaultUrl: 'http://127.0.0.1:10531/v1',                               defaultModel: '',                          icon: '🎫' },
+    chatgpt_local: { name: 'ChatGPT (suscripción)', type: 'openai',   auth: 'none',             defaultUrl: 'http://127.0.0.1:10531/v1',                               defaultModel: '',                          icon: '🎫', gateway: true },
+    // FreeLLMAPI: pasarela de código abierto que el usuario aloja y que reúne
+    // los planes gratuitos de muchos proveedores tras un único /v1 compatible
+    // con OpenAI. Se autentica con su clave unificada («freellmapi-…») y el
+    // modelo «auto» deja que ella elija y cambie de proveedor al agotar cupos.
+    // `gateway`: corre en el equipo pero REENVÍA las consultas a terceros, así
+    // que no cuenta como IA local aunque su URL sea localhost.
+    freellmapi:    { name: 'FreeLLMAPI',          type: 'openai',     auth: 'apikey',           defaultUrl: 'http://localhost:3001/v1',                                defaultModel: 'auto',                      icon: '🆓', gateway: true },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
     // Mistral y Cerebras hablan el dialecto de OpenAI y aceptan llamadas directas
     // desde el navegador (CORS abierto), así que funcionan también en hosting
@@ -385,6 +392,8 @@ const PROVIDER_ACCESS = {
                   cost: 'Créditos gratuitos para probar modelos abiertos.' },
     mistral:    { keyUrl: 'https://console.mistral.ai/api-keys',         keyExample: '32 caracteres', keyFormat: /^[A-Za-z0-9]{32}$/,
                   cost: 'Plan «Experiment» gratuito con límites.' },
+    freellmapi: { keyUrl: 'https://github.com/tashfeenahmed/freellmapi', keyExample: 'freellmapi-…', keyFormat: /^freellmapi-[A-Za-z0-9_-]{8,}$/,
+                  cost: 'Gratis y autoalojado: la clave unificada sale de su panel (Keys). Reúne los planes gratuitos de otros proveedores.' },
     cerebras:   { keyUrl: 'https://cloud.cerebras.ai',                   keyExample: 'csk-…',        keyFormat: /^csk-[A-Za-z0-9]{20,}$/,
                   cost: 'Plan gratuito con límites diarios.' },
 };
@@ -398,7 +407,7 @@ function getProviderAccess(providerId) {
 // genérico («sk-ant-» y «sk-or-» antes que «sk-»). Mistral queda fuera: sus
 // claves son 32 caracteres sin prefijo y no se distinguen de un token cualquiera.
 const _API_KEY_PREFIXES = [
-    ['sk-ant-', 'claude'], ['sk-or-', 'openrouter'], ['gsk_', 'groq'], ['nvapi-', 'nvidia'],
+    ['freellmapi-', 'freellmapi'], ['sk-ant-', 'claude'], ['sk-or-', 'openrouter'], ['gsk_', 'groq'], ['nvapi-', 'nvidia'],
     ['csk-', 'cerebras'], ['AIza', 'gemini'], ['AQ.', 'gemini'], ['sk-', 'openai'],
 ];
 
@@ -594,6 +603,8 @@ function registerCustomProviders(list) {
             icon: def.icon || base.icon,
             custom: true,
             baseProvider: baseId,
+            // Una copia de una pasarela sigue reenviando a terceros.
+            ...(base.gateway ? { gateway: true } : {}),
         };
         registered.push(def);
     }

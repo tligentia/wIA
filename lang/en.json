@@ -237,5 +237,7 @@
   "agent.catalog.installed": "✓ installed",
   "agent.catalog.install": "＋ install",
   "agent.switch.heading": "🤖 Switch agent",
-  "agent.switch.current": "current"
+  "agent.switch.current": "current",
+  "access.cost.freellmapi": "Free and self-hosted: the unified key comes from its dashboard (Keys). It pools other providers' free tiers.",
+  "locality.gateway": "{name} is a gateway: it runs on your machine but forwards requests to external providers."
 }

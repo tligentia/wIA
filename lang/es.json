@@ -237,5 +237,7 @@
   "agent.catalog.installed": "✓ instalado",
   "agent.catalog.install": "＋ instalar",
   "agent.switch.heading": "🤖 Cambiar de agente",
-  "agent.switch.current": "actual"
+  "agent.switch.current": "actual",
+  "access.cost.freellmapi": "Gratis y autoalojado: la clave unificada sale de su panel (Keys). Reúne los planes gratuitos de otros proveedores.",
+  "locality.gateway": "{name} es una pasarela: se ejecuta en tu equipo, pero reenvía las consultas a proveedores externos."
 }
