@@ -99,7 +99,7 @@ Cuando generes código:
             claude:        { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-5', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 16384 },
             openai:        { url: 'https://api.openai.com/v1', model: 'gpt-4.1', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             chatgpt_local: { url: 'http://127.0.0.1:10531/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
-            freellmapi:    { url: 'http://localhost:3001/v1', model: 'auto', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
+            freellmapi:    { url: 'http://localhost:31415/v1', model: 'auto', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             nvidia:        { url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             mistral:       { url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },
             cerebras:      { url: 'https://api.cerebras.ai/v1', model: '', apiKey: '', temperature: 0.8, topP: 0.9, topK: 40, maxTokens: 8192 },

@@ -27,7 +27,7 @@ Ideado, diseñado y desarrollado por **Jesús de Pablos** — [jesus.depablos.es
 | **OpenAI** | OpenAI nativo | API Key | `https://api.openai.com/v1` |
 | **ChatGPT (suscripción)** | OpenAI compatible | Ninguna (pasarela local) | `http://127.0.0.1:10531/v1` |
 | **Nvidia Integrate** | OpenAI compatible | API Key | `https://integrate.api.nvidia.com/v1` |
-| **FreeLLMAPI** | OpenAI compatible (pasarela autoalojada) | Clave unificada | `http://localhost:3001/v1` |
+| **FreeLLMAPI** | OpenAI compatible (pasarela autoalojada) | Clave unificada | `http://localhost:31415/v1` |
 | **Mistral** | OpenAI compatible | API Key | `https://api.mistral.ai/v1` |
 | **Cerebras** | OpenAI compatible | API Key | `https://api.cerebras.ai/v1` |
 | **WebGPU (Browser)** | Transformers.js en navegador | Ninguna | Sin servidor |

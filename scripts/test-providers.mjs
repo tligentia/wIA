@@ -385,7 +385,7 @@ console.log('\nFreeLLMAPI (pasarela autoalojada)\n');
 check('existe, habla el dialecto de OpenAI y pide su clave unificada',
     run(`PROVIDERS.freellmapi?.type`) === 'openai' && run(`PROVIDERS.freellmapi?.auth`) === 'apikey');
 check('apunta a la pasarela local con el modelo «auto»',
-    run(`PROVIDERS.freellmapi.defaultUrl`) === 'http://localhost:3001/v1' && run(`state.settings.providerConfigs.freellmapi.model`) === 'auto');
+    run(`PROVIDERS.freellmapi.defaultUrl`) === 'http://localhost:31415/v1' && run(`state.settings.providerConfigs.freellmapi.model`) === 'auto');
 check('reconoce su clave y la distingue de las de otros proveedores',
     run(`checkApiKeyFormat('freellmapi', 'freellmapi-abc123def456').ok`) === true
     && run(`checkApiKeyFormat('freellmapi', 'gsk_' + 'a1B2'.repeat(8)).looksLike`) === 'groq'

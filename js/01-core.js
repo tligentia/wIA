@@ -347,7 +347,7 @@ const PROVIDERS = {
     // modelo «auto» deja que ella elija y cambie de proveedor al agotar cupos.
     // `gateway`: corre en el equipo pero REENVÍA las consultas a terceros, así
     // que no cuenta como IA local aunque su URL sea localhost.
-    freellmapi:    { name: 'FreeLLMAPI',          type: 'openai',     auth: 'apikey',           defaultUrl: 'http://localhost:3001/v1',                                defaultModel: 'auto',                      icon: '🆓', gateway: true },
+    freellmapi:    { name: 'FreeLLMAPI',          type: 'openai',     auth: 'apikey',           defaultUrl: 'http://localhost:31415/v1',                                defaultModel: 'auto',                      icon: '🆓', gateway: true },
     nvidia:        { name: 'Nvidia Integrate',    type: 'openai',     auth: 'apikey',           defaultUrl: 'https://integrate.api.nvidia.com/v1',                     defaultModel: 'meta/llama-3.3-70b-instruct', icon: '🟢' },
     // Mistral y Cerebras hablan el dialecto de OpenAI y aceptan llamadas directas
     // desde el navegador (CORS abierto), así que funcionan también en hosting
