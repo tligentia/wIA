@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const versionPath = resolve('Plantilla/Version.js');
 const source = readFileSync(versionPath, 'utf8');
@@ -61,6 +62,16 @@ try {
   }
 } catch (e) {
   console.warn(`Aviso: no se pudo actualizar la caché del service worker: ${e.message}`);
+}
+
+// Los imports de js/*.js, index.html y el precache del service worker llevan
+// «?v=<versión>» (sale de CACHE en sw.js, ya actualizado arriba): sin él, un
+// navegador con el SW anterior mezcla el HTML nuevo con JS viejos de su caché.
+// Los regenera el generador del grafo de módulos.
+const gen = spawnSync(process.execPath, ['--expose-internals', 'scripts/gen-modules.mjs'], { stdio: 'inherit' });
+if (gen.status !== 0) {
+  console.error('Aviso: no se pudo regenerar el grafo de módulos; ejecuta `npm run gen:modules`.');
+  process.exitCode = 1;
 }
 
 console.log(`Version actualizada a ${version}`);

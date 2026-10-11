@@ -1,3 +1,41 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    MOBILE_SAFE_WEBGPU_MODEL, PROVIDERS, WEBGPU_MODELS, applyProviderNames,
+    buildCustomProviderId, checkApiKeyFormat, debounce, escapeHtml, getDefaultProviderName,
+    getProviderAccess, getProviderBaseId, getProviderOAuth, isCloneableProvider,
+    isCustomProvider, isHeavyForMobile, isMobileDevice, loadWebGPUCatalogFile,
+    registerCustomProviders, tr,
+} from './01-core.js?v=2610.AA';
+import {
+    getCachedWebGPUModels, scheduleWebGPUPriming, startWebGPUMonitor, stopWebGPUMonitor,
+    warmUpActiveWebGPUModel, webgpuState,
+} from './03-webgpu.js?v=2610.AA';
+import {
+    checkProviderStatus, detectLocalProviderAvailability, finishProviderOAuth,
+} from './04-providers.js?v=2610.AA';
+import {
+    renderAttachmentPreview, renderChatList, renderOrderQueue, renderProjectSelect,
+    renderWelcomeStarters, showWelcome,
+} from './05-workspace.js?v=2610.AA';
+import {
+    renderMessages,
+} from './06-chat.js?v=2610.AA';
+import {
+    autoResizeTextarea, bindEvents, bindSlashCommandEvents, loadPromptLibrary,
+    showConnectionValidationResult, updateSendButton,
+} from './07-ui.js?v=2610.AA';
+import {
+    updateAnonButtonUI,
+} from './08-anon.js?v=2610.AA';
+import {
+    bindLangSwitch, loadTranslations, refreshLocalizedUI, t,
+} from './09-i18n.js?v=2610.AA';
+import {
+    renderRagIndexStatus,
+} from './11-rag.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 02-state.js
    Estado global, referencias DOM, init, helpers de proveedor y persistencia (localStorage + IndexedDB)
@@ -78,6 +116,7 @@ Cuando generes código:
         incognitoMode: false,
         privacyLockEnabled: false,
         anonymizeOutgoing: false, // 🕶️ DLP local: anonimizar antes de enviar a la IA
+        autoFailover: false,      // 🔁 Si el motor falla o agota su cupo antes de contestar, prueba otro de su mismo tipo (local/cloud)
         anonDisabledTypes: [],    // IDs de tipos de datos que NO se anonimizan (resto: activos)
         // Motores clonados por el usuario: [{ id, name, icon, baseProvider }].
         // Su URL, credencial y modelo viven en providerConfigs como los de serie.
@@ -253,6 +292,7 @@ const dom = {
     anonSelectAll: $('#anonSelectAll'),
     anonTypesList: $('#anonTypesList'),
     ragEnabledToggle: $('#ragEnabledToggle'),
+    autoFailoverToggle: $('#autoFailoverToggle'),
     ragReindexBtn: $('#ragReindexBtn'),
     ragIndexStatus: $('#ragIndexStatus'),
     languageSelect: $('#languageSelect'),
@@ -763,7 +803,7 @@ function updateProviderUI() {
     if (webgpuInfo) webgpuInfo.style.display = isWebGPU ? 'block' : 'none';
     if (dom.webgpuManualAdd) dom.webgpuManualAdd.style.display = isWebGPU ? 'flex' : 'none';
     if (isWebGPU && typeof startWebGPUMonitor === 'function') startWebGPUMonitor();
-    else if (typeof _webgpuMonitorTimer !== 'undefined' && _webgpuMonitorTimer) { clearInterval(_webgpuMonitorTimer); _webgpuMonitorTimer = null; }
+    else if (typeof stopWebGPUMonitor === 'function') stopWebGPUMonitor();
 
     // URL Placeholder and behavior
     if (dom.ollamaUrl) {
@@ -965,6 +1005,30 @@ const idbStore = {
             tx.oncomplete = () => resolve(true);
             tx.onerror = () => reject(tx.error);
         });
+    },
+    async keys() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const req = db.transaction('kv', 'readonly').objectStore('kv').getAllKeys();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    },
+    /** Varias escrituras en UNA transacción: o entran todas o ninguna. ops: [['set', clave, valor] | ['del', clave]] */
+    async batch(ops) {
+        if (!ops.length) return true;
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('kv', 'readwrite');
+            const store = tx.objectStore('kv');
+            for (const [op, key, value] of ops) {
+                if (op === 'set') store.put(value, key);
+                else store.delete(key);
+            }
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        });
     }
 };
 
@@ -1078,6 +1142,54 @@ const secretVault = {
             return { value: null, wasEncrypted: true, unreadable: true };
         }
     }
+};
+
+// ─── Cifrado de copias de seguridad ──────────
+// La clave de la bóveda es NO exportable y vive en este navegador, así que no
+// sirve para un fichero que se va a restaurar en otro equipo. Las copias
+// protegidas derivan su clave de una contraseña (PBKDF2-SHA256, sal aleatoria)
+// y cifran con AES-GCM: el fichero se abre en cualquier navegador que conozca la
+// contraseña, y sin ella no revela nada (ni siquiera los títulos de los chats).
+const backupCrypto = {
+    ITERATIONS: 600000,
+    available() { return typeof crypto !== 'undefined' && !!crypto.subtle; },
+    _toB64(bytes) {
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return btoa(bin);
+    },
+    _fromB64(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); },
+    async _key(passphrase, salt, iterations) {
+        const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+            { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+            base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    },
+    async seal(payload, passphrase, meta = {}) {
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const key = await this._key(passphrase, salt, this.ITERATIONS);
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(payload)));
+        return {
+            _type: 'wia-backup-enc', ...meta,
+            kdf: 'PBKDF2-SHA256', iterations: this.ITERATIONS,
+            salt: this._toB64(salt), iv: this._toB64(iv), data: this._toB64(new Uint8Array(data)),
+        };
+    },
+    /** Descifra un sobre; lanza Error('bad-passphrase') si la contraseña no vale o el fichero está alterado. */
+    async open(envelope, passphrase) {
+        if (!envelope || envelope._type !== 'wia-backup-enc' || !envelope.salt || !envelope.iv || !envelope.data) throw new Error('bad-envelope');
+        // Tope al coste que puede pedir un fichero ajeno: un valor enorme congelaría la pestaña.
+        const iterations = Number(envelope.iterations);
+        if (!Number.isInteger(iterations) || iterations < 1000 || iterations > 5000000) throw new Error('bad-envelope');
+        try {
+            const key = await this._key(passphrase, this._fromB64(envelope.salt), iterations);
+            const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: this._fromB64(envelope.iv) }, key, this._fromB64(envelope.data));
+            return JSON.parse(new TextDecoder().decode(pt));
+        } catch (_) {
+            throw new Error('bad-passphrase');
+        }
+    },
 };
 
 // Todos los sitios donde vive una API key dentro de state.settings.
@@ -1234,13 +1346,38 @@ async function loadState() {
         // anteriores al cifrado): al terminar la carga se reescribe ya cifrado.
         let needsReencrypt = false;
         let unreadable = false;
+        let legacyFormat = false;
         try {
             const rawProjects = await secretVault.decryptRecord(await idbStore.get('projects'));
-            const rawChats = await secretVault.decryptRecord(await idbStore.get('chats'));
             projects = rawProjects.value;
-            chats = rawChats.value;
-            if (rawProjects.unreadable || rawChats.unreadable) unreadable = true;
-            if ((projects && !rawProjects.wasEncrypted) || (chats && !rawChats.wasEncrypted)) needsReencrypt = true;
+            if (rawProjects.unreadable) { unreadable = true; chatStore.projectsLocked = true; }
+            if (projects && !rawProjects.wasEncrypted) needsReencrypt = true;
+
+            const chatKeys = (await idbStore.keys()).filter(k => String(k).startsWith(chatStore.PREFIX));
+            if (chatKeys.length) {
+                // Formato por chat: cada conversación es su propio registro.
+                chats = [];
+                for (const k of chatKeys) {
+                    const id = String(k).slice(chatStore.PREFIX.length);
+                    chatStore.onDisk.add(id);
+                    try {
+                        const rec = await secretVault.decryptRecord(await idbStore.get(k));
+                        if (rec.unreadable) { chatStore.unreadable.add(id); unreadable = true; }
+                        else if (rec.value) chats.push(rec.value);
+                    } catch (_) { chatStore.unreadable.add(id); unreadable = true; }
+                }
+                // Sin índice, el orden de la lista lo da la fecha de creación (el
+                // panel lateral reordena por última actividad de todos modos).
+                chats.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                if (await idbStore.get('chats')) chatStore.legacyChats = true;
+            } else {
+                // Formato anterior: un único registro con todos los chats.
+                const rawChats = await secretVault.decryptRecord(await idbStore.get('chats'));
+                chats = rawChats.value;
+                if (rawChats.unreadable) unreadable = true;
+                else if (chats) { legacyFormat = true; chatStore.legacyChats = true; }
+                if (chats && !rawChats.wasEncrypted) needsReencrypt = true;
+            }
         } catch (e) {
             console.warn('IndexedDB no disponible, usando localStorage:', e);
         }
@@ -1273,9 +1410,14 @@ async function loadState() {
             });
         }
 
+        // Lo que se acaba de leer es, por definición, lo que hay en disco.
+        for (const c of state.chats) chatStore.sigs.set(c.id, chatSignature(c));
+        chatStore.projectsSig = projectsSignature();
+        initChatSync();
+
         if (migrated) {
             try {
-                await persistConversationsToIdb({ notifyOnError: false });
+                await persistConversationsToIdb({ notifyOnError: false, full: true });
                 // Libera la cuota de localStorage solo tras migrar con éxito
                 localStorage.removeItem('antigravity_projects');
                 localStorage.removeItem('antigravity_chats');
@@ -1283,10 +1425,10 @@ async function loadState() {
             } catch (e) {
                 console.warn('No se pudo migrar a IndexedDB, se mantiene localStorage:', e);
             }
-        } else if (needsReencrypt) {
-            // Historial de una versión anterior, guardado en claro: se reescribe
-            // cifrado en cuanto se ha leído bien.
-            persistConversationsToIdb({ notifyOnError: false })
+        } else if (needsReencrypt || legacyFormat) {
+            // Historial de una versión anterior (en claro, o en un único registro):
+            // se reescribe cifrado y por chat en cuanto se ha leído bien.
+            persistConversationsToIdb({ notifyOnError: false, full: true })
                 .then(() => console.log('[Persistencia] historial existente reescrito cifrado'))
                 .catch(() => {});
         }
@@ -1421,7 +1563,10 @@ function saveState(options = {}) {
             }
         }
         // Las API keys se cifran aparte en IndexedDB; en localStorage van en blanco.
-        localStorage.setItem('antigravity_settings', JSON.stringify(settingsWithoutSecrets(state.settings)));
+        // Durante un failover state.settings lleva un motor provisional: se guarda
+        // el elegido por el usuario, no el que está contestando por él.
+        const persisted = state._engineOverride ? { ...state.settings, ...state._engineOverride } : state.settings;
+        localStorage.setItem('antigravity_settings', JSON.stringify(settingsWithoutSecrets(persisted)));
         scheduleSecretPersist();
         persistOrderQueue();
         return true;
@@ -1443,15 +1588,107 @@ function persistOrderQueue() {
     } catch (e) { /* cuota / almacenamiento no disponible */ }
 }
 
+// ─── Almacén de conversaciones ───────────────
+// Antes todo el historial era UN registro cifrado: cada guardado volvía a
+// serializar, cifrar y escribir TODAS las conversaciones (imágenes incluidas), y
+// dos pestañas abiertas se pisaban entre sí. Ahora cada chat es su propio
+// registro cifrado (`chat:<id>`) y solo se escribe lo que ha cambiado. No hay un
+// índice compartido a propósito: sería un registro que todas las pestañas
+// reescriben (y se pisarían igual); el conjunto de claves `chat:*` ES el índice.
+// Una pestaña avisa a las demás por BroadcastChannel.
+const chatStore = {
+    PREFIX: 'chat:',
+    key: (id) => 'chat:' + id,
+    sigs: new Map(),            // id → firma de lo último que hay en disco
+    onDisk: new Set(),          // ids con registro en disco (incluye los ilegibles)
+    unreadable: new Set(),      // ids que no se pudieron descifrar: no se tocan
+    projectsSig: '',
+    projectsLocked: false,      // 'projects' ilegible: no se sobrescribe
+    legacyChats: false,         // existe el registro único antiguo 'chats'
+    chain: Promise.resolve(),   // serializa las escrituras de esta pestaña
+    tabId: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
+    channel: null,
+};
+
+function _fnv(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36) + ':' + str.length;
+}
+
+/**
+ * Firma de un chat para saber si cambió. Barata para los que no se están
+ * mirando (campos propios + nº de mensajes + tamaño del último) y completa para
+ * el chat activo, que es el que se edita: así no se serializan todos los chats
+ * en cada guardado.
+ */
+function chatSignature(chat) {
+    const msgs = chat.messages || [];
+    const last = msgs[msgs.length - 1];
+    const own = Object.keys(chat).filter(k => k !== 'messages').sort().map(k => chat[k]);
+    let sig = JSON.stringify([own, msgs.length, last ? [String(last.content || '').length, String(last.thinking || '').length, (last.images || []).length] : 0]);
+    if (chat.id === state.activeChatId) sig += '|' + _fnv(JSON.stringify(msgs));
+    return sig;
+}
+
+function projectsSignature() {
+    return _fnv(JSON.stringify((state.projects || []).map(p => ({
+        ...p, documents: (p.documents || []).map(d => [d.id, d.name, String(d.data || '').length]),
+    }))));
+}
+
+function postChatSync(message) {
+    try { chatStore.channel?.postMessage({ ...message, tab: chatStore.tabId }); } catch (_) {}
+}
+
 async function persistConversationsToIdb(options = {}) {
+    const run = () => _persistConversations(options);
+    const p = chatStore.chain.then(run, run);
+    chatStore.chain = p.catch(() => {});
+    return p;
+}
+
+async function _persistConversations(options = {}) {
     try {
         // Chats y proyectos se guardan CIFRADOS (AES-GCM con la clave no
-        // exportable de la bóveda). Antes iban en claro en IndexedDB: cualquier
-        // extensión con permiso sobre el sitio, o quien abriese las herramientas
-        // de desarrollo, leía conversaciones y documentos enteros. Es coherente
-        // con lo que promete la app y con el cifrado que ya tenían las API keys.
-        await idbStore.set('projects', await secretVault.encryptRecord(state.projects));
-        await idbStore.set('chats', await secretVault.encryptRecord(state.chats));
+        // exportable de la bóveda): cualquier extensión con permiso sobre el
+        // sitio, o quien abriese las herramientas de desarrollo, leería si no
+        // conversaciones y documentos enteros.
+        const full = !!options.full;
+        const ops = [];
+        const newSigs = new Map();
+        const changed = [];
+
+        const pSig = projectsSignature();
+        const writeProjects = !chatStore.projectsLocked && (full || pSig !== chatStore.projectsSig);
+        if (writeProjects) ops.push(['set', 'projects', await secretVault.encryptRecord(state.projects)]);
+
+        const ids = [];
+        for (const chat of state.chats) {
+            ids.push(chat.id);
+            const sig = chatSignature(chat);
+            newSigs.set(chat.id, sig);
+            if (full || chatStore.sigs.get(chat.id) !== sig || !chatStore.onDisk.has(chat.id)) {
+                ops.push(['set', chatStore.key(chat.id), await secretVault.encryptRecord(chat)]);
+                changed.push(chat.id);
+            }
+        }
+        // Los chats ilegibles se dejan tal cual en disco: ni se leen ni se borran.
+        const removed = [...chatStore.onDisk].filter(id => !ids.includes(id) && !chatStore.unreadable.has(id));
+        removed.forEach(id => ops.push(['del', chatStore.key(id)]));
+
+        await idbStore.batch(ops);
+
+        chatStore.sigs = newSigs;
+        chatStore.onDisk = new Set([...ids, ...chatStore.unreadable]);
+        if (writeProjects) chatStore.projectsSig = pSig;
+        // El registro único antiguo ya no hace falta cuando el nuevo está completo.
+        if (chatStore.legacyChats && !chatStore.unreadable.size) {
+            try { await idbStore.del('chats'); chatStore.legacyChats = false; } catch (_) {}
+        }
+        if (changed.length || removed.length || writeProjects) {
+            postChatSync({ t: 'changed', ids: changed, removed, projects: writeProjects });
+        }
         return true;
     } catch (e) {
         console.warn('Failed to persist conversations to IndexedDB:', e);
@@ -1460,6 +1697,87 @@ async function persistConversationsToIdb(options = {}) {
         }
         return false;
     }
+}
+
+/** Borra TODO el historial guardado (chats, proyectos, índice y el formato antiguo). */
+async function purgeConversationStore() {
+    try {
+        const keys = await idbStore.keys();
+        const doomed = keys.filter(k => k === 'chats' || k === 'projects' || String(k).startsWith(chatStore.PREFIX));
+        await idbStore.batch(doomed.map(k => ['del', k]));
+    } catch (e) { console.warn('No se pudo vaciar el almacén de conversaciones:', e); }
+    chatStore.sigs = new Map(); chatStore.onDisk = new Set(); chatStore.unreadable = new Set();
+    chatStore.projectsSig = ''; chatStore.projectsLocked = false; chatStore.legacyChats = false;
+    postChatSync({ t: 'purged' });
+}
+
+// ── Sincronización entre pestañas ──
+async function _readChatRecord(id) {
+    const rec = await secretVault.decryptRecord(await idbStore.get(chatStore.key(id)));
+    return rec.unreadable ? null : rec.value;
+}
+
+async function syncFromOtherTab(msg) {
+    try {
+        if (msg.t === 'purged') {
+            chatStore.sigs = new Map(); chatStore.onDisk = new Set(); chatStore.projectsSig = '';
+            resetProjectsAndChatsState();
+            applyPostResetUI({ preserveSettings: true });
+            return;
+        }
+        if (msg.t !== 'changed') return;
+
+        // Mientras esta pestaña genera una respuesta, su chat activo no se toca.
+        const protectedId = state.isStreaming ? state.activeChatId : null;
+        let activeChanged = false;
+        let removedActive = false;
+
+        for (const id of (msg.ids || [])) {
+            if (id === protectedId) continue;
+            const chat = await _readChatRecord(id);
+            if (!chat) continue;
+            const at = state.chats.findIndex(c => c.id === id);
+            if (at >= 0) state.chats[at] = chat; else state.chats.unshift(chat);
+            chatStore.onDisk.add(id);
+            chatStore.sigs.set(id, chatSignature(chat));
+            if (id === state.activeChatId) activeChanged = true;
+        }
+        for (const id of (msg.removed || [])) {
+            if (id === protectedId) continue;
+            state.chats = state.chats.filter(c => c.id !== id);
+            chatStore.onDisk.delete(id);
+            chatStore.sigs.delete(id);
+            if (id === state.activeChatId) removedActive = true;
+        }
+
+        if (msg.projects) {
+            const rec = await secretVault.decryptRecord(await idbStore.get('projects'));
+            if (Array.isArray(rec.value) && rec.value.length) {
+                state.projects = rec.value;
+                chatStore.projectsSig = projectsSignature();
+                if (!state.projects.find(p => p.id === state.activeProjectId)) state.activeProjectId = 'general';
+                renderProjectSelect();
+            }
+        }
+        if (removedActive) { state.activeChatId = null; showWelcome(); }
+        renderChatList();
+        if (activeChanged && typeof renderMessages === 'function') renderMessages({ force: true });
+    } catch (e) {
+        console.warn('No se pudo sincronizar con otra pestaña:', e);
+    }
+}
+
+function initChatSync() {
+    if (chatStore.channel || typeof BroadcastChannel === 'undefined') return;
+    try {
+        chatStore.channel = new BroadcastChannel('wia-conversations');
+        chatStore.channel.onmessage = (ev) => {
+            const msg = ev.data;
+            if (!msg || msg.tab === chatStore.tabId) return;
+            // Tras las escrituras en curso de esta pestaña, para no leer a medias.
+            chatStore.chain = chatStore.chain.then(() => syncFromOtherTab(msg)).catch(() => {});
+        };
+    } catch (_) { chatStore.channel = null; }
 }
 
 /**
@@ -1626,11 +1944,19 @@ function isPrivateHostname(hostname) {
  * del proveedor (un "Ollama Remoto" en 192.168.x.x sigue siendo local).
  */
 function getAILocality() {
-    const def = getProviderDef(state.settings.provider);
+    return getProviderLocality(state.settings.provider, state.settings.ollamaUrl);
+}
+
+/**
+ * getProviderLocality — lo mismo para un motor cualquiera y una URL dada. Lo
+ * usa también el failover para no sacar una consulta de tu equipo a un tercero.
+ */
+function getProviderLocality(providerId, configuredUrl) {
+    const def = getProviderDef(providerId);
     if (def.type === 'webgpu') {
         return { mode: 'local', label: 'IA Local', detail: 'La inferencia se ejecuta en tu navegador (WebGPU). Nada sale de tu equipo.' };
     }
-    const url = state.settings.ollamaUrl || def.defaultUrl || '';
+    const url = configuredUrl || def.defaultUrl || '';
     // Una pasarela corre en tu equipo pero reenvía cada consulta a proveedores
     // externos: anunciarla como «IA Local» por su URL sería engañoso.
     if (def.gateway) {
@@ -1741,6 +2067,7 @@ function applySettingsToUI() {
     dom.systemPrompt.value = state.settings.systemPrompt;
     dom.thinkingMode.checked = state.settings.thinkingMode;
     if (dom.ragEnabledToggle) dom.ragEnabledToggle.checked = state.settings.ragEnabled !== false;
+    if (dom.autoFailoverToggle) dom.autoFailoverToggle.checked = state.settings.autoFailover === true;
     if (typeof renderRagIndexStatus === 'function') renderRagIndexStatus();
     if (dom.incognitoMode) dom.incognitoMode.checked = !!state.settings.incognitoMode;
     if (dom.privacyLockEnabled) dom.privacyLockEnabled.checked = !!state.settings.privacyLockEnabled;
@@ -1765,3 +2092,19 @@ function applySettingsToUI() {
 
     updateProviderUI();
 }
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    state, $, $$, dom, showPersistenceAlert, isIncognitoMode,
+    isConversationPersistenceDisabled, init, getProviderDef, getOrderedProviderEntries,
+    renameProvider, cloneProvider, deleteCustomProvider, markProviderUsed,
+    renderProviderOptions, getActiveProviderConfig, getAuthHeaders, syncProviderToState,
+    saveCurrentProviderConfig, updateProviderUI, updateApiKeyFormatHint,
+    updateProviderUrlSuggestion, updateInputDisclaimer, idbStore, secretVault, backupCrypto,
+    settingsWithoutSecrets, applyImportedSettings, describeDroppedKeys, saveState,
+    persistOrderQueue, chatStore, purgeConversationStore, saveStateNow,
+    resetProjectsAndChatsState, applyPostResetUI, formatTokens, getCompactProviderLabel,
+    getCompactModelLabel, updateSettingsActiveContext, getProviderLocality, updateStatusMeta,
+    updateModelContextIndicator, applyTheme, applySettingsToUI,
+};
+/* <<< exports <<< */

@@ -2,6 +2,7 @@ import http from 'http';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,9 +39,22 @@ function isPrivateHostname(hostname) {
     return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname);
 }
 
+// ¿Puede el proxy llegar a localhost y a la red privada del servidor?
+//
+// En uso local es justo para lo que sirve (Ollama, LM Studio en el propio equipo
+// o en la LAN). Pero en un despliegue con dominio propio (ALLOWED_HOSTS /
+// TRUST_PROXY) el proxy lo puede usar cualquiera que llegue por HTTP, no solo
+// un navegador con la app: las comprobaciones de origen no detienen a curl, y
+// permitir destinos privados lo convertiría en un SSRF hacia el interior del
+// servidor (servicios en 127.0.0.1, paneles, otros contenedores).
+// Por eso, con dominio declarado, lo privado queda CERRADO salvo que quien
+// despliega lo pida de forma expresa con PROXY_ALLOW_PRIVATE=1.
+const PROXY_ALLOW_PRIVATE_ENV = process.env.PROXY_ALLOW_PRIVATE;
+let PROXY_ALLOW_PRIVATE;  // se resuelve más abajo, cuando ya se conocen ALLOWED_HOSTS y TRUST_PROXY
+
 function isProxyTargetAllowed(targetUrl) {
     const hostname = targetUrl.hostname;
-    if (isPrivateHostname(hostname)) return true;
+    if (isPrivateHostname(hostname)) return PROXY_ALLOW_PRIVATE;
     return PROXY_ALLOWED_HOSTS.some(allowed =>
         hostname === allowed || hostname.endsWith(`.${allowed}`)
     );
@@ -55,6 +69,10 @@ const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '')
 // X-Forwarded-Host lo puede escribir cualquier cliente. Solo se atiende si quien
 // despliega declara que hay un proxy inverso delante (TRUST_PROXY=1) que lo fija.
 const TRUST_PROXY = /^(1|true|yes)$/i.test(process.env.TRUST_PROXY || '');
+
+PROXY_ALLOW_PRIVATE = PROXY_ALLOW_PRIVATE_ENV !== undefined && PROXY_ALLOW_PRIVATE_ENV !== ''
+    ? /^(1|true|yes)$/i.test(PROXY_ALLOW_PRIVATE_ENV)
+    : (ALLOWED_HOSTS.length === 0 && !TRUST_PROXY);
 
 function requestHost(req) {
     const forwarded = TRUST_PROXY ? String(req.headers['x-forwarded-host'] || '').split(',')[0].trim() : '';
@@ -161,7 +179,7 @@ const SECURITY_HEADERS = {
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'credentialless',
     // Ver scripts/csp-policy.mjs — mantener sincronizado (npm run check:csp)
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src *; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src *; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'",
 };
 
 const MIME_TYPES = {
@@ -181,7 +199,48 @@ const MIME_TYPES = {
     '.ico': 'image/x-icon',
     '.onnx': 'application/octet-stream',
     '.wasm': 'application/wasm',
+    '.woff2': 'font/woff2',
 };
+
+// ─── Estáticos: caché y compresión ───────────────────────────────────────
+// Sin esto cada carga bajaba ~1 MB de JS/CSS sin comprimir y sin posibilidad de
+// 304. Se sirve con ETag (derivado de tamaño + fecha) y `no-cache`: el navegador
+// revalida siempre, pero un fichero sin cambios cuesta una respuesta vacía. Lo
+// que cambia poco (lib/) puede reutilizarse un día sin preguntar.
+const COMPRESSIBLE = new Set(['.html', '.css', '.js', '.mjs', '.json', '.svg', '.wasm', '.webmanifest']);
+const COMPRESS_MAX_BYTES = 40 * 1024 * 1024;
+const compressedCache = new Map(); // ruta → { tag, enc, buf }
+const COMPRESSED_CACHE_MAX_BYTES = 80 * 1024 * 1024;
+let compressedCacheBytes = 0;
+
+function pickEncoding(req) {
+    const accept = String(req.headers['accept-encoding'] || '');
+    if (/\bbr\b/.test(accept)) return 'br';
+    if (/\bgzip\b/.test(accept)) return 'gzip';
+    return null;
+}
+
+function compressFile(filePath, tag, enc) {
+    const cached = compressedCache.get(filePath + '|' + enc);
+    if (cached && cached.tag === tag) return Promise.resolve(cached.buf);
+    return new Promise((resolve, reject) => {
+        fs.readFile(filePath, (err, raw) => {
+            if (err) return reject(err);
+            const done = (e, buf) => {
+                if (e) return reject(e);
+                if (compressedCacheBytes + buf.length <= COMPRESSED_CACHE_MAX_BYTES) {
+                    const old = compressedCache.get(filePath + '|' + enc);
+                    if (old) compressedCacheBytes -= old.buf.length;
+                    compressedCache.set(filePath + '|' + enc, { tag, buf });
+                    compressedCacheBytes += buf.length;
+                }
+                resolve(buf);
+            };
+            if (enc === 'br') zlib.brotliCompress(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }, done);
+            else zlib.gzip(raw, { level: 6 }, done);
+        });
+    });
+}
 
 // Hosts rechazados ya avisados en el log (acotado: lo escribe el cliente).
 const warnedHosts = new Set();
@@ -241,7 +300,9 @@ const server = http.createServer((req, res) => {
 
             if (!isProxyTargetAllowed(targetUrl)) {
                 res.writeHead(403, { 'Content-Type': 'text/plain' });
-                res.end(`Proxy target not allowed: ${targetUrl.hostname}. Añádelo con CORS_PROXY_ALLOW.`);
+                res.end(isPrivateHostname(targetUrl.hostname)
+                    ? `Proxy target not allowed: ${targetUrl.hostname}. En un despliegue con dominio propio los destinos privados están cerrados; PROXY_ALLOW_PRIVATE=1 los habilita.`
+                    : `Proxy target not allowed: ${targetUrl.hostname}. Añádelo con CORS_PROXY_ALLOW.`);
                 return;
             }
             const headers = { ...req.headers };
@@ -366,7 +427,14 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    fs.stat(filePath, (err, stats) => {
+    // Solo lectura: nada de POST/PUT sobre ficheros estáticos.
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.writeHead(405, { 'Content-Type': 'text/plain', Allow: 'GET, HEAD' });
+        res.end('Method Not Allowed');
+        return;
+    }
+
+    fs.stat(filePath, async (err, stats) => {
         if (err || !stats.isFile()) {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
             res.end('Not Found');
@@ -375,17 +443,50 @@ const server = http.createServer((req, res) => {
 
         const ext = path.extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        const tag = `"${stats.size.toString(36)}-${Math.floor(stats.mtimeMs).toString(36)}"`;
 
-        const headers = { 'Content-Type': contentType, ...SECURITY_HEADERS };
+        const headers = { 'Content-Type': contentType, ...SECURITY_HEADERS, ETag: tag, 'Last-Modified': stats.mtime.toUTCString(), Vary: 'Accept-Encoding' };
         // El service worker no debe cachearse en el navegador o los despliegues
-        // nuevos tardarían en propagarse.
+        // nuevos tardarían en propagarse. Todo lo demás se revalida con ETag.
         if (filePath.endsWith('sw.js')) headers['Cache-Control'] = 'no-cache';
+        else if (relPath.startsWith('/lib/')) headers['Cache-Control'] = 'public, max-age=86400';
+        else headers['Cache-Control'] = 'no-cache';
 
+        if (req.headers['if-none-match'] === tag) {
+            res.writeHead(304, headers);
+            res.end();
+            return;
+        }
+
+        const enc = COMPRESSIBLE.has(ext) && stats.size > 1024 && stats.size <= COMPRESS_MAX_BYTES ? pickEncoding(req) : null;
+        const fail = (e) => {
+            console.warn(`[static] no se pudo leer ${relPath}: ${e.message}`);
+            if (res.headersSent) { res.destroy(); return; }
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Internal Server Error');
+        };
+
+        if (enc) {
+            try {
+                const buf = await compressFile(filePath, tag, enc);
+                res.writeHead(200, { ...headers, 'Content-Encoding': enc, 'Content-Length': buf.length });
+                res.end(req.method === 'HEAD' ? undefined : buf);
+            } catch (e) { fail(e); }
+            return;
+        }
+
+        headers['Content-Length'] = stats.size;
         res.writeHead(200, headers);
-        fs.createReadStream(filePath).pipe(res);
+        if (req.method === 'HEAD') { res.end(); return; }
+        fs.createReadStream(filePath).on('error', fail).pipe(res);
     });
 });
 
 server.listen(PORT, HOST, () => {
     console.log(`Server running at http://${HOST}:${PORT}`);
+    if (!PROXY_ALLOW_PRIVATE) {
+        console.log('[cors-proxy] destinos privados (localhost, LAN) cerrados: despliegue con dominio propio. PROXY_ALLOW_PRIVATE=1 para abrirlos.');
+    } else if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
+        console.warn(`[cors-proxy] AVISO: escuchas en ${HOST} y el proxy alcanza la red privada. Úsalo solo en una red de confianza.`);
+    }
 });

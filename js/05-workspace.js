@@ -1,3 +1,28 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    checkProviderStatus,
+} from './04-providers.js?v=2610.AA';
+import {
+    PROVIDERS, escapeHtml, loadLocalJson, notify, tr, trf,
+} from './01-core.js?v=2610.AA';
+import {
+    applySettingsToUI, dom, getCompactModelLabel, getOrderedProviderEntries,
+    isConversationPersistenceDisabled, markProviderUsed, persistOrderQueue,
+    saveCurrentProviderConfig, saveState, saveStateNow, showPersistenceAlert, state,
+    syncProviderToState, updateStatusMeta,
+} from './02-state.js?v=2610.AA';
+import {
+    renderMessages, sendMessage, supportsWebGPUImageAssist,
+} from './06-chat.js?v=2610.AA';
+import {
+    autoResizeTextarea, closeSidebar, formatDate, updateSendButton,
+} from './07-ui.js?v=2610.AA';
+import {
+    loadAnonRules, updateAnonButtonUI,
+} from './08-anon.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 05-workspace.js
    PDF, documentos de proyecto, adjuntos, proyectos, chats y listado lateral
@@ -57,7 +82,7 @@ async function handleProjectFiles(files) {
             });
         } else {
             if (file.size > MAX_PROJECT_DOC_BYTES) {
-                alert(`«${file.name}» ocupa ${formatBytes(file.size)} y supera el límite de ${formatBytes(MAX_PROJECT_DOC_BYTES)} por documento. Divídelo en partes más pequeñas.`);
+                notify(trf('dlg.doc.tooBig', '«{p0}» ocupa {p1} y supera el límite de {p2} por documento. Divídelo en partes más pequeñas.', { p0: file.name, p1: formatBytes(file.size), p2: formatBytes(MAX_PROJECT_DOC_BYTES) }), 'error');
                 continue;
             }
             // await en serie: `reader.onload` sin esperar lanzaba varias
@@ -72,7 +97,7 @@ async function handleProjectFiles(files) {
                     data
                 });
             } catch (e) {
-                alert(`No se pudo leer «${file.name}»: ${e?.message || e}`);
+                notify(trf('dlg.file.unreadable', 'No se pudo leer «{p0}»: {p1}', { p0: file.name, p1: e?.message || e }), 'error');
             }
         }
     }
@@ -190,7 +215,7 @@ async function handleFiles(files) {
 
         const isImage = file.type.startsWith('image/');
         if (isImage && !state.capabilities.includes('vision') && !supportsWebGPUImageAssist()) {
-            alert(`El modelo seleccionado (${state.settings.model}) no soporta imágenes.`);
+            notify(trf('dlg.model.noImages', 'El modelo seleccionado ({p0}) no soporta imágenes.', { p0: state.settings.model }), 'error');
             continue;
         }
 
@@ -208,7 +233,7 @@ async function handleFiles(files) {
         }
 
         if (file.size > MAX_TEXT_ATTACHMENT_BYTES) {
-            alert(`«${file.name}» ocupa ${formatBytes(file.size)} y supera el límite de ${formatBytes(MAX_TEXT_ATTACHMENT_BYTES)} por archivo adjunto.\n\nPara textos grandes, añádelo como documento del proyecto: así se reparte y se recorta al contexto del modelo en vez de enviarse entero en cada mensaje.`);
+            notify(trf('dlg.attach.tooBig', '«{p0}» ocupa {p1} y supera el límite de {p2} por archivo adjunto.\n\nPara textos grandes, añádelo como documento del proyecto: así se reparte y se recorta al contexto del modelo en vez de enviarse entero en cada mensaje.', { p0: file.name, p1: formatBytes(file.size), p2: formatBytes(MAX_TEXT_ATTACHMENT_BYTES) }), 'error');
             continue;
         }
 
@@ -223,7 +248,7 @@ async function handleFiles(files) {
             });
             renderAttachmentPreview();
         } catch (e) {
-            alert(`No se pudo leer «${file.name}»: ${e?.message || e}`);
+            notify(trf('dlg.file.unreadable', 'No se pudo leer «{p0}»: {p1}', { p0: file.name, p1: e?.message || e }), 'error');
         }
     }
     dom.fileUpload.value = '';
@@ -247,14 +272,14 @@ function renderAttachmentPreview() {
             return `
                 <div class="attachment-item image">
                     <img src="data:${a.type};base64,${a.data}" alt="${escapeHtml(a.name)}">
-                    <div class="attachment-remove" data-id="${a.id}">✕</div>
+                    <div class="attachment-remove" data-id="${escapeHtml(a.id)}">✕</div>
                 </div>
             `;
         } else {
             return `
                 <div class="attachment-item" title="${escapeHtml(a.name)}">
                     📝 <span class="attachment-name">${escapeHtml(a.name)}</span>
-                    <div class="attachment-remove" data-id="${a.id}">✕</div>
+                    <div class="attachment-remove" data-id="${escapeHtml(a.id)}">✕</div>
                 </div>
             `;
         }
@@ -279,7 +304,7 @@ function getDefaultWelcomeStarters() {
 
 function renderProjectSelect() {
     dom.projectSelect.innerHTML = state.projects.map(p =>
-        `<option value="${p.id}" ${p.id === state.activeProjectId ? 'selected' : ''}>${escapeHtml(`${p.emoji || ''} ${p.name}`.trim())}</option>`
+        `<option value="${escapeHtml(p.id)}" ${p.id === state.activeProjectId ? 'selected' : ''}>${escapeHtml(`${p.emoji || ''} ${p.name}`.trim())}</option>`
     ).join('');
 }
 
@@ -436,7 +461,7 @@ function renderAgentsGallery() {
         const active = p.id === state.activeProjectId;
         const docsCount = (p.documents || []).length;
         return `
-            <div class="agent-card ${active ? 'active' : ''}" data-agent-id="${p.id}" role="button" tabindex="0">
+            <div class="agent-card ${active ? 'active' : ''}" data-agent-id="${escapeHtml(p.id)}" role="button" tabindex="0">
                 <div class="agent-card-emoji">${escapeHtml(p.emoji || (p.id === 'general' ? '🏠' : '🤖'))}</div>
                 <div class="agent-card-body">
                     <div class="agent-card-name">${escapeHtml(p.name)}${active ? ' · <span style="color:var(--accent-secondary)">activo</span>' : ''}</div>
@@ -449,9 +474,9 @@ function renderAgentsGallery() {
                     </div>
                 </div>
                 <div class="agent-card-actions">
-                    <button class="agent-card-edit" data-edit-agent="${p.id}" title="Editar agente">✏️</button>
-                    ${p.id === 'general' ? '' : `<button class="agent-card-edit" data-duplicate-agent="${p.id}" title="${escapeHtml(tr('agent.duplicate.title', 'Duplicar este agente (sin sus chats)'))}">⧉</button>`}
-                    <button class="agent-card-edit" data-export-agent="${p.id}" title="Exportar agente a fichero">📤</button>
+                    <button class="agent-card-edit" data-edit-agent="${escapeHtml(p.id)}" title="Editar agente">✏️</button>
+                    ${p.id === 'general' ? '' : `<button class="agent-card-edit" data-duplicate-agent="${escapeHtml(p.id)}" title="${escapeHtml(tr('agent.duplicate.title', 'Duplicar este agente (sin sus chats)'))}">⧉</button>`}
+                    <button class="agent-card-edit" data-export-agent="${escapeHtml(p.id)}" title="Exportar agente a fichero">📤</button>
                 </div>
             </div>
         `;
@@ -561,7 +586,7 @@ function openProjectEditor(projectId) {
 
     dom.projectProvider.innerHTML = '<option value="">— Global (ajustes generales) —</option>' +
         getOrderedProviderEntries().map(([id, def]) =>
-            `<option value="${id}" ${proj.agentProvider === id ? 'selected' : ''}>${Array.isArray(state.settings.favoriteProviders) && state.settings.favoriteProviders.includes(id) ? '★ ' : ''}${def.icon} ${def.name}</option>`
+            `<option value="${escapeHtml(id)}" ${proj.agentProvider === id ? 'selected' : ''}>${Array.isArray(state.settings.favoriteProviders) && state.settings.favoriteProviders.includes(id) ? '★ ' : ''}${def.icon} ${def.name}</option>`
         ).join('');
 
     renderStartersEditor(proj);
@@ -712,7 +737,7 @@ function installAgentDefinition(raw, { activate = false } = {}) {
 
 function deleteProject(id) {
     if (id === 'general') {
-        alert("No puedes eliminar el Workspace General.");
+        notify(trf('dlg.project.noDeleteGeneral', 'No puedes eliminar el Workspace General.'), 'error');
         return;
     }
     state.projects = state.projects.filter(p => p.id !== id);
@@ -815,24 +840,24 @@ function showChat() {
 function buildChatItemHtml(chat) {
     const isStarred = !!chat.starred;
     return `
-        <div class="chat-item ${chat.id === state.activeChatId ? 'active' : ''} ${isStarred ? 'starred' : ''}" data-id="${chat.id}">
+        <div class="chat-item ${chat.id === state.activeChatId ? 'active' : ''} ${isStarred ? 'starred' : ''}" data-id="${escapeHtml(chat.id)}">
             <div class="chat-item-text">
                 <div class="chat-item-title">${escapeHtml(chat.title)}</div>
                 <div class="chat-item-date">${formatDate(chat.updatedAt)}</div>
             </div>
             <div class="chat-item-actions">
-                <button class="btn-icon star-chat-btn ${isStarred ? 'star-active' : ''}" data-id="${chat.id}" title="${escapeHtml(isStarred ? tr('chat.unfavorite', 'Quitar de favoritos') : tr('chat.favorite', 'Añadir a favoritos'))}">
+                <button class="btn-icon star-chat-btn ${isStarred ? 'star-active' : ''}" data-id="${escapeHtml(chat.id)}" title="${escapeHtml(isStarred ? tr('chat.unfavorite', 'Quitar de favoritos') : tr('chat.favorite', 'Añadir a favoritos'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? 'var(--star-color)' : 'none'}" stroke="${isStarred ? 'var(--star-color)' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                     </svg>
                 </button>
-                <button class="btn-icon export-chat-btn" data-id="${chat.id}" title="${escapeHtml(tr('chat.export', 'Exportar'))}">
+                <button class="btn-icon export-chat-btn" data-id="${escapeHtml(chat.id)}" title="${escapeHtml(tr('chat.export', 'Exportar'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 </button>
-                <button class="btn-icon move-chat-btn" data-id="${chat.id}" title="${escapeHtml(tr('chat.move', 'Mover a otro Proyecto'))}">
+                <button class="btn-icon move-chat-btn" data-id="${escapeHtml(chat.id)}" title="${escapeHtml(tr('chat.move', 'Mover a otro Proyecto'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 </button>
-                <button class="btn-icon delete-chat-btn" data-id="${chat.id}" title="${escapeHtml(tr('chat.delete', 'Eliminar'))}">
+                <button class="btn-icon delete-chat-btn" data-id="${escapeHtml(chat.id)}" title="${escapeHtml(tr('chat.delete', 'Eliminar'))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     </svg>
@@ -1004,8 +1029,8 @@ function renderOrderQueue() {
         <div class="order-item">
             <span class="order-item-idx">${i + 1}</span>
             <span class="order-item-text" title="${escapeHtml(o.text)}">${escapeHtml(o.text)}</span>
-            <button class="order-item-run" data-order-run="${o.id}" title="Ejecutar solo esta orden">▶</button>
-            <button class="order-item-del" data-order-del="${o.id}" title="Quitar de la cola">✕</button>
+            <button class="order-item-run" data-order-run="${escapeHtml(o.id)}" title="Ejecutar solo esta orden">▶</button>
+            <button class="order-item-del" data-order-del="${escapeHtml(o.id)}" title="Quitar de la cola">✕</button>
         </div>
     `).join('');
     const runBtn = document.getElementById('orderQueueRun');
@@ -1059,3 +1084,16 @@ async function runOrderQueue() {
         renderOrderQueue();
     }
 }
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    handleProjectFiles, handleFiles, removeAttachment, renderAttachmentPreview,
+    renderProjectSelect, applyAgentEngine, switchProject, renderWelcomeStarters,
+    renderAgentsGallery, renderAgentCatalog, findInstalledCatalogAgent, duplicateProject,
+    getActiveProject, getEditingProject, openProjectEditor, createProject, exportAgentToFile,
+    installAgentDefinition, deleteProject, createChat, createChatFromUI, deleteChat,
+    switchChat, getActiveChat, generateTitle, showWelcome, showChat, renderChatList,
+    tryQueueOrder, renderOrderQueue, removeOrder, clearOrderQueue, runSingleOrder,
+    runOrderQueue,
+};
+/* <<< exports <<< */

@@ -1,3 +1,16 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    state,
+} from './02-state.js?v=2610.AA';
+import {
+    getWebGPUCustomModels,
+} from './04-providers.js?v=2610.AA';
+import {
+    t,
+} from './09-i18n.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 01-core.js
    Interceptor CORS, utilidades, saneado HTML, registro de proveedores y catálogo WebGPU
@@ -450,6 +463,90 @@ function checkApiKeyFormat(providerId, key, url) {
 // define algo aquí; se comprueba en cada llamada, no al cargar.
 function tr(key, fallback = '') {
     return typeof t === 'function' ? t(key, fallback) : fallback;
+}
+
+/** trf — tr() con sustitución de {marcadores}: trf('k', 'Hola {p0}', { p0: nombre }). */
+function trf(key, fallback = '', vars = null) {
+    let text = tr(key, fallback);
+    if (vars) for (const [name, value] of Object.entries(vars)) text = text.split('{' + name + '}').join(String(value));
+    return text;
+}
+
+// ─── Avisos no bloqueantes ───────────────────
+// alert() congela la pestaña (también una generación en curso), no se puede
+// traducir ni estilar y los lectores de pantalla lo anuncian mal. Un aviso
+// ("toast") sale en una región aria-live, se cierra solo y no interrumpe.
+// Las confirmaciones de acciones destructivas siguen siendo confirm().
+const recentNotices = [];
+function notify(message, kind = 'info') {
+    recentNotices.push({ message: String(message), kind, at: Date.now() });
+    if (recentNotices.length > 20) recentNotices.shift();
+    try {
+        let region = document.getElementById('toastRegion');
+        if (!region) {
+            region = document.createElement('div');
+            region.id = 'toastRegion';
+            region.className = 'toast-region';
+            region.setAttribute('aria-live', 'polite');
+            document.body.appendChild(region);
+        }
+        const el = document.createElement('div');
+        el.className = 'toast toast-' + kind;
+        el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+        const text = document.createElement('span');
+        text.className = 'toast-text';
+        text.textContent = String(message);
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'toast-close';
+        close.setAttribute('aria-label', tr('toast.close', 'Cerrar aviso'));
+        close.textContent = '✕';
+        close.addEventListener('click', () => el.remove());
+        el.append(text, close);
+        region.appendChild(el);
+        setTimeout(() => el.remove(), kind === 'error' ? 12000 : 6000);
+    } catch (_) {
+        try { alert(message); } catch (__) { /* sin interfaz: queda en recentNotices */ }
+    }
+}
+
+/**
+ * announce — anuncia algo a lectores de pantalla sin tocar lo que se ve.
+ * Durante una respuesta en streaming el contenido cambia muchas veces por
+ * segundo y anunciarlo todo sería inutilizable; se anuncia solo el inicio y el
+ * final del turno.
+ */
+function announce(message) {
+    try {
+        const region = document.getElementById('srStatus');
+        if (!region) return;
+        region.textContent = '';
+        // Vaciar y reescribir en el siguiente ciclo: así se anuncia aunque el texto sea el mismo.
+        setTimeout(() => { region.textContent = String(message); }, 30);
+    } catch (_) { /* sin DOM */ }
+}
+
+// ─── Errores no controlados ──────────────────
+// Un fallo inesperado en un manejador de evento o una promesa sin catch dejaba la
+// consola como único rastro: la interfaz parecía "muerta" sin explicación.
+// Se registra siempre y se avisa como máximo una vez cada 10 s, ignorando el
+// ruido que no es de la app (extensiones, cancelaciones del usuario).
+let _lastCrashNotice = 0;
+function reportUnhandled(reason) {
+    const msg = String(reason?.message || reason || '');
+    if (reason?.name === 'AbortError' || /ResizeObserver loop|Script error\.?$/i.test(msg)) return;
+    console.error('[wIA] Error no controlado:', reason);
+    const now = Date.now();
+    if (now - _lastCrashNotice < 10000) return;
+    _lastCrashNotice = now;
+    notify(tr('error.unhandled', 'Algo ha fallado de forma inesperada. Si se repite, recarga la página: tus conversaciones están guardadas.'), 'error');
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('error', (e) => {
+        if (e.target && e.target !== window) return; // fallo al cargar un recurso, no una excepción
+        reportUnhandled(e.error || e.message);
+    });
+    window.addEventListener('unhandledrejection', (e) => reportUnhandled(e.reason));
 }
 
 // ─── Inicio de sesión OAuth de proveedores ──
@@ -1208,3 +1305,19 @@ function getVisionAssistDef() {
 const WEBGPU_TEXT_FALLBACK_MODEL = 'HuggingFaceTB/SmolLM2-1.7B-Instruct';
 const WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS = 180;
 const WEBGPU_PROGRESS_UI_MIN_DELTA_PCT = 2;
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    loadLocalJson, TRANSFORMERS_VERSION, _transformersSources, importTransformers, debounce,
+    CHARS_PER_TOKEN, CONTEXT_SAFETY_MARGIN_TOKENS, estimateTokenCount, escapeHtml,
+    sanitizeRenderedHtml, PROVIDERS, getProviderAccess, checkApiKeyFormat, tr, trf, notify,
+    announce, getProviderOAuth, createPkceVerifier, createPkceChallenge,
+    getDefaultProviderName, applyProviderNames, isCloneableProvider, getProviderBaseId,
+    isCustomProvider, buildCustomProviderId, registerCustomProviders, isMobileDevice,
+    MOBILE_SAFE_WEBGPU_MODEL, isHeavyForMobile, MODEL_FUNCTION_DEFS, MODEL_FILTER_ORDER,
+    UNCENSORED_NAME_HINTS, WEBGPU_MODELS, WEBGPU_BROKEN_MODELS, getWebGPUBrokenInfo,
+    loadWebGPUCatalogFile, webgpuDtypeCandidates, isRetryableWebGPULoadError,
+    describeWebGPULoadFailure, getVisionAssistDef, WEBGPU_TEXT_FALLBACK_MODEL,
+    WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS, WEBGPU_PROGRESS_UI_MIN_DELTA_PCT,
+};
+/* <<< exports <<< */

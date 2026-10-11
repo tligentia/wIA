@@ -14,9 +14,10 @@
 import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { resolve } from 'node:path';
+import { classicSource } from './lib/generated-blocks.mjs';
 
 const root = process.cwd();
-const read = (p) => readFileSync(resolve(root, p), 'utf8');
+const read = (p) => classicSource(readFileSync, resolve(root, p));
 
 // ── DOM mínimo con soporte de hijos, dataset y insertAdjacentHTML ──
 // Los nodos guardan de dónde salieron para poder contar reconstrucciones.

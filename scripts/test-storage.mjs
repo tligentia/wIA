@@ -14,9 +14,10 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { resolve } from 'node:path';
 import { webcrypto } from 'node:crypto';
+import { classicSource } from './lib/generated-blocks.mjs';
 
 const root = process.cwd();
-const read = (p) => readFileSync(resolve(root, p), 'utf8');
+const read = (p) => classicSource(readFileSync, resolve(root, p));
 
 const noopEl = () => ({
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
@@ -67,6 +68,8 @@ runInContext(`
     idbStore.get = async (k) => __store.get(k);
     idbStore.set = async (k, v) => { __store.set(k, v); return true; };
     idbStore.del = async (k) => { __store.delete(k); return true; };
+    idbStore.keys = async () => [...__store.keys()];
+    idbStore.batch = async (ops) => { for (const [op, k, v] of ops) { if (op === 'set') __store.set(k, v); else __store.delete(k); } return true; };
     applySettingsToUI = () => {};
     renderAttachmentPreview = () => {}; renderProjectSelect = () => {};
     renderChatList = () => {}; showWelcome = () => {}; checkProviderStatus = () => Promise.resolve();
@@ -113,7 +116,7 @@ const SECRETO = 'Reunión con Marta sobre el expediente 44/2026';
     `);
     await run('persistConversationsToIdb({ notifyOnError: false })');
 
-    const stored = run('__store.get("chats")');
+    const stored = run('__store.get("chat:c9")');
     check('lo almacenado va cifrado', stored?.__wiaEnc === 'v1', String(stored?.__wiaEnc));
     const raw = JSON.stringify(Array.from(Buffer.from(stored.data)));
     check('el contenido del chat no es legible en IndexedDB',
@@ -122,12 +125,12 @@ const SECRETO = 'Reunión con Marta sobre el expediente 44/2026';
     // Y se recupera intacto
     sandbox.__stored = stored;
     const back = await run('secretVault.decryptRecord(__stored)');
-    check('el chat se recupera íntegro', back.value?.[0]?.messages?.[0]?.content === SECRETO);
+    check('el chat se recupera íntegro', back.value?.messages?.[0]?.content === SECRETO);
 }
 
 // ── 4. Clave perdida: se detecta, no se confunde con "sin datos" ─────
 {
-    const stored = run('__store.get("chats")');
+    const stored = run('__store.get("chat:c9")');
     sandbox.__otherKeyRecord = stored;
     // Se fuerza una clave nueva, como si el navegador hubiera borrado la anterior.
     run('secretVault._keyPromise = null; __store.delete("wia-secret-key");');

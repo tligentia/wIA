@@ -1,3 +1,22 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    autoResizeTextarea, openSettings, updateSendButton,
+} from './07-ui.js?v=2610.AA';
+import {
+    debounce, escapeHtml, loadLocalJson, tr,
+} from './01-core.js?v=2610.AA';
+import {
+    dom, saveState, secretVault, state,
+} from './02-state.js?v=2610.AA';
+import {
+    getActiveChat,
+} from './05-workspace.js?v=2610.AA';
+import {
+    renderMessages,
+} from './06-chat.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 08-anon.js
    Anonimización DLP local (motor AnonimAE embebido en lib/)
@@ -87,17 +106,55 @@ async function ensureAnonReady(chat) {
  * no está listo: quien llama decide, pero nunca recibe el texto sin tratar
  * creyendo que está protegido.
  */
+// Construir el motor compila todas las expresiones regulares: se reutiliza
+// mientras no cambien las reglas ni los tipos desactivados.
+let _anonEngine = null;
+let _anonEngineKey = '';
+let _anonEngineRules = null;
+function getAnonEngine() {
+    const key = (state.settings.anonDisabledTypes || []).slice().sort().join('|');
+    if (!_anonEngine || _anonEngineKey !== key || _anonEngineRules !== _anonRules) {
+        _anonEngine = new LocalDetectionEngine(filterRulesByEnabledTypes(_anonRules));
+        _anonEngineRules = _anonRules;
+        _anonEngineKey = key;
+    }
+    return _anonEngine;
+}
+
 function anonymizeTextSync(text, chat) {
     if (!text) return { text: text || '', count: 0 };
     const st = chat ? anonChatState[chat.id] : null;
     if (!_anonRules || !st || typeof LocalDetectionEngine === 'undefined') {
         throw new Error('anonimizador no preparado');
     }
-    const engine = new LocalDetectionEngine(filterRulesByEnabledTypes(_anonRules));
+    const engine = getAnonEngine();
     const entities = engine.detect(text);
     if (!entities.length) return { text, count: 0 };
     const res = LocalPlaceholderEngine.process(text, entities, st);
     return { text: res.anonymizedText, count: entities.length };
+}
+
+/**
+ * anonymizeHistoryText — anonimiza un mensaje YA guardado del historial antes de
+ * reenviarlo. Con 🕶️ activo, lo escrito antes de activarlo (o pegado por otra
+ * vía, o devuelto por el modelo con datos reales) saldría en claro en cada
+ * petición. Es idempotente —los marcadores no se vuelven a detectar— y se
+ * memoriza por texto: el mismo mensaje da el mismo resultado mientras no cambien
+ * los tipos activos, y así un historial largo no se reanaliza en cada envío.
+ * Lanza si el anonimizador no está listo: jamás devuelve texto sin tratar.
+ */
+function anonymizeHistoryText(text, chat) {
+    if (!state.settings.anonymizeOutgoing || !text || typeof text !== 'string') return text;
+    const st = chat ? anonChatState[chat.id] : null;
+    if (!st) throw new Error('anonimizador no preparado');
+    const sig = (state.settings.anonDisabledTypes || []).slice().sort().join('|');
+    if (!st._histMemo || st._histSig !== sig) { st._histMemo = new Map(); st._histSig = sig; }
+    if (st._histMemo.has(text)) return st._histMemo.get(text);
+    const before = Object.keys(st.placeholderToValue).length;
+    const res = anonymizeTextSync(text, chat);
+    if (Object.keys(st.placeholderToValue).length !== before) persistAnonVault(chat, st);
+    st._histMemo.set(text, res.text);
+    return res.text;
 }
 
 /**
@@ -123,6 +180,26 @@ function restoreAnonText(text, chat) {
     const st = chat ? anonChatState[chat.id] : null;
     if (!st || !text) return text;
     return LocalPlaceholderEngine.restore(text, st.placeholderToValue);
+}
+
+/**
+ * listAnonItems — qué marcadores contiene `text` y qué valor real esconde cada
+ * uno, sin repetidos y en orden de aparición. Alimenta el desplegable del
+ * mensaje; es solo para pantalla. Devuelve [] si el mapa del chat aún no está
+ * descifrado (deanonymizeForDisplay lo hidrata y fuerza el repintado).
+ */
+function listAnonItems(text, chat) {
+    const st = chat ? anonChatState[chat.id] : null;
+    if (!st || !text || text.indexOf('[') === -1) return [];
+    const seen = new Set();
+    const items = [];
+    for (const m of text.matchAll(/\[([A-Za-zÁÉÍÓÚÑáéíóúñ]+)_(\d{3,})\]/g)) {
+        if (seen.has(m[0])) continue;
+        seen.add(m[0]);
+        const value = st.placeholderToValue[m[0]];
+        if (value !== undefined) items.push({ placeholder: m[0], category: m[1], value });
+    }
+    return items;
 }
 
 /**
@@ -480,3 +557,11 @@ function bindAnonTool() {
     updateAnonButtonUI();
     setTimeout(updateAnonButtonUI, 1200);
 })();
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    loadAnonRules, anonChatState, persistAnonVault, ensureAnonReady, anonymizeTextSync,
+    anonymizeHistoryText, anonymizeOutgoingText, restoreAnonText, listAnonItems,
+    deanonymizeForDisplay, updateAnonButtonUI, renderAnonTypesPanel,
+};
+/* <<< exports <<< */

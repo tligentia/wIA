@@ -1,3 +1,50 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    createChat, generateTitle, getActiveChat, getActiveProject, renderAttachmentPreview,
+    renderChatList, showChat,
+} from './05-workspace.js?v=2610.AA';
+import {
+    CHARS_PER_TOKEN, CONTEXT_SAFETY_MARGIN_TOKENS, MOBILE_SAFE_WEBGPU_MODEL, WEBGPU_MODELS,
+    WEBGPU_PROGRESS_UI_MIN_DELTA_PCT, WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS,
+    WEBGPU_TEXT_FALLBACK_MODEL, announce, escapeHtml, estimateTokenCount, getProviderBaseId,
+    getVisionAssistDef, importTransformers, isHeavyForMobile, isMobileDevice, notify,
+    sanitizeRenderedHtml, tr, trf,
+} from './01-core.js?v=2610.AA';
+import {
+    applySettingsToUI, dom, formatTokens, getActiveProviderConfig, getAuthHeaders,
+    getCompactModelLabel, getCompactProviderLabel, getProviderDef, saveCurrentProviderConfig,
+    saveState, state, syncProviderToState, updateInputDisclaimer,
+} from './02-state.js?v=2610.AA';
+import {
+    WEBGPU_LOOP_STOP_NOTE, analyzeImagesForWebGPU, applyWebGPUStreamedText, checkWebGPUSupport,
+    formatWoundResult, loadDinoMedicalVisionModel, loadFlorence2VisionModel,
+    loadVLMVisionModel, loadWebGPUImageAssistPipeline, loadWebGPUModel, loadWoundClassifier,
+    maybeStopRepetitionLoop, runDinoMedicalEmbedding, runFlorence2Analysis, runVLMAnalysis,
+    runWebGPUGeneration, runWoundClassify, splitWebGPUThinking, updateGenerationStatus,
+    webgpuState, webgpuWorker,
+} from './03-webgpu.js?v=2610.AA';
+import {
+    FAILOVER_MAX_HOPS, checkProviderStatus, classifyEngineFailure, describeChatFailure,
+    getEngineCooldown, getFailoverCandidates, getWebGPUCustomModels, markEngineFailure,
+    markEngineSuccess, parseRetryAfter, providerHttpError, recordWebGPUModelReport,
+    withEngineOverride,
+} from './04-providers.js?v=2610.AA';
+import {
+    autoResizeTextarea, autoTitleChat, scrollToBottom, updateSendButton,
+} from './07-ui.js?v=2610.AA';
+import {
+    anonChatState, anonymizeHistoryText, anonymizeOutgoingText, anonymizeTextSync,
+    deanonymizeForDisplay, ensureAnonReady, listAnonItems, persistAnonVault, restoreAnonText,
+} from './08-anon.js?v=2610.AA';
+import {
+    t,
+} from './09-i18n.js?v=2610.AA';
+import {
+    formatRagContext, prepareRagContext,
+} from './11-rag.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 06-chat.js
    Render de mensajes, streaming multi-protocolo y builders por proveedor
@@ -83,6 +130,8 @@ function messageSignature(msg, idx) {
         (msg.images || []).length,
         (msg.attachedDocs || []),
         msg.provider || '', msg.model || '',
+        msg.routing ? [msg.routing.via, msg.routing.attempts] : 0,
+        msg.failover?.hops ? msg.failover.hops.map(h => `${h.provider}:${h.kind}`).join(',') : 0,
     ]);
     // Se añade la longitud: dos contenidos distintos con el mismo hash de 32
     // bits tendrían que coincidir además en tamaño para pasar desapercibidos.
@@ -253,7 +302,21 @@ function renderMessage(msg, idx) {
                 ? t(msg.anonCount === 1 ? 'anon.badge.one' : 'anon.badge.many')
                 : `dato${msg.anonCount === 1 ? '' : 's'} sensible${msg.anonCount === 1 ? '' : 's'} protegido${msg.anonCount === 1 ? '' : 's'}`;
             const _anonTitle = (typeof t === 'function') ? t('anon.badge.title') : '';
-            contentHtml += `<div class="anon-badge" title="${escapeHtml(_anonTitle)}">🕶️ ${msg.anonCount} ${escapeHtml(_anonLabel)}</div>`;
+            const _anonItems = (typeof listAnonItems === 'function') ? listAnonItems(msg.content, getActiveChat()) : [];
+            if (_anonItems.length) {
+                // Desplegable nativo: abre/cierra con clic o teclado sin JS propio.
+                const rows = _anonItems.map(it => `<li><code class="anon-ph">${escapeHtml(it.placeholder)}</code><span class="anon-arrow" aria-hidden="true">→</span><span class="anon-val">${escapeHtml(it.value)}</span></li>`).join('');
+                contentHtml += `
+                    <details class="anon-details">
+                        <summary class="anon-badge" title="${escapeHtml(_anonTitle)}">
+                            <span>🕶️ ${msg.anonCount} ${escapeHtml(_anonLabel)}</span>
+                            <svg class="anon-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </summary>
+                        <ul class="anon-list">${rows}</ul>
+                    </details>`;
+            } else {
+                contentHtml += `<div class="anon-badge" title="${escapeHtml(_anonTitle)}">🕶️ ${msg.anonCount} ${escapeHtml(_anonLabel)}</div>`;
+            }
         }
         contentHtml += isUser ? `<p style="white-space: pre-wrap;">${escapeHtml(displayContent)}</p>` : renderMarkdown(displayContent);
     }
@@ -265,6 +328,21 @@ function renderMessage(msg, idx) {
             tps = (msg.metrics.eval_count / (msg.metrics.eval_duration / 1e9)).toFixed(2);
         }
         metricsHtml = `<span class="metrics-btn" data-msg-action="metrics" data-idx="${idx}" role="button" tabindex="0" title="Geek Info">⏱️ ${tps} T/s</span>`;
+    }
+
+    // Qué motor contestó de verdad: la pasarela (X-Routed-Via) y/o el failover.
+    let routingHtml = '';
+    if (!isUser && msg.routing?.via) {
+        const detail = msg.routing.attempts > 0
+            ? trf('chat.routing.fellOver', 'La pasarela saltó {n} vez/veces antes de contestar: {trail}', { n: msg.routing.attempts, trail: msg.routing.trail || '' })
+            : tr('chat.routing.via', 'Proveedor que ha servido esta respuesta a través de la pasarela');
+        routingHtml += `<span class="routing-chip" title="${escapeHtml(detail)}">↪ ${escapeHtml(msg.routing.via)}</span>`;
+    }
+    if (!isUser && msg.failover?.hops?.length) {
+        const skipped = msg.failover.hops.map(h => h.kind === 'cooldown'
+            ? `${h.provider} (${tr('chat.failover.paused', 'en pausa')})`
+            : `${h.provider}${h.status ? ` (${h.status})` : ` (${h.kind})`}`).join(' → ');
+        routingHtml += `<span class="routing-chip failover" title="${escapeHtml(tr('chat.failover.badgeTitle', 'Failover automático: se saltaron estos motores antes de contestar'))}: ${escapeHtml(skipped)}">🔁 ${escapeHtml(trf('chat.failover.badge', 'Failover desde {name}', { name: msg.failover.hops[0].provider }))}</span>`;
     }
 
     // Message action buttons
@@ -291,7 +369,7 @@ function renderMessage(msg, idx) {
             <div class="message-inner">
                 <div class="message-avatar">${avatarContent}</div>
                 <div class="message-body">
-                    <div class="message-sender">${metricsHtml}</div>
+                    <div class="message-sender">${routingHtml}${metricsHtml}</div>
                     <div class="message-content">
                         ${contentHtml}
                         ${msg.isProposal ? `
@@ -359,6 +437,22 @@ function showMetricsModal(idx) {
         </li>`;
     }
 
+    // Enrutado: motor real y saltos (pasarela y/o failover de wIA)
+    if (msg.routing?.via || msg.failover?.hops?.length) {
+        html += `<div style="font-size: 0.7rem; text-transform: uppercase; color: var(--accent-secondary); font-weight: 800; letter-spacing: 1px; margin-bottom: 6px;">${escapeHtml(tr('chat.routing.title', 'Enrutado'))}</div>`;
+        const row = (k, v) => `<li style="display: flex; justify-content: space-between; gap: 12px; font-size: 0.8rem; margin-bottom: 2px;">
+                <span style="color: var(--text-tertiary);">${escapeHtml(k)}:</span>
+                <span style="color: var(--text-primary); font-family: monospace; text-align: right; word-break: break-all;">${escapeHtml(String(v))}</span>
+            </li>`;
+        if (msg.routing?.via) html += row('x-routed-via', msg.routing.via);
+        if (msg.routing?.attempts) html += row('x-fallback-attempts', msg.routing.attempts);
+        if (msg.routing?.trail) html += row('x-fallback-trail', msg.routing.trail);
+        (msg.failover?.hops || []).forEach((h, n) => {
+            html += row(`${tr('chat.failover.hop', 'salto')} ${n + 1}`, `${h.provider}${h.model ? ' · ' + h.model : ''} → ${h.kind}${h.status ? ' ' + h.status : ''}`);
+        });
+        html += `<div style="margin-bottom: 12px;"></div>`;
+    }
+
     // 3. Telemetría de Red
     if (msg.metrics && Object.keys(msg.metrics).length > 0) {
         html += `<div style="font-size: 0.7rem; text-transform: uppercase; color: var(--accent-secondary); font-weight: 800; letter-spacing: 1px; margin-bottom: 6px;">Telemetría de Red</div>`;
@@ -395,6 +489,114 @@ function showMetricsModal(idx) {
 }
 
 window.showMetricsModal = showMetricsModal;
+
+// ─── Enrutado de la pasarela y failover automático ────
+/**
+ * captureGatewayRouting — una pasarela (FreeLLMAPI) contesta qué proveedor ha
+ * servido la petición en «X-Routed-Via» y, si tuvo que saltar, en
+ * «X-Fallback-Attempts/Trail». Sin esto el mensaje solo decía «auto».
+ *
+ * Las cabeceras personalizadas solo son legibles si la petición pasa por el
+ * proxy local (mismo origen) o la pasarela las expone por CORS; si no, no hay
+ * nada que leer y el mensaje queda como estaba. Es texto de un tercero: se
+ * acota y se escapa al pintarlo.
+ */
+function captureGatewayRouting(response, assistantMsg) {
+    const get = (name) => {
+        try { return String(response.headers?.get?.(name) || '').trim().slice(0, 240); } catch (_) { return ''; }
+    };
+    const via = get('x-routed-via');
+    if (!via) return;
+    const attempts = parseInt(get('x-fallback-attempts'), 10);
+    assistantMsg.routing = { via, attempts: Number.isFinite(attempts) ? attempts : 0, trail: get('x-fallback-trail') };
+}
+
+// Un envío contra un solo motor. Va aparte para poder repetirlo con otro.
+async function sendToEngine(chat, assistantMsg, msgIdx, autoSendBody) {
+    const provType = getProviderDef(state.settings.provider).type;
+    const headers = getAuthHeaders();
+    // Solo usar autoSendBody si es un array de mensajes (para el optimizador de prompts u otros)
+    // Si es un simple flag 'RETRY_LAST', reconstruir desde el historial.
+    const messages = (autoSendBody && Array.isArray(autoSendBody)) ? autoSendBody : buildApiMessages(chat);
+    const startTime = Date.now();
+    let pendingToolCall = null;
+
+    // ── Petición según el protocolo del motor ──
+    if (provType === 'ollama') pendingToolCall = await streamOllama(chat, assistantMsg, msgIdx, headers, messages);
+    else if (provType === 'openai') pendingToolCall = await streamOpenAI(chat, assistantMsg, msgIdx, headers, messages, autoSendBody, startTime);
+    else if (provType === 'gemini') await streamGemini(chat, assistantMsg, msgIdx, headers, startTime);
+    else if (provType === 'anthropic') await streamAnthropic(chat, assistantMsg, msgIdx, headers, messages, startTime);
+    return pendingToolCall;
+}
+
+/**
+ * sendWithFailover — envía con el motor elegido y, si el usuario lo ha
+ * activado, prueba con otros del mismo tipo (local/cloud) cuando este falla por
+ * cupo, caída o credenciales ANTES de emitir texto. Ver getFailoverCandidates
+ * en 04-providers.js para lo que nunca hace.
+ *
+ * Deja en el mensaje `failover` (qué motores se saltaron y por qué) y cambia
+ * `provider`/`model` al que contestó de verdad.
+ */
+async function sendWithFailover(chat, assistantMsg, msgIdx, autoSendBody) {
+    const primary = { provider: state.settings.provider, model: state.settings.model };
+    // Un cuerpo ya construido (continuación de una herramienta, optimizador) está
+    // formateado para el protocolo de este motor: no se traslada a otro.
+    const enabled = state.settings.autoFailover === true && !Array.isArray(autoSendBody);
+    const tried = [primary.provider];
+    const hops = [];
+    let target = null;
+
+    // Si el motor elegido está en pausa por un fallo reciente, se ahorra el golpe.
+    if (enabled && getEngineCooldown(primary.provider, primary.model) > 0) {
+        const alt = getFailoverCandidates(primary.provider, { exclude: tried })[0];
+        if (alt) {
+            hops.push({ provider: primary.provider, model: primary.model, kind: 'cooldown', status: 0 });
+            tried.push(alt.provider);
+            target = alt;
+        }
+    }
+
+    for (;;) {
+        const current = target || primary;
+        if (target) {
+            assistantMsg.provider = target.provider;
+            assistantMsg.model = target.model;
+            setMessageLoadingState(assistantMsg, {
+                phase: 'initializing',
+                detail: trf('chat.failover.trying', 'Probando con {name}…', { name: getProviderDef(target.provider).name }),
+            });
+            updateStreamingMessage(msgIdx, assistantMsg);
+        }
+        try {
+            const result = target
+                ? await withEngineOverride(target.provider, target.model, () => sendToEngine(chat, assistantMsg, msgIdx, autoSendBody))
+                : await sendToEngine(chat, assistantMsg, msgIdx, autoSendBody);
+            markEngineSuccess(current.provider, current.model);
+            clearMessageLoadingState(assistantMsg);
+            if (hops.length) assistantMsg.failover = { hops };
+            return result;
+        } catch (e) {
+            if (e?.name === 'AbortError' || state.abortController?.signal?.aborted) throw e;
+            const failure = classifyEngineFailure(e);
+            markEngineFailure(current.provider, current.model, failure);
+            hops.push({ provider: current.provider, model: current.model, kind: failure.kind, status: failure.status });
+            // Con texto ya recibido no se reintenta: se mezclarían dos respuestas.
+            const started = !!(assistantMsg.content || assistantMsg.thinking);
+            const next = (enabled && failure.retryable && !started && hops.length <= FAILOVER_MAX_HOPS)
+                ? getFailoverCandidates(primary.provider, { exclude: tried })[0]
+                : null;
+            if (!next) {
+                clearMessageLoadingState(assistantMsg);
+                if (hops.length > 1 || target) assistantMsg.failover = { hops };
+                e.failoverHops = hops.length > 1 ? hops : [];
+                throw e;
+            }
+            tried.push(next.provider);
+            target = next;
+        }
+    }
+}
 
 // ─── Fallback rápido: registrar éxitos y ofrecer alternativas ────
 // Registra un motor+modelo que ha respondido con éxito (recientes primero,
@@ -1214,7 +1416,7 @@ async function improvePrompt() {
     // rama WebGPU. El botón ya se oculta con ese motor; si aun así llegara aquí,
     // más vale un aviso claro que un «Respuesta vacía del modelo».
     if (getProviderDef(state.settings.provider).type === 'webgpu') {
-        alert('«Mejorar prompt» todavía no está disponible con el motor WebGPU local. Cambia a otro motor para usarlo.');
+        notify(trf('dlg.improve.noWebgpu', '«Mejorar prompt» todavía no está disponible con el motor WebGPU local. Cambia a otro motor para usarlo.'), 'info');
         return;
     }
 
@@ -1366,8 +1568,760 @@ window.applyProposal = (idx) => {
 };
 
 // ─── Streaming Chat ─────────────────────────
+// ─── Un turno por protocolo ──────────────────
+// sendMessage prepara el turno (anonimización, adjuntos, RAG) y reparte el
+// trabajo: cada protocolo vive en su función, con su propio estado de streaming.
+// Las de Ollama y OpenAI devuelven la llamada a herramienta pendiente, si la hay.
+
+/** runWebGPUTurn — turno completo con un modelo local en el navegador (carga, visión, generación). */
+async function runWebGPUTurn(chat, assistantMsg, msgIdx) {
+    // Salvaguarda móvil: antes de cargar un modelo grande que podría agotar
+    // la memoria del teléfono, ofrece cambiar a un ligero. Una vez por sesión.
+    if (typeof isMobileDevice === 'function' && isMobileDevice()
+        && typeof isHeavyForMobile === 'function' && isHeavyForMobile(state.settings.model)
+        && !state._mobileHeavyAck) {
+        const heavyDef = WEBGPU_MODELS.find(m => m.id === state.settings.model);
+        const lightDef = WEBGPU_MODELS.find(m => m.id === MOBILE_SAFE_WEBGPU_MODEL);
+        const _tr = (k, fb) => (typeof t === 'function' ? t(k, fb) : fb);
+        const useLight = confirm(
+            _tr('mobile.heavy.warn', '⚠️ En el móvil, «{model}» ({size}) puede agotar la memoria y cerrar la pestaña.')
+                .replace('{model}', heavyDef?.label || state.settings.model)
+                .replace('{size}', heavyDef?.size || 'grande') + '\n\n' +
+            _tr('mobile.heavy.ask', '¿Usar en su lugar un modelo ligero recomendado ({light})?')
+                .replace('{light}', lightDef?.label || 'Qwen 2.5 0.5B') + '\n\n' +
+            _tr('mobile.heavy.hint', 'Aceptar = usar el ligero · Cancelar = continuar con el grande.')
+        );
+        if (useLight) {
+            state.settings.model = MOBILE_SAFE_WEBGPU_MODEL;
+            getActiveProviderConfig().model = MOBILE_SAFE_WEBGPU_MODEL;
+            assistantMsg.model = MOBILE_SAFE_WEBGPU_MODEL;
+            saveState();
+            if (typeof applySettingsToUI === 'function') applySettingsToUI();
+        } else {
+            state._mobileHeavyAck = true; // no volver a preguntar esta sesión
+        }
+    }
+    // Fuera del try: el catch de más abajo también lo necesita (para anotar el fallo del modelo).
+    const modelId = state.settings.model;
+    try {
+        const support = await checkWebGPUSupport();
+        const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
+        const modelLabel = modelDef?.label || modelId;
+        const deviceLabel = support === 'webgpu' ? 'WebGPU' : 'WASM / CPU';
+        const useVisionTask = !!modelDef?.omnimodal;
+        const pipelineTask = useVisionTask ? 'omnimodal' : 'text-generation';
+        dom.statusDot.className = 'status-dot loading';
+        dom.statusText.textContent = (typeof t==='function'?t('status.initializing'):'Inicializando...');
+        setMessageLoadingState(assistantMsg, {
+            phase: 'preparing',
+            detail: `Arrancando ${modelLabel} en tu navegador.`,
+            modelLabel,
+            deviceLabel,
+            sourceUrl: buildWebGPURepoUrl(modelId),
+            note: useVisionTask
+                ? 'La primera vez puede tardar: además del modelo, el runtime multimodal debe preparar visión + texto. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
+                : 'La primera vez puede tardar porque el modelo se descarga y se guarda en caché. ⚠️ El modelo en memoria se descartará al salir o recargar la página.',
+            progress: 0,
+            progressLabel: 'Preparando',
+            file: ''
+        });
+        updateStreamingMessage(msgIdx, assistantMsg);
+
+        const pipe = await loadWebGPUModel(modelId, (pct, progress) => {
+            const stage = describeWebGPUProgressStage(progress);
+            const phase = webgpuState.cancelRequested ? 'cancelling' : stage.phase;
+            setMessageLoadingState(assistantMsg, {
+                phase,
+                detail: progress.retryingWithDtype
+                    ? `La variante principal ha fallado. Reintentando ${modelLabel} con cuantización ${progress.retryingWithDtype} para mejorar compatibilidad.`
+                    : `${stage.detail} (${modelLabel}).`,
+                modelLabel,
+                deviceLabel,
+                sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(modelId),
+                progress: pct,
+                progressLabel: stage.progressLabel,
+                file: progress.file || '',
+                note: webgpuState.cancelRequested
+                    ? 'La cancelación se aplicará en cuanto termine el paso actual del runtime.'
+                    : progress.retryingWithDtype
+                        ? `Motivo del reintento: ${progress.previousError || 'fallo opaco del runtime WebGPU'}.`
+                    : progress._compileOverdue
+                        ? '⚠️ Más de 2 min compilando. Es posible que este modelo sea demasiado grande o complejo para los recursos de tu dispositivo. Considera elegir un modelo más ligero si la carga no se completa.'
+                    : progress.status === 'compiling'
+                        ? 'Este proceso es intensivo y puede tardar entre 30s y 2 min en modelos grandes. La app no está colgada.'
+                    : useVisionTask
+                        ? 'Los modelos multimodales suelen descargar más componentes que uno solo de texto. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
+                        : 'Este paso solo suele ocurrir la primera vez o tras limpiar la caché. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
+            });
+            updateStreamingMessage(msgIdx, assistantMsg);
+        }, pipelineTask);
+
+        if (!pipe) throw new Error('No se pudo inicializar Pipeline WebGPU.');
+        if (state.abortController?.signal?.aborted || webgpuState.cancelRequested) {
+            throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
+        }
+
+        let rawImages = [];
+        let imageMetaList = [];
+        const imageAssistMessages = chat.messages.filter(msg =>
+            msg.role === 'user' &&
+            normalizeImageMeta(msg.imageMeta, msg.images || []).length > 0 &&
+            (!Array.isArray(msg.imageCaptions) || msg.imageCaptions.length === 0)
+        );
+
+        dom.statusDot.className = 'status-dot online';
+        dom.statusText.textContent = (typeof t==='function'?t('status.localInference'):'🧠 Inferencia local');
+        setMessageLoadingState(assistantMsg, {
+            phase: 'generating',
+            detail: useVisionTask
+                ? `${modelLabel} ya está listo. Preparando imágenes y generando la respuesta localmente.`
+                : `${modelLabel} ya está listo. Generando la respuesta localmente.`,
+            modelLabel,
+            deviceLabel,
+            sourceUrl: buildWebGPURepoUrl(modelId),
+            progress: null,
+            progressLabel: '',
+            file: '',
+            note: useVisionTask
+                ? 'La inferencia multimodal sucede en tu navegador; las imágenes no se envían a un servidor.'
+                : 'La inferencia sucede en tu navegador; no se envía el contenido a un servidor.'
+        });
+        updateStreamingMessage(msgIdx, assistantMsg);
+
+        // Build conversation context.
+        // Se usa el mismo constructor que el resto de motores: además de
+        // presupuestar el tamaño, incorpora la BASE DE CONOCIMIENTO del
+        // proyecto, que en la rama WebGPU no se estaba enviando nunca (los
+        // documentos adjuntos a un agente se ignoraban en silencio al usar
+        // un modelo local).
+        const systemContent = buildSystemContext(chat, getPromptTokenBudget()).text;
+
+        if (!useVisionTask && supportsWebGPUImageAssist() && imageAssistMessages.length > 0) {
+            setMessageLoadingState(assistantMsg, {
+                phase: 'initializing',
+                detail: `Analizando ${imageAssistMessages.reduce((sum, msg) => sum + normalizeImageMeta(msg.imageMeta, msg.images || []).length, 0)} imagen(es) con ${getVisionAssistDef().label}.`,
+                modelLabel,
+                deviceLabel,
+                sourceUrl: buildWebGPURepoUrl(getVisionAssistDef().id),
+                progress: 0,
+                progressLabel: 'Vision',
+                file: '',
+                note: 'La imagen se convierte en descripcion local antes de pasarla al modelo de chat.'
+            });
+            updateStreamingMessage(msgIdx, assistantMsg);
+
+            let processedCount = 0;
+            for (const msg of imageAssistMessages) {
+                const normalizedImages = normalizeImageMeta(msg.imageMeta, msg.images || []);
+                msg.imageCaptions = await analyzeImagesForWebGPU(normalizedImages, (pct, progress) => {
+                    setMessageLoadingState(assistantMsg, {
+                        phase: 'initializing',
+                        detail: `Analizando imagenes adjuntas localmente para enriquecer el prompt.`,
+                        modelLabel,
+                        deviceLabel,
+                        sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(getVisionAssistDef().id),
+                        progress: pct,
+                        progressLabel: 'Vision',
+                        file: progress.file || '',
+                        note: `Modelo auxiliar: ${getVisionAssistDef().id}`
+                    });
+                    updateStreamingMessage(msgIdx, assistantMsg);
+                }, msg.content || '');
+                processedCount += normalizedImages.length;
+            }
+            if (processedCount > 0) saveState();
+        }
+
+        const builtConversation = buildWebGPUConversation(chat, systemContent, useVisionTask);
+        let conversationHistory = builtConversation.conversationHistory;
+        imageMetaList = builtConversation.imageMetaList;
+
+        let generationOutcome = null;
+
+        if (useVisionTask) {
+            try {
+                if (imageMetaList.length > 0) {
+                    setMessageLoadingState(assistantMsg, {
+                        phase: 'initializing',
+                        detail: `Transformando ${imageMetaList.length} imagen${imageMetaList.length === 1 ? '' : 'es'} para ${modelLabel}.`,
+                        modelLabel,
+                        deviceLabel,
+                        sourceUrl: buildWebGPURepoUrl(modelId),
+                        progress: null,
+                        progressLabel: 'Imagenes',
+                        file: '',
+                        note: 'Intentando primero el flujo VLM nativo del modelo de vision.'
+                    });
+                    updateStreamingMessage(msgIdx, assistantMsg);
+                    rawImages = await getWebGPURawImages(imageMetaList, true);
+                }
+
+                generationOutcome = await runWebGPUGeneration(pipe, {
+                    text: conversationHistory,
+                    images: rawImages
+                }, assistantMsg, msgIdx);
+            } catch (visionError) {
+                const fallbackModelId = getWebGPUTextFallbackModelId();
+                const fallbackModelDef = WEBGPU_MODELS.find(m => m.id === fallbackModelId);
+                const fallbackModelLabel = fallbackModelDef?.label || fallbackModelId;
+
+                console.warn('[WebGPU] VLM path failed, falling back to local image assist:', visionError);
+                setMessageLoadingState(assistantMsg, {
+                    phase: 'initializing',
+                    detail: `El flujo VLM ha fallado. Recuperando la conversacion con analisis visual local y ${fallbackModelLabel}.`,
+                    modelLabel,
+                    deviceLabel,
+                    sourceUrl: buildWebGPURepoUrl(fallbackModelId),
+                    progress: 0,
+                    progressLabel: 'Fallback',
+                    file: '',
+                    note: 'Se mantiene el chat y la imagen se convertira en contexto textual automaticamente.'
+                });
+                updateStreamingMessage(msgIdx, assistantMsg);
+
+                let processedCount = 0;
+                for (const msg of imageAssistMessages) {
+                    const normalizedImages = normalizeImageMeta(msg.imageMeta, msg.images || []);
+                    msg.imageCaptions = await analyzeImagesForWebGPU(normalizedImages, (pct, progress) => {
+                        setMessageLoadingState(assistantMsg, {
+                            phase: 'initializing',
+                            detail: 'Analizando imagenes localmente para recuperar la conversacion.',
+                            modelLabel: fallbackModelLabel,
+                            deviceLabel,
+                            sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(getVisionAssistDef().id),
+                            progress: pct,
+                            progressLabel: 'Fallback',
+                            file: progress.file || '',
+                            note: `Modelo auxiliar: ${getVisionAssistDef().id}`
+                        });
+                        updateStreamingMessage(msgIdx, assistantMsg);
+                    });
+                    processedCount += normalizedImages.length;
+                }
+                if (processedCount > 0) saveState();
+
+                const fallbackPipe = await loadWebGPUModel(fallbackModelId, (pct, progress) => {
+                    const stage = describeWebGPUProgressStage(progress);
+                    const phase = stage.phase;
+                    setMessageLoadingState(assistantMsg, {
+                        phase,
+                        detail: `${stage.detail} (${fallbackModelLabel}).`,
+                        modelLabel: fallbackModelLabel,
+                        deviceLabel,
+                        sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(fallbackModelId),
+                        progress: pct,
+                        progressLabel: stage.progressLabel,
+                        file: progress.file || '',
+                        note: 'Fallback automatico tras fallo del modelo de vision.'
+                    });
+                    updateStreamingMessage(msgIdx, assistantMsg);
+                }, 'text-generation');
+
+                // Guarda: loadWebGPUModel devuelve null si hay otra carga en
+                // curso (guarda isLoading). Sin esto, runWebGPUGeneration(null)
+                // reventaría al leer .__omnimodal/.__worker sobre null.
+                if (!fallbackPipe) throw new Error('No se pudo inicializar el modelo de reserva WebGPU (otra carga en curso).');
+
+                conversationHistory = buildWebGPUConversation(chat, systemContent, false).conversationHistory;
+                setMessageLoadingState(assistantMsg, {
+                    phase: 'generating',
+                    detail: `${fallbackModelLabel} esta respondiendo con el analisis visual local como contexto.`,
+                    modelLabel: fallbackModelLabel,
+                    deviceLabel,
+                    sourceUrl: buildWebGPURepoUrl(fallbackModelId),
+                    progress: null,
+                    progressLabel: '',
+                    file: '',
+                    note: `Fallback automatico desde ${modelLabel}.`
+                });
+                updateStreamingMessage(msgIdx, assistantMsg);
+
+                generationOutcome = await runWebGPUGeneration(fallbackPipe, conversationHistory, assistantMsg, msgIdx);
+                assistantMsg.model = fallbackModelId;
+                assistantMsg.fallbackFrom = modelId;
+                assistantMsg.fallbackReason = visionError.message || String(visionError);
+            }
+        } else {
+            generationOutcome = await runWebGPUGeneration(pipe, conversationHistory, assistantMsg, msgIdx);
+        }
+
+        assistantMsg.content = generationOutcome?.text || '*(Sin respuesta generada)*';
+        if (generationOutcome?.thinking) {
+            assistantMsg.thinking = generationOutcome.thinking;
+        }
+        clearMessageLoadingState(assistantMsg);
+        if (generationOutcome?.metrics) {
+            assistantMsg.metrics = generationOutcome.metrics;
+        }
+
+        dom.statusText.textContent = '🧠 Modelo listo';
+        updateInputDisclaimer();
+
+    } catch (e) {
+        if (e.name === 'AbortError' || state.abortController?.signal?.aborted) {
+            setMessageLoadingState(assistantMsg, {
+                phase: 'cancelled',
+                detail: 'La carga o generación se ha detenido antes de completarse.',
+                modelLabel: assistantMsg.loading?.modelLabel,
+                deviceLabel: assistantMsg.loading?.deviceLabel,
+                sourceUrl: assistantMsg.loading?.sourceUrl,
+                progress: assistantMsg.loading?.progress ?? null,
+                progressLabel: assistantMsg.loading?.progressLabel || '',
+                file: '',
+                note: webgpuState.isLoading
+                    ? 'El navegador puede terminar la descarga actual en segundo plano antes de liberar el proceso.'
+                    : 'Puedes volver a intentarlo cuando quieras.'
+            });
+            if (!assistantMsg.content) assistantMsg.content = '*[Operación detenida por el usuario]*';
+        } else {
+            console.error('[WebGPU] inference error:', e);
+            const errorDetail = formatErrorDetail(e);
+            const errStr = errorDetail.toLowerCase();
+            // Queda anotado junto al modelo: la próxima vez la tarjeta dice
+            // que aquí falló y por qué (un corte de red no cuenta como fallo
+            // del modelo).
+            if (typeof recordWebGPUModelReport === 'function' && !/network|fetch|failed to load/i.test(errorDetail)) {
+                recordWebGPUModelReport(modelId, 'fail', errorDetail);
+            }
+            
+            let errorHtml = `⚠️ **Fallo en motor WebGPU**\nHubo un problema intentando instalar o ejecutar el modelo en tu navegador.\n\n`;
+            
+            if (errStr.includes('could not locate file') || errStr.includes('config.json') || errStr.includes('/resolve/main/{file}/') || errStr.includes('file not found')) {
+                errorHtml += `> **📦 Repositorio incompatible o incompleto**\n> El navegador ha localizado el repositorio, pero no ha encontrado los archivos esperados por Transformers.js/WebGPU para montar el modelo.\n>\n> 👉 **Solución:** Prueba otro modelo del catálogo marcado como verificado, o revisa que el repositorio manual sea una variante ONNX/Transformers.js compatible.`;
+            } else if (errStr.includes('image-to-text') || errStr.includes('rawimage') || errStr.includes('image processor') || errStr.includes('vit-gpt2-image-captioning')) {
+                errorHtml += `> **👁 Fallo en el asistente visual local**\n> La app ha intentado convertir tu imagen en una descripcion local antes de pasarla al modelo de chat, pero ese paso ha fallado.\n>\n> 👉 **Solución:** Reintenta con una imagen mas pequeña o menos compleja. Si persiste, usa un modelo solo texto sin imagen o un proveedor con vision nativa.`;
+            } else if (errStr.includes('image-text-to-text') || errStr.includes('qwen2-vl') || errStr.includes('phi-3.5-vision')) {
+                errorHtml += `> **👁 Limitación real del runtime multimodal**\n> Este modelo VLM aparece en el catálogo, pero el chat multimodal tipo Qwen2-VL / Phi-3.5-Vision todavía no encaja bien con el soporte actual de Transformers.js en navegador.\n>\n> 👉 **Solución:** Usa por ahora un modelo solo texto en WebGPU con el asistente visual local, o cambia a un proveedor cloud/local que sí soporte visión conversacional de forma nativa.`;
+            } else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('unauthorized') || errStr.includes('access')) {
+                errorHtml += `> **🔒 Acceso Denegado / Modelo no disponible**\n> Este modelo no ha sido encontrado o requiere una API Key de HuggingFace. Es probable que el ID del modelo haya cambiado en el repositorio central.\n>\n> 👉 **Solución:** Vuelve a los ajustes y selecciona otro modelo. Te recomendamos **SmolLM2** o la versión **Coder de Qwen 2.5** que están verificadas.`;
+            } else if (errStr.includes('out of memory') || errStr.includes('oom') || errStr.includes('allocate') || errStr.includes('allocation') || errStr.includes('insufficient memory') || errStr.includes('device lost')) {
+                errorHtml += `> **💥 Memoria Insuficiente (OOM)**\n> Tu navegador / tarjeta gráfica se ha quedado sin memoria intentando montar este cerebro en la VRAM local.\n>\n> 👉 **Solución:** Vuelve a los ajustes y elige un modelo más ligero (categoría ⚡ Ligeros). También puedes intentar cerrar pestañas pesadas o reiniciar el navegador.`;
+            } else if (isOpaqueWebGPUNumericError(errorDetail)) {
+                errorHtml += `> **🧩 Fallo opaco del runtime WebGPU/ONNX**\n> El motor local ha devuelto un código interno (\`${errorDetail}\`) en vez de un mensaje legible. Esto suele ocurrir al final de la carga cuando la variante descargada no llega a inicializarse bien en tu navegador o tu GPU.\n>\n> 👉 **Solución:** La app ya intenta una variante más ligera cuando puede. Si este fallo persiste, prueba de nuevo con \`Phi-4 Mini\` tras recargar o cambia a \`Qwen 2.5 Coder 1.5B\` / \`SmolLM2 1.7B\`, que son más tolerantes en WebGPU.`;
+            } else if (errStr.includes('wasm') || errStr.includes('unsupported') || errStr.includes('adapter')) {
+                errorHtml += `> **🚫 Soporte de Hardware**\n> Parece que el navegador no soporta aceleración por hardware o el fallback de WebAssembly (CPU) está fallando/agotando los recursos.\n>\n> 👉 **Solución:** Comprueba que usas una versión reciente de Chrome/Edge (v113+) y que tienes habilitada la *"Aceleración por hardware"* en sus ajustes.`;
+            } else if (errStr.includes('network') || errStr.includes('fetch')) {
+                errorHtml += `> **📶 Error de Red**\n> Hubo un corte de conexión mientras descargábamos los pesos (tensores) de HuggingFace.\n>\n> 👉 **Solución:** Comprueba tu internet y vuelve a darle a reintentar.`;
+            } else {
+                errorHtml += `> **Detalle técnico:** \`${errorDetail}\`\n>\n> 👉 **Solución:** Refresca la página, intenta limpiar la caché o usar un modelo más pequeño.`;
+            }
+            
+            setMessageLoadingState(assistantMsg, {
+                phase: 'error',
+                detail: 'La preparación del modelo se interrumpió por un error.',
+                modelLabel: assistantMsg.loading?.modelLabel,
+                deviceLabel: assistantMsg.loading?.deviceLabel,
+                sourceUrl: assistantMsg.loading?.sourceUrl || buildWebGPURepoUrl(modelId),
+                progress: assistantMsg.loading?.progress ?? null,
+                progressLabel: assistantMsg.loading?.progressLabel || '',
+                file: '',
+                note: 'Revisa el mensaje de error y cambia a un modelo más ligero si hace falta.'
+            });
+            assistantMsg.content = errorHtml;
+        }
+        updateStreamingMessage(msgIdx, assistantMsg);
+    } finally {
+        webgpuState.cancelRequested = false;
+        state.isStreaming = false;
+        state.abortController = null;
+        dom.stopBtn.classList.add('hidden');
+        dom.sendBtn.classList.remove('hidden');
+        noteGenerationOutcome(assistantMsg);
+        announce(tr('sr.done', 'Respuesta completada.'));
+        chat.updatedAt = Date.now();
+        saveState();
+        renderChatList();
+        renderMessages();
+    }
+}
+
+async function streamOllama(chat, assistantMsg, msgIdx, headers, messages) {
+    const reader_decoder = { reader: null, decoder: new TextDecoder() };
+    let buffer = '';
+    let isInThinking = false;
+    let thinkingText = '';
+    let responseText = '';
+    let pendingToolCall = null;
+
+        // Ollama native streaming
+        let reqBody = {
+            model: state.settings.model,
+            messages: messages,
+            stream: true,
+            options: {
+                temperature: parseFloat(state.settings.temperature),
+                top_p: parseFloat(state.settings.topP || 0.9),
+                top_k: parseInt(state.settings.topK || 40)
+            }
+        };
+        
+        if (dom.toolInternet.classList.contains('active') && state.capabilities.includes('tools') && (state._toolRounds || 0) < MAX_TOOL_ROUNDS) {
+            reqBody.tools = [buildWikipediaTool()];
+        }
+        
+        const response = await fetch(`${state.settings.ollamaUrl}/api/chat`, {
+            method: 'POST', headers, body: JSON.stringify(reqBody),
+            signal: state.abortController.signal,
+        });
+        if (!response.ok) throw await providerHttpError(response);
+        
+        reader_decoder.reader = response.body.getReader();
+        
+        while (true) {
+            const { done, value } = await reader_decoder.reader.read();
+            if (done) break;
+            buffer += reader_decoder.decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const json = JSON.parse(line);
+                    if (json.done && json.total_duration) {
+                        assistantMsg.metrics = {
+                            total_duration: json.total_duration,
+                            load_duration: json.load_duration,
+                            prompt_eval_count: json.prompt_eval_count,
+                            eval_count: json.eval_count,
+                            eval_duration: json.eval_duration
+                        };
+                    }
+                    if (json.message?.tool_calls) pendingToolCall = json.message.tool_calls;
+                    const token = json.message?.content || '';
+                    if (token) {
+                        processStreamToken(token, assistantMsg, msgIdx, { isInThinking, thinkingText, responseText });
+                        isInThinking = streamState.isInThinking;
+                        thinkingText = streamState.thinkingText;
+                        responseText = streamState.responseText;
+                    }
+                } catch(e) {}
+            }
+        }
+        
+
+    return pendingToolCall;
+}
+
+async function streamOpenAI(chat, assistantMsg, msgIdx, headers, messages, autoSendBody, startTime) {
+    const reader_decoder = { reader: null, decoder: new TextDecoder() };
+    let buffer = '';
+    let isInThinking = false;
+    let thinkingText = '';
+    let responseText = '';
+    let pendingToolCall = null;
+    let partialToolCallArgs = '';
+
+        // OpenAI-compatible streaming (LMStudio, Groq, OpenRouter, OpenAI)
+        // Map images for OpenAI vision format
+        if (!autoSendBody) {
+            messages = messages.map(m => {
+                if (m.images && m.images.length > 0) {
+                    const contentArr = [{ type: "text", text: m.content || "Imagen adjunta:" }];
+                    m.images.forEach(imgBase64 => {
+                        const mimeType = imgBase64.startsWith('/') ? 'image/jpeg' : (imgBase64.startsWith('iVB') ? 'image/png' : 'image/jpeg');
+                        contentArr.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${imgBase64}` } });
+                    });
+                    const newM = { ...m, content: contentArr };
+                    delete newM.images;
+                    return newM;
+                }
+                return m;
+            });
+        }
+        
+        // El dialecto de OpenAI exige que la llamada a herramienta lleve `id`,
+        // `type` y los argumentos como TEXTO JSON, y que su respuesta cite ese
+        // id. Sin esto la segunda vuelta (tras buscar en Internet) se rechaza
+        // con un 400 en OpenAI, Groq, OpenRouter…
+        messages = messages.map(m => {
+            if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+                return { ...m, tool_calls: m.tool_calls.map((tc, i) => ({
+                    id: tc.id || `call_${i}`,
+                    type: 'function',
+                    function: {
+                        name: tc.function?.name,
+                        arguments: typeof tc.function?.arguments === 'string'
+                            ? tc.function.arguments
+                            : JSON.stringify(tc.function?.arguments || {}),
+                    },
+                })) };
+            }
+            if (m.role === 'tool') return { ...m, tool_call_id: m.tool_call_id || 'call_0' };
+            return m;
+        });
+
+        let maxTok = parseInt(state.settings.maxTokens || 4096);
+        // Cap max_tokens for Groq (hard limit usually 8192 for output tokens)
+        if (getProviderBaseId(state.settings.provider) === 'groq' && maxTok > 8192) {
+            maxTok = 8192;
+        }
+
+        let reqBody = {
+            model: state.settings.model,
+            messages: messages,
+            stream: true,
+            temperature: parseFloat(state.settings.temperature),
+            top_p: parseFloat(state.settings.topP || 0.9),
+            max_tokens: maxTok
+        };
+        
+        // Add top_k only for providers that definitely support it (Ollama, Claude, Gemini)
+        // Removed groq as it rejects the property
+        if (['ollama', 'claude', 'gemini'].includes(state.settings.provider)) {
+            reqBody.top_k = parseInt(state.settings.topK || 40);
+        }
+        
+        // Only include stream_options if exactly OpenAI (many others fail or rate-limit on this)
+        if (getProviderBaseId(state.settings.provider) === 'openai') {
+            reqBody.stream_options = { include_usage: true };
+        }
+        
+        if (dom.toolInternet.classList.contains('active') && state.capabilities.includes('tools') && (state._toolRounds || 0) < MAX_TOOL_ROUNDS) {
+            reqBody.tools = [buildWikipediaTool()];
+        }
+        
+        const response = await fetch(`${state.settings.ollamaUrl}/chat/completions`, {
+            method: 'POST', headers, body: JSON.stringify(reqBody),
+            signal: state.abortController.signal,
+        });
+        
+        if (!response.ok) {
+            let errorDetail = response.statusText;
+            try {
+                const errorJson = await response.json();
+                // OpenRouter/Groq/OpenAI error nesting variants
+                errorDetail = errorJson.error?.message || errorJson.message || (errorJson.error && typeof errorJson.error === 'string' ? errorJson.error : errorDetail);
+            } catch(e) {}
+            const httpError = new Error(`${response.status}: ${errorDetail}`);
+            httpError.status = response.status;
+            httpError.retryAfterMs = parseRetryAfter(response.headers?.get?.('retry-after'));
+            throw httpError;
+        }
+        captureGatewayRouting(response, assistantMsg);
+        
+        reader_decoder.reader = response.body.getReader();
+        
+        while (true) {
+            const { done, value } = await reader_decoder.reader.read();
+            if (done) break;
+            buffer += reader_decoder.decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                const jsonStr = trimmed.substring(6);
+                if (jsonStr === '[DONE]') continue;
+                try {
+                    const json = JSON.parse(jsonStr);
+                    if (json.usage) {
+                        assistantMsg.metrics = {
+                            prompt_eval_count: json.usage.prompt_tokens,
+                            eval_count: json.usage.completion_tokens,
+                            total_tokens: json.usage.total_tokens,
+                            total_time_ms: Date.now() - startTime
+                        };
+                        if (assistantMsg.metrics.eval_count && assistantMsg.metrics.total_time_ms > 0) {
+                            assistantMsg.metrics.tps = (assistantMsg.metrics.eval_count / (assistantMsg.metrics.total_time_ms / 1000)).toFixed(2);
+                        }
+                    }
+                    const delta = json.choices?.[0]?.delta || {};
+                    const toolCallsData = delta.tool_calls;
+                    if (toolCallsData && toolCallsData.length > 0) {
+                        if (!pendingToolCall) {
+                            pendingToolCall = [{ id: toolCallsData[0].id, function: { name: toolCallsData[0].function.name, arguments: "" } }];
+                        }
+                        if (toolCallsData[0].function?.arguments) {
+                            partialToolCallArgs += toolCallsData[0].function.arguments;
+                        }
+                    }
+                    if (json.choices?.[0]?.finish_reason === 'tool_calls' && pendingToolCall) {
+                        pendingToolCall[0].function.arguments = partialToolCallArgs || '{}';
+                        pendingToolCall[0].function.arguments = JSON.parse(pendingToolCall[0].function.arguments);
+                    }
+                    const token = delta.content || '';
+                    if (token) {
+                        processStreamToken(token, assistantMsg, msgIdx, { isInThinking, thinkingText, responseText });
+                        isInThinking = streamState.isInThinking;
+                        thinkingText = streamState.thinkingText;
+                        responseText = streamState.responseText;
+                    }
+                } catch(e) {}
+            }
+        }
+        
+
+    return pendingToolCall;
+}
+
+async function streamGemini(chat, assistantMsg, msgIdx, headers, startTime) {
+    const reader_decoder = { reader: null, decoder: new TextDecoder() };
+    let buffer = '';
+    let thinkingText = '';
+    let responseText = '';
+
+        // Google Gemini streaming
+        const apiKey = state.settings.apiKey;
+        const geminiMessages = buildGeminiMessages(chat);
+        
+        let reqBody = {
+            contents: geminiMessages.contents,
+            generationConfig: {
+                temperature: parseFloat(state.settings.temperature),
+                topP: parseFloat(state.settings.topP || 0.9),
+                topK: parseInt(state.settings.topK || 40),
+                maxOutputTokens: parseInt(state.settings.maxTokens || 4096)
+            }
+        };
+        if (geminiMessages.systemInstruction) {
+            reqBody.system_instruction = geminiMessages.systemInstruction;
+        }
+        
+        const response = await fetch(
+            `${state.settings.ollamaUrl}/models/${state.settings.model}:streamGenerateContent?alt=sse`,
+            { method: 'POST', headers, body: JSON.stringify(reqBody), signal: state.abortController.signal }
+        );
+        if (!response.ok) throw await providerHttpError(response);
+        
+        reader_decoder.reader = response.body.getReader();
+        
+        while (true) {
+            const { done, value } = await reader_decoder.reader.read();
+            if (done) break;
+            buffer += reader_decoder.decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                const jsonStr = trimmed.substring(6);
+                try {
+                    const json = JSON.parse(jsonStr);
+                    // Gemini thinking via thought field
+                    const parts = json.candidates?.[0]?.content?.parts || [];
+                    for (const part of parts) {
+                        if (part.thought) {
+                            thinkingText += part.text || '';
+                            assistantMsg.thinking = thinkingText;
+                            updateStreamingMessage(msgIdx, assistantMsg);
+                        } else if (part.text) {
+                            responseText += part.text;
+                            assistantMsg.content = responseText;
+                            updateStreamingMessage(msgIdx, assistantMsg);
+                        }
+                    }
+                    // Usage metrics
+                    if (json.usageMetadata) {
+                        assistantMsg.metrics = {
+                            prompt_eval_count: json.usageMetadata.promptTokenCount,
+                            eval_count: json.usageMetadata.candidatesTokenCount,
+                            total_tokens: json.usageMetadata.totalTokenCount,
+                            total_time_ms: Date.now() - startTime
+                        };
+                        if (assistantMsg.metrics.eval_count && assistantMsg.metrics.total_time_ms > 0) {
+                            assistantMsg.metrics.tps = (assistantMsg.metrics.eval_count / (assistantMsg.metrics.total_time_ms / 1000)).toFixed(2);
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+        
+}
+
+async function streamAnthropic(chat, assistantMsg, msgIdx, headers, messages, startTime) {
+    const reader_decoder = { reader: null, decoder: new TextDecoder() };
+    let buffer = '';
+    let thinkingText = '';
+    let responseText = '';
+
+        // Anthropic Messages API streaming
+        const anthropicData = buildAnthropicMessages(chat);
+        
+        // Sin top_k: Anthropic lo reserva para casos avanzados y desaconseja
+        // combinarlo con top_p; además los modelos con razonamiento extendido
+        // rechazan la petición si llegan los tres muestreadores a la vez.
+        let reqBody = {
+            model: state.settings.model,
+            messages: anthropicData.messages,
+            max_tokens: parseInt(state.settings.maxTokens || 8192),
+            stream: true,
+            temperature: parseFloat(state.settings.temperature),
+            top_p: parseFloat(state.settings.topP || 0.9)
+        };
+        if (anthropicData.system) {
+            reqBody.system = anthropicData.system;
+        }
+        
+        const response = await fetch(`${state.settings.ollamaUrl}/messages`, {
+            method: 'POST', headers, body: JSON.stringify(reqBody),
+            signal: state.abortController.signal,
+        });
+        if (!response.ok) throw await providerHttpError(response);
+        
+        reader_decoder.reader = response.body.getReader();
+        let currentBlockType = null;
+        
+        while (true) {
+            const { done, value } = await reader_decoder.reader.read();
+            if (done) break;
+            buffer += reader_decoder.decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                const jsonStr = trimmed.substring(6);
+                try {
+                    const json = JSON.parse(jsonStr);
+                    
+                    if (json.type === 'content_block_start') {
+                        currentBlockType = json.content_block?.type || 'text';
+                    } else if (json.type === 'content_block_delta') {
+                        const delta = json.delta || {};
+                        if (delta.type === 'thinking_delta') {
+                            thinkingText += delta.thinking || '';
+                            assistantMsg.thinking = thinkingText;
+                            updateStreamingMessage(msgIdx, assistantMsg);
+                        } else if (delta.type === 'text_delta') {
+                            responseText += delta.text || '';
+                            assistantMsg.content = responseText;
+                            updateStreamingMessage(msgIdx, assistantMsg);
+                        }
+                    } else if (json.type === 'message_delta') {
+                        if (json.usage) {
+                            assistantMsg.metrics = {
+                                eval_count: json.usage.output_tokens,
+                                total_time_ms: Date.now() - startTime
+                            };
+                            if (assistantMsg.metrics.eval_count && assistantMsg.metrics.total_time_ms > 0) {
+                                assistantMsg.metrics.tps = (assistantMsg.metrics.eval_count / (assistantMsg.metrics.total_time_ms / 1000)).toFixed(2);
+                            }
+                        }
+                    } else if (json.type === 'message_start' && json.message?.usage) {
+                        assistantMsg.metrics = assistantMsg.metrics || {};
+                        assistantMsg.metrics.prompt_eval_count = json.message.usage.input_tokens;
+                    }
+                } catch(e) {}
+            }
+        }
+}
+
+// Tope de vueltas de herramienta por turno: sin él, un modelo que insiste en
+// buscar encadenaría búsquedas sin fin.
+const MAX_TOOL_ROUNDS = 3;
+
 async function sendMessage(content, autoSendBody = null) {
-    if (state.isStreaming) return;
+    // La continuación tras una llamada a herramienta se lanza desde dentro de la
+    // propia generación, con isStreaming todavía activo: es la única re-entrada
+    // legítima. El resto de llamadas con una generación en curso se ignoran.
+    const isToolFollowUp = state._toolFollowUp === true;
+    state._toolFollowUp = false;
+    if (state.isStreaming && !isToolFollowUp) return;
+    if (!isToolFollowUp) state._toolRounds = 0;
 
     let isRetry = autoSendBody === 'RETRY_LAST';
 
@@ -1385,6 +2339,16 @@ async function sendMessage(content, autoSendBody = null) {
     let reqImages = [];
     let promptAttachments = '';
     let attachedDocsNames = [];
+
+    // Las imágenes no se pueden anonimizar (un DNI fotografiado viaja tal cual).
+    // Con 🕶️ activo se pide confirmación antes de enviarlas; si se cancela no se
+    // toca nada: ni adjuntos ni texto.
+    if (!autoSendBody && !isRetry && state.settings.anonymizeOutgoing
+        && state.attachments.some(a => a.isImage)
+        && state.settings.provider !== 'webgpu'
+        && !confirm(tr('anon.imagesWarn', 'La anonimización solo actúa sobre texto: las imágenes adjuntas se enviarán SIN anonimizar y pueden contener datos personales. ¿Enviarlas de todos modos?'))) {
+        return;
+    }
 
     if (!autoSendBody && !isRetry) {
         for (const att of state.attachments) {
@@ -1477,6 +2441,7 @@ async function sendMessage(content, autoSendBody = null) {
 
     state.isStreaming = true;
     state.abortController = new AbortController();
+    if (!isToolFollowUp) announce(tr('sr.generating', 'Generando respuesta…'));
     dom.sendBtn.classList.add('hidden');
     dom.stopBtn.classList.remove('hidden');
 
@@ -1512,363 +2477,7 @@ async function sendMessage(content, autoSendBody = null) {
 
     // ── WebGPU Branch ────────────────────────────────────────────────────────
     if (provType === 'webgpu') {
-        // Salvaguarda móvil: antes de cargar un modelo grande que podría agotar
-        // la memoria del teléfono, ofrece cambiar a un ligero. Una vez por sesión.
-        if (typeof isMobileDevice === 'function' && isMobileDevice()
-            && typeof isHeavyForMobile === 'function' && isHeavyForMobile(state.settings.model)
-            && !state._mobileHeavyAck) {
-            const heavyDef = WEBGPU_MODELS.find(m => m.id === state.settings.model);
-            const lightDef = WEBGPU_MODELS.find(m => m.id === MOBILE_SAFE_WEBGPU_MODEL);
-            const _tr = (k, fb) => (typeof t === 'function' ? t(k, fb) : fb);
-            const useLight = confirm(
-                _tr('mobile.heavy.warn', '⚠️ En el móvil, «{model}» ({size}) puede agotar la memoria y cerrar la pestaña.')
-                    .replace('{model}', heavyDef?.label || state.settings.model)
-                    .replace('{size}', heavyDef?.size || 'grande') + '\n\n' +
-                _tr('mobile.heavy.ask', '¿Usar en su lugar un modelo ligero recomendado ({light})?')
-                    .replace('{light}', lightDef?.label || 'Qwen 2.5 0.5B') + '\n\n' +
-                _tr('mobile.heavy.hint', 'Aceptar = usar el ligero · Cancelar = continuar con el grande.')
-            );
-            if (useLight) {
-                state.settings.model = MOBILE_SAFE_WEBGPU_MODEL;
-                getActiveProviderConfig().model = MOBILE_SAFE_WEBGPU_MODEL;
-                assistantMsg.model = MOBILE_SAFE_WEBGPU_MODEL;
-                saveState();
-                if (typeof applySettingsToUI === 'function') applySettingsToUI();
-            } else {
-                state._mobileHeavyAck = true; // no volver a preguntar esta sesión
-            }
-        }
-        try {
-            const modelId = state.settings.model;
-            const support = await checkWebGPUSupport();
-            const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
-            const modelLabel = modelDef?.label || modelId;
-            const deviceLabel = support === 'webgpu' ? 'WebGPU' : 'WASM / CPU';
-            const useVisionTask = !!modelDef?.omnimodal;
-            const pipelineTask = useVisionTask ? 'omnimodal' : 'text-generation';
-            dom.statusDot.className = 'status-dot loading';
-            dom.statusText.textContent = (typeof t==='function'?t('status.initializing'):'Inicializando...');
-            setMessageLoadingState(assistantMsg, {
-                phase: 'preparing',
-                detail: `Arrancando ${modelLabel} en tu navegador.`,
-                modelLabel,
-                deviceLabel,
-                sourceUrl: buildWebGPURepoUrl(modelId),
-                note: useVisionTask
-                    ? 'La primera vez puede tardar: además del modelo, el runtime multimodal debe preparar visión + texto. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
-                    : 'La primera vez puede tardar porque el modelo se descarga y se guarda en caché. ⚠️ El modelo en memoria se descartará al salir o recargar la página.',
-                progress: 0,
-                progressLabel: 'Preparando',
-                file: ''
-            });
-            updateStreamingMessage(msgIdx, assistantMsg);
-
-            const pipe = await loadWebGPUModel(modelId, (pct, progress) => {
-                const stage = describeWebGPUProgressStage(progress);
-                const phase = webgpuState.cancelRequested ? 'cancelling' : stage.phase;
-                setMessageLoadingState(assistantMsg, {
-                    phase,
-                    detail: progress.retryingWithDtype
-                        ? `La variante principal ha fallado. Reintentando ${modelLabel} con cuantización ${progress.retryingWithDtype} para mejorar compatibilidad.`
-                        : `${stage.detail} (${modelLabel}).`,
-                    modelLabel,
-                    deviceLabel,
-                    sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(modelId),
-                    progress: pct,
-                    progressLabel: stage.progressLabel,
-                    file: progress.file || '',
-                    note: webgpuState.cancelRequested
-                        ? 'La cancelación se aplicará en cuanto termine el paso actual del runtime.'
-                        : progress.retryingWithDtype
-                            ? `Motivo del reintento: ${progress.previousError || 'fallo opaco del runtime WebGPU'}.`
-                        : progress._compileOverdue
-                            ? '⚠️ Más de 2 min compilando. Es posible que este modelo sea demasiado grande o complejo para los recursos de tu dispositivo. Considera elegir un modelo más ligero si la carga no se completa.'
-                        : progress.status === 'compiling'
-                            ? 'Este proceso es intensivo y puede tardar entre 30s y 2 min en modelos grandes. La app no está colgada.'
-                        : useVisionTask
-                            ? 'Los modelos multimodales suelen descargar más componentes que uno solo de texto. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
-                            : 'Este paso solo suele ocurrir la primera vez o tras limpiar la caché. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
-                });
-                updateStreamingMessage(msgIdx, assistantMsg);
-            }, pipelineTask);
-
-            if (!pipe) throw new Error('No se pudo inicializar Pipeline WebGPU.');
-            if (state.abortController?.signal?.aborted || webgpuState.cancelRequested) {
-                throw new DOMException('Carga cancelada por el usuario.', 'AbortError');
-            }
-
-            let rawImages = [];
-            let imageMetaList = [];
-            const imageAssistMessages = chat.messages.filter(msg =>
-                msg.role === 'user' &&
-                normalizeImageMeta(msg.imageMeta, msg.images || []).length > 0 &&
-                (!Array.isArray(msg.imageCaptions) || msg.imageCaptions.length === 0)
-            );
-
-            dom.statusDot.className = 'status-dot online';
-            dom.statusText.textContent = (typeof t==='function'?t('status.localInference'):'🧠 Inferencia local');
-            setMessageLoadingState(assistantMsg, {
-                phase: 'generating',
-                detail: useVisionTask
-                    ? `${modelLabel} ya está listo. Preparando imágenes y generando la respuesta localmente.`
-                    : `${modelLabel} ya está listo. Generando la respuesta localmente.`,
-                modelLabel,
-                deviceLabel,
-                sourceUrl: buildWebGPURepoUrl(modelId),
-                progress: null,
-                progressLabel: '',
-                file: '',
-                note: useVisionTask
-                    ? 'La inferencia multimodal sucede en tu navegador; las imágenes no se envían a un servidor.'
-                    : 'La inferencia sucede en tu navegador; no se envía el contenido a un servidor.'
-            });
-            updateStreamingMessage(msgIdx, assistantMsg);
-
-            // Build conversation context.
-            // Se usa el mismo constructor que el resto de motores: además de
-            // presupuestar el tamaño, incorpora la BASE DE CONOCIMIENTO del
-            // proyecto, que en la rama WebGPU no se estaba enviando nunca (los
-            // documentos adjuntos a un agente se ignoraban en silencio al usar
-            // un modelo local).
-            const systemContent = buildSystemContext(chat, getPromptTokenBudget()).text;
-
-            if (!useVisionTask && supportsWebGPUImageAssist() && imageAssistMessages.length > 0) {
-                setMessageLoadingState(assistantMsg, {
-                    phase: 'initializing',
-                    detail: `Analizando ${imageAssistMessages.reduce((sum, msg) => sum + normalizeImageMeta(msg.imageMeta, msg.images || []).length, 0)} imagen(es) con ${getVisionAssistDef().label}.`,
-                    modelLabel,
-                    deviceLabel,
-                    sourceUrl: buildWebGPURepoUrl(getVisionAssistDef().id),
-                    progress: 0,
-                    progressLabel: 'Vision',
-                    file: '',
-                    note: 'La imagen se convierte en descripcion local antes de pasarla al modelo de chat.'
-                });
-                updateStreamingMessage(msgIdx, assistantMsg);
-
-                let processedCount = 0;
-                for (const msg of imageAssistMessages) {
-                    const normalizedImages = normalizeImageMeta(msg.imageMeta, msg.images || []);
-                    msg.imageCaptions = await analyzeImagesForWebGPU(normalizedImages, (pct, progress) => {
-                        setMessageLoadingState(assistantMsg, {
-                            phase: 'initializing',
-                            detail: `Analizando imagenes adjuntas localmente para enriquecer el prompt.`,
-                            modelLabel,
-                            deviceLabel,
-                            sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(getVisionAssistDef().id),
-                            progress: pct,
-                            progressLabel: 'Vision',
-                            file: progress.file || '',
-                            note: `Modelo auxiliar: ${getVisionAssistDef().id}`
-                        });
-                        updateStreamingMessage(msgIdx, assistantMsg);
-                    }, msg.content || '');
-                    processedCount += normalizedImages.length;
-                }
-                if (processedCount > 0) saveState();
-            }
-
-            const builtConversation = buildWebGPUConversation(chat, systemContent, useVisionTask);
-            let conversationHistory = builtConversation.conversationHistory;
-            imageMetaList = builtConversation.imageMetaList;
-
-            let generationOutcome = null;
-
-            if (useVisionTask) {
-                try {
-                    if (imageMetaList.length > 0) {
-                        setMessageLoadingState(assistantMsg, {
-                            phase: 'initializing',
-                            detail: `Transformando ${imageMetaList.length} imagen${imageMetaList.length === 1 ? '' : 'es'} para ${modelLabel}.`,
-                            modelLabel,
-                            deviceLabel,
-                            sourceUrl: buildWebGPURepoUrl(modelId),
-                            progress: null,
-                            progressLabel: 'Imagenes',
-                            file: '',
-                            note: 'Intentando primero el flujo VLM nativo del modelo de vision.'
-                        });
-                        updateStreamingMessage(msgIdx, assistantMsg);
-                        rawImages = await getWebGPURawImages(imageMetaList, true);
-                    }
-
-                    generationOutcome = await runWebGPUGeneration(pipe, {
-                        text: conversationHistory,
-                        images: rawImages
-                    }, assistantMsg, msgIdx);
-                } catch (visionError) {
-                    const fallbackModelId = getWebGPUTextFallbackModelId();
-                    const fallbackModelDef = WEBGPU_MODELS.find(m => m.id === fallbackModelId);
-                    const fallbackModelLabel = fallbackModelDef?.label || fallbackModelId;
-
-                    console.warn('[WebGPU] VLM path failed, falling back to local image assist:', visionError);
-                    setMessageLoadingState(assistantMsg, {
-                        phase: 'initializing',
-                        detail: `El flujo VLM ha fallado. Recuperando la conversacion con analisis visual local y ${fallbackModelLabel}.`,
-                        modelLabel,
-                        deviceLabel,
-                        sourceUrl: buildWebGPURepoUrl(fallbackModelId),
-                        progress: 0,
-                        progressLabel: 'Fallback',
-                        file: '',
-                        note: 'Se mantiene el chat y la imagen se convertira en contexto textual automaticamente.'
-                    });
-                    updateStreamingMessage(msgIdx, assistantMsg);
-
-                    let processedCount = 0;
-                    for (const msg of imageAssistMessages) {
-                        const normalizedImages = normalizeImageMeta(msg.imageMeta, msg.images || []);
-                        msg.imageCaptions = await analyzeImagesForWebGPU(normalizedImages, (pct, progress) => {
-                            setMessageLoadingState(assistantMsg, {
-                                phase: 'initializing',
-                                detail: 'Analizando imagenes localmente para recuperar la conversacion.',
-                                modelLabel: fallbackModelLabel,
-                                deviceLabel,
-                                sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(getVisionAssistDef().id),
-                                progress: pct,
-                                progressLabel: 'Fallback',
-                                file: progress.file || '',
-                                note: `Modelo auxiliar: ${getVisionAssistDef().id}`
-                            });
-                            updateStreamingMessage(msgIdx, assistantMsg);
-                        });
-                        processedCount += normalizedImages.length;
-                    }
-                    if (processedCount > 0) saveState();
-
-                    const fallbackPipe = await loadWebGPUModel(fallbackModelId, (pct, progress) => {
-                        const stage = describeWebGPUProgressStage(progress);
-                        const phase = stage.phase;
-                        setMessageLoadingState(assistantMsg, {
-                            phase,
-                            detail: `${stage.detail} (${fallbackModelLabel}).`,
-                            modelLabel: fallbackModelLabel,
-                            deviceLabel,
-                            sourceUrl: progress.sourceUrl || buildWebGPURepoUrl(fallbackModelId),
-                            progress: pct,
-                            progressLabel: stage.progressLabel,
-                            file: progress.file || '',
-                            note: 'Fallback automatico tras fallo del modelo de vision.'
-                        });
-                        updateStreamingMessage(msgIdx, assistantMsg);
-                    }, 'text-generation');
-
-                    // Guarda: loadWebGPUModel devuelve null si hay otra carga en
-                    // curso (guarda isLoading). Sin esto, runWebGPUGeneration(null)
-                    // reventaría al leer .__omnimodal/.__worker sobre null.
-                    if (!fallbackPipe) throw new Error('No se pudo inicializar el modelo de reserva WebGPU (otra carga en curso).');
-
-                    conversationHistory = buildWebGPUConversation(chat, systemContent, false).conversationHistory;
-                    setMessageLoadingState(assistantMsg, {
-                        phase: 'generating',
-                        detail: `${fallbackModelLabel} esta respondiendo con el analisis visual local como contexto.`,
-                        modelLabel: fallbackModelLabel,
-                        deviceLabel,
-                        sourceUrl: buildWebGPURepoUrl(fallbackModelId),
-                        progress: null,
-                        progressLabel: '',
-                        file: '',
-                        note: `Fallback automatico desde ${modelLabel}.`
-                    });
-                    updateStreamingMessage(msgIdx, assistantMsg);
-
-                    generationOutcome = await runWebGPUGeneration(fallbackPipe, conversationHistory, assistantMsg, msgIdx);
-                    assistantMsg.model = fallbackModelId;
-                    assistantMsg.fallbackFrom = modelId;
-                    assistantMsg.fallbackReason = visionError.message || String(visionError);
-                }
-            } else {
-                generationOutcome = await runWebGPUGeneration(pipe, conversationHistory, assistantMsg, msgIdx);
-            }
-
-            assistantMsg.content = generationOutcome?.text || '*(Sin respuesta generada)*';
-            if (generationOutcome?.thinking) {
-                assistantMsg.thinking = generationOutcome.thinking;
-            }
-            clearMessageLoadingState(assistantMsg);
-            if (generationOutcome?.metrics) {
-                assistantMsg.metrics = generationOutcome.metrics;
-            }
-
-            dom.statusText.textContent = '🧠 Modelo listo';
-            updateInputDisclaimer();
-
-        } catch (e) {
-            if (e.name === 'AbortError' || state.abortController?.signal?.aborted) {
-                setMessageLoadingState(assistantMsg, {
-                    phase: 'cancelled',
-                    detail: 'La carga o generación se ha detenido antes de completarse.',
-                    modelLabel: assistantMsg.loading?.modelLabel,
-                    deviceLabel: assistantMsg.loading?.deviceLabel,
-                    sourceUrl: assistantMsg.loading?.sourceUrl,
-                    progress: assistantMsg.loading?.progress ?? null,
-                    progressLabel: assistantMsg.loading?.progressLabel || '',
-                    file: '',
-                    note: webgpuState.isLoading
-                        ? 'El navegador puede terminar la descarga actual en segundo plano antes de liberar el proceso.'
-                        : 'Puedes volver a intentarlo cuando quieras.'
-                });
-                if (!assistantMsg.content) assistantMsg.content = '*[Operación detenida por el usuario]*';
-            } else {
-                console.error('[WebGPU] inference error:', e);
-                const errorDetail = formatErrorDetail(e);
-                const errStr = errorDetail.toLowerCase();
-                // Queda anotado junto al modelo: la próxima vez la tarjeta dice
-                // que aquí falló y por qué (un corte de red no cuenta como fallo
-                // del modelo).
-                if (typeof recordWebGPUModelReport === 'function' && !/network|fetch|failed to load/i.test(errorDetail)) {
-                    recordWebGPUModelReport(modelId, 'fail', errorDetail);
-                }
-                
-                let errorHtml = `⚠️ **Fallo en motor WebGPU**\nHubo un problema intentando instalar o ejecutar el modelo en tu navegador.\n\n`;
-                
-                if (errStr.includes('could not locate file') || errStr.includes('config.json') || errStr.includes('/resolve/main/{file}/') || errStr.includes('file not found')) {
-                    errorHtml += `> **📦 Repositorio incompatible o incompleto**\n> El navegador ha localizado el repositorio, pero no ha encontrado los archivos esperados por Transformers.js/WebGPU para montar el modelo.\n>\n> 👉 **Solución:** Prueba otro modelo del catálogo marcado como verificado, o revisa que el repositorio manual sea una variante ONNX/Transformers.js compatible.`;
-                } else if (errStr.includes('image-to-text') || errStr.includes('rawimage') || errStr.includes('image processor') || errStr.includes('vit-gpt2-image-captioning')) {
-                    errorHtml += `> **👁 Fallo en el asistente visual local**\n> La app ha intentado convertir tu imagen en una descripcion local antes de pasarla al modelo de chat, pero ese paso ha fallado.\n>\n> 👉 **Solución:** Reintenta con una imagen mas pequeña o menos compleja. Si persiste, usa un modelo solo texto sin imagen o un proveedor con vision nativa.`;
-                } else if (errStr.includes('image-text-to-text') || errStr.includes('qwen2-vl') || errStr.includes('phi-3.5-vision')) {
-                    errorHtml += `> **👁 Limitación real del runtime multimodal**\n> Este modelo VLM aparece en el catálogo, pero el chat multimodal tipo Qwen2-VL / Phi-3.5-Vision todavía no encaja bien con el soporte actual de Transformers.js en navegador.\n>\n> 👉 **Solución:** Usa por ahora un modelo solo texto en WebGPU con el asistente visual local, o cambia a un proveedor cloud/local que sí soporte visión conversacional de forma nativa.`;
-                } else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('unauthorized') || errStr.includes('access')) {
-                    errorHtml += `> **🔒 Acceso Denegado / Modelo no disponible**\n> Este modelo no ha sido encontrado o requiere una API Key de HuggingFace. Es probable que el ID del modelo haya cambiado en el repositorio central.\n>\n> 👉 **Solución:** Vuelve a los ajustes y selecciona otro modelo. Te recomendamos **SmolLM2** o la versión **Coder de Qwen 2.5** que están verificadas.`;
-                } else if (errStr.includes('out of memory') || errStr.includes('oom') || errStr.includes('allocate') || errStr.includes('allocation') || errStr.includes('insufficient memory') || errStr.includes('device lost')) {
-                    errorHtml += `> **💥 Memoria Insuficiente (OOM)**\n> Tu navegador / tarjeta gráfica se ha quedado sin memoria intentando montar este cerebro en la VRAM local.\n>\n> 👉 **Solución:** Vuelve a los ajustes y elige un modelo más ligero (categoría ⚡ Ligeros). También puedes intentar cerrar pestañas pesadas o reiniciar el navegador.`;
-                } else if (isOpaqueWebGPUNumericError(errorDetail)) {
-                    errorHtml += `> **🧩 Fallo opaco del runtime WebGPU/ONNX**\n> El motor local ha devuelto un código interno (\`${errorDetail}\`) en vez de un mensaje legible. Esto suele ocurrir al final de la carga cuando la variante descargada no llega a inicializarse bien en tu navegador o tu GPU.\n>\n> 👉 **Solución:** La app ya intenta una variante más ligera cuando puede. Si este fallo persiste, prueba de nuevo con \`Phi-4 Mini\` tras recargar o cambia a \`Qwen 2.5 Coder 1.5B\` / \`SmolLM2 1.7B\`, que son más tolerantes en WebGPU.`;
-                } else if (errStr.includes('wasm') || errStr.includes('unsupported') || errStr.includes('adapter')) {
-                    errorHtml += `> **🚫 Soporte de Hardware**\n> Parece que el navegador no soporta aceleración por hardware o el fallback de WebAssembly (CPU) está fallando/agotando los recursos.\n>\n> 👉 **Solución:** Comprueba que usas una versión reciente de Chrome/Edge (v113+) y que tienes habilitada la *"Aceleración por hardware"* en sus ajustes.`;
-                } else if (errStr.includes('network') || errStr.includes('fetch')) {
-                    errorHtml += `> **📶 Error de Red**\n> Hubo un corte de conexión mientras descargábamos los pesos (tensores) de HuggingFace.\n>\n> 👉 **Solución:** Comprueba tu internet y vuelve a darle a reintentar.`;
-                } else {
-                    errorHtml += `> **Detalle técnico:** \`${errorDetail}\`\n>\n> 👉 **Solución:** Refresca la página, intenta limpiar la caché o usar un modelo más pequeño.`;
-                }
-                
-                setMessageLoadingState(assistantMsg, {
-                    phase: 'error',
-                    detail: 'La preparación del modelo se interrumpió por un error.',
-                    modelLabel: assistantMsg.loading?.modelLabel,
-                    deviceLabel: assistantMsg.loading?.deviceLabel,
-                    sourceUrl: assistantMsg.loading?.sourceUrl || buildWebGPURepoUrl(modelId),
-                    progress: assistantMsg.loading?.progress ?? null,
-                    progressLabel: assistantMsg.loading?.progressLabel || '',
-                    file: '',
-                    note: 'Revisa el mensaje de error y cambia a un modelo más ligero si hace falta.'
-                });
-                assistantMsg.content = errorHtml;
-            }
-            updateStreamingMessage(msgIdx, assistantMsg);
-        } finally {
-            webgpuState.cancelRequested = false;
-            state.isStreaming = false;
-            state.abortController = null;
-            dom.stopBtn.classList.add('hidden');
-            dom.sendBtn.classList.remove('hidden');
-            noteGenerationOutcome(assistantMsg);
-            chat.updatedAt = Date.now();
-            saveState();
-            renderChatList();
-            renderMessages();
-        }
-        return;
+        return runWebGPUTurn(chat, assistantMsg, msgIdx);
     }
     // ── End WebGPU Branch ────────────────────────────────────────────────────
 
@@ -1877,335 +2486,8 @@ async function sendMessage(content, autoSendBody = null) {
     let handedOffToToolFollowUp = false;
 
     try {
-        const headers = getAuthHeaders();
-        // Solo usar autoSendBody si es un array de mensajes (para el optimizador de prompts u otros)
-        // Si es un simple flag 'RETRY_LAST', reconstruir desde el historial.
-        let messages = (autoSendBody && Array.isArray(autoSendBody)) ? autoSendBody : buildApiMessages(chat);
-        
-        const reader_decoder = { reader: null, decoder: new TextDecoder() };
-        let buffer = '';
-        let isInThinking = false;
-        let thinkingText = '';
-        let responseText = '';
-        let pendingToolCall = null;
-        let partialToolCallArgs = '';
-        const startTime = Date.now();
-        
-        // ── Build request based on provider type ──
-        if (provType === 'ollama') {
-            // Ollama native streaming
-            let reqBody = {
-                model: state.settings.model,
-                messages: messages,
-                stream: true,
-                options: {
-                    temperature: parseFloat(state.settings.temperature),
-                    top_p: parseFloat(state.settings.topP || 0.9),
-                    top_k: parseInt(state.settings.topK || 40)
-                }
-            };
-            
-            if (dom.toolInternet.classList.contains('active') && state.capabilities.includes('tools')) {
-                reqBody.tools = [buildWikipediaTool()];
-            }
-            
-            const response = await fetch(`${state.settings.ollamaUrl}/api/chat`, {
-                method: 'POST', headers, body: JSON.stringify(reqBody),
-                signal: state.abortController.signal,
-            });
-            if (!response.ok) throw new Error(`Error: ${response.status} ${response.statusText}`);
-            
-            reader_decoder.reader = response.body.getReader();
-            
-            while (true) {
-                const { done, value } = await reader_decoder.reader.read();
-                if (done) break;
-                buffer += reader_decoder.decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const json = JSON.parse(line);
-                        if (json.done && json.total_duration) {
-                            assistantMsg.metrics = {
-                                total_duration: json.total_duration,
-                                load_duration: json.load_duration,
-                                prompt_eval_count: json.prompt_eval_count,
-                                eval_count: json.eval_count,
-                                eval_duration: json.eval_duration
-                            };
-                        }
-                        if (json.message?.tool_calls) pendingToolCall = json.message.tool_calls;
-                        const token = json.message?.content || '';
-                        if (token) {
-                            processStreamToken(token, assistantMsg, msgIdx, { isInThinking, thinkingText, responseText });
-                            isInThinking = streamState.isInThinking;
-                            thinkingText = streamState.thinkingText;
-                            responseText = streamState.responseText;
-                        }
-                    } catch(e) {}
-                }
-            }
-            
-        } else if (provType === 'openai') {
-            // OpenAI-compatible streaming (LMStudio, Groq, OpenRouter, OpenAI)
-            // Map images for OpenAI vision format
-            if (!autoSendBody) {
-                messages = messages.map(m => {
-                    if (m.images && m.images.length > 0) {
-                        const contentArr = [{ type: "text", text: m.content || "Imagen adjunta:" }];
-                        m.images.forEach(imgBase64 => {
-                            const mimeType = imgBase64.startsWith('/') ? 'image/jpeg' : (imgBase64.startsWith('iVB') ? 'image/png' : 'image/jpeg');
-                            contentArr.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${imgBase64}` } });
-                        });
-                        const newM = { ...m, content: contentArr };
-                        delete newM.images;
-                        return newM;
-                    }
-                    return m;
-                });
-            }
-            
-            let maxTok = parseInt(state.settings.maxTokens || 4096);
-            // Cap max_tokens for Groq (hard limit usually 8192 for output tokens)
-            if (getProviderBaseId(state.settings.provider) === 'groq' && maxTok > 8192) {
-                maxTok = 8192;
-            }
+        const pendingToolCall = await sendWithFailover(chat, assistantMsg, msgIdx, autoSendBody);
 
-            let reqBody = {
-                model: state.settings.model,
-                messages: messages,
-                stream: true,
-                temperature: parseFloat(state.settings.temperature),
-                top_p: parseFloat(state.settings.topP || 0.9),
-                max_tokens: maxTok
-            };
-            
-            // Add top_k only for providers that definitely support it (Ollama, Claude, Gemini)
-            // Removed groq as it rejects the property
-            if (['ollama', 'claude', 'gemini'].includes(state.settings.provider)) {
-                reqBody.top_k = parseInt(state.settings.topK || 40);
-            }
-            
-            // Only include stream_options if exactly OpenAI (many others fail or rate-limit on this)
-            if (getProviderBaseId(state.settings.provider) === 'openai') {
-                reqBody.stream_options = { include_usage: true };
-            }
-            
-            if (dom.toolInternet.classList.contains('active') && state.capabilities.includes('tools')) {
-                reqBody.tools = [buildWikipediaTool()];
-            }
-            
-            const response = await fetch(`${state.settings.ollamaUrl}/chat/completions`, {
-                method: 'POST', headers, body: JSON.stringify(reqBody),
-                signal: state.abortController.signal,
-            });
-            
-            if (!response.ok) {
-                let errorDetail = response.statusText;
-                try {
-                    const errorJson = await response.json();
-                    // OpenRouter/Groq/OpenAI error nesting variants
-                    errorDetail = errorJson.error?.message || errorJson.message || (errorJson.error && typeof errorJson.error === 'string' ? errorJson.error : errorDetail);
-                } catch(e) {}
-                throw new Error(`${response.status}: ${errorDetail}`);
-            }
-            
-            reader_decoder.reader = response.body.getReader();
-            
-            while (true) {
-                const { done, value } = await reader_decoder.reader.read();
-                if (done) break;
-                buffer += reader_decoder.decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                    const jsonStr = trimmed.substring(6);
-                    if (jsonStr === '[DONE]') continue;
-                    try {
-                        const json = JSON.parse(jsonStr);
-                        if (json.usage) {
-                            assistantMsg.metrics = {
-                                prompt_eval_count: json.usage.prompt_tokens,
-                                eval_count: json.usage.completion_tokens,
-                                total_tokens: json.usage.total_tokens,
-                                total_time_ms: Date.now() - startTime
-                            };
-                            if (assistantMsg.metrics.eval_count && assistantMsg.metrics.total_time_ms > 0) {
-                                assistantMsg.metrics.tps = (assistantMsg.metrics.eval_count / (assistantMsg.metrics.total_time_ms / 1000)).toFixed(2);
-                            }
-                        }
-                        const delta = json.choices?.[0]?.delta || {};
-                        const toolCallsData = delta.tool_calls;
-                        if (toolCallsData && toolCallsData.length > 0) {
-                            if (!pendingToolCall) {
-                                pendingToolCall = [{ function: { name: toolCallsData[0].function.name, arguments: "" } }];
-                            } else if (toolCallsData[0].function?.arguments) {
-                                partialToolCallArgs += toolCallsData[0].function.arguments;
-                            }
-                        }
-                        if (json.choices?.[0]?.finish_reason === 'tool_calls' && pendingToolCall) {
-                            pendingToolCall[0].function.arguments = partialToolCallArgs || '{}';
-                            pendingToolCall[0].function.arguments = JSON.parse(pendingToolCall[0].function.arguments);
-                        }
-                        const token = delta.content || '';
-                        if (token) {
-                            processStreamToken(token, assistantMsg, msgIdx, { isInThinking, thinkingText, responseText });
-                            isInThinking = streamState.isInThinking;
-                            thinkingText = streamState.thinkingText;
-                            responseText = streamState.responseText;
-                        }
-                    } catch(e) {}
-                }
-            }
-            
-        } else if (provType === 'gemini') {
-            // Google Gemini streaming
-            const apiKey = state.settings.apiKey;
-            const geminiMessages = buildGeminiMessages(chat);
-            
-            let reqBody = {
-                contents: geminiMessages.contents,
-                generationConfig: {
-                    temperature: parseFloat(state.settings.temperature),
-                    topP: parseFloat(state.settings.topP || 0.9),
-                    topK: parseInt(state.settings.topK || 40),
-                    maxOutputTokens: parseInt(state.settings.maxTokens || 4096)
-                }
-            };
-            if (geminiMessages.systemInstruction) {
-                reqBody.system_instruction = geminiMessages.systemInstruction;
-            }
-            
-            const response = await fetch(
-                `${state.settings.ollamaUrl}/models/${state.settings.model}:streamGenerateContent?alt=sse`,
-                { method: 'POST', headers, body: JSON.stringify(reqBody), signal: state.abortController.signal }
-            );
-            if (!response.ok) throw new Error(`Error: ${response.status} ${response.statusText}`);
-            
-            reader_decoder.reader = response.body.getReader();
-            
-            while (true) {
-                const { done, value } = await reader_decoder.reader.read();
-                if (done) break;
-                buffer += reader_decoder.decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                    const jsonStr = trimmed.substring(6);
-                    try {
-                        const json = JSON.parse(jsonStr);
-                        // Gemini thinking via thought field
-                        const parts = json.candidates?.[0]?.content?.parts || [];
-                        for (const part of parts) {
-                            if (part.thought) {
-                                thinkingText += part.text || '';
-                                assistantMsg.thinking = thinkingText;
-                                updateStreamingMessage(msgIdx, assistantMsg);
-                            } else if (part.text) {
-                                responseText += part.text;
-                                assistantMsg.content = responseText;
-                                updateStreamingMessage(msgIdx, assistantMsg);
-                            }
-                        }
-                        // Usage metrics
-                        if (json.usageMetadata) {
-                            assistantMsg.metrics = {
-                                prompt_eval_count: json.usageMetadata.promptTokenCount,
-                                eval_count: json.usageMetadata.candidatesTokenCount,
-                                total_tokens: json.usageMetadata.totalTokenCount,
-                                total_time_ms: Date.now() - startTime
-                            };
-                            if (assistantMsg.metrics.eval_count && assistantMsg.metrics.total_time_ms > 0) {
-                                assistantMsg.metrics.tps = (assistantMsg.metrics.eval_count / (assistantMsg.metrics.total_time_ms / 1000)).toFixed(2);
-                            }
-                        }
-                    } catch(e) {}
-                }
-            }
-            
-        } else if (provType === 'anthropic') {
-            // Anthropic Messages API streaming
-            const anthropicData = buildAnthropicMessages(chat);
-            
-            // Sin top_k: Anthropic lo reserva para casos avanzados y desaconseja
-            // combinarlo con top_p; además los modelos con razonamiento extendido
-            // rechazan la petición si llegan los tres muestreadores a la vez.
-            let reqBody = {
-                model: state.settings.model,
-                messages: anthropicData.messages,
-                max_tokens: parseInt(state.settings.maxTokens || 8192),
-                stream: true,
-                temperature: parseFloat(state.settings.temperature),
-                top_p: parseFloat(state.settings.topP || 0.9)
-            };
-            if (anthropicData.system) {
-                reqBody.system = anthropicData.system;
-            }
-            
-            const response = await fetch(`${state.settings.ollamaUrl}/messages`, {
-                method: 'POST', headers, body: JSON.stringify(reqBody),
-                signal: state.abortController.signal,
-            });
-            if (!response.ok) throw new Error(`Error: ${response.status} ${response.statusText}`);
-            
-            reader_decoder.reader = response.body.getReader();
-            let currentBlockType = null;
-            
-            while (true) {
-                const { done, value } = await reader_decoder.reader.read();
-                if (done) break;
-                buffer += reader_decoder.decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                    const jsonStr = trimmed.substring(6);
-                    try {
-                        const json = JSON.parse(jsonStr);
-                        
-                        if (json.type === 'content_block_start') {
-                            currentBlockType = json.content_block?.type || 'text';
-                        } else if (json.type === 'content_block_delta') {
-                            const delta = json.delta || {};
-                            if (delta.type === 'thinking_delta') {
-                                thinkingText += delta.thinking || '';
-                                assistantMsg.thinking = thinkingText;
-                                updateStreamingMessage(msgIdx, assistantMsg);
-                            } else if (delta.type === 'text_delta') {
-                                responseText += delta.text || '';
-                                assistantMsg.content = responseText;
-                                updateStreamingMessage(msgIdx, assistantMsg);
-                            }
-                        } else if (json.type === 'message_delta') {
-                            if (json.usage) {
-                                assistantMsg.metrics = {
-                                    eval_count: json.usage.output_tokens,
-                                    total_time_ms: Date.now() - startTime
-                                };
-                                if (assistantMsg.metrics.eval_count && assistantMsg.metrics.total_time_ms > 0) {
-                                    assistantMsg.metrics.tps = (assistantMsg.metrics.eval_count / (assistantMsg.metrics.total_time_ms / 1000)).toFixed(2);
-                                }
-                            }
-                        } else if (json.type === 'message_start' && json.message?.usage) {
-                            assistantMsg.metrics = assistantMsg.metrics || {};
-                            assistantMsg.metrics.prompt_eval_count = json.message.usage.input_tokens;
-                        }
-                    } catch(e) {}
-                }
-            }
-        }
-        
         // Tool Call Proxy Logic (Ollama & OpenAI)
         if (pendingToolCall && pendingToolCall.length > 0) {
             const tool = pendingToolCall[0];
@@ -2219,7 +2501,13 @@ async function sendMessage(content, autoSendBody = null) {
                 searchResult = await runWebSearch(searchQuery);
             }
 
+            // Si el usuario pulsó «Detener» mientras se buscaba, no se continúa.
+            if (state.abortController?.signal?.aborted) {
+                throw new DOMException('Generación detenida por el usuario.', 'AbortError');
+            }
+
             const toolMsg = { role: 'tool', content: searchResult };
+            if (tool.id) toolMsg.tool_call_id = tool.id;
             chat.messages.push(toolMsg);
 
             // La segunda vuelta se marca para que el `finally` de ESTA llamada no
@@ -2229,6 +2517,8 @@ async function sendMessage(content, autoSendBody = null) {
             // enviar mientras la continuación seguía generando, permitiendo lanzar
             // dos generaciones en paralelo.
             handedOffToToolFollowUp = true;
+            state._toolRounds = (state._toolRounds || 0) + 1;
+            state._toolFollowUp = true;
             const loopMessages = buildApiMessages(chat);
             return sendMessage('', loopMessages);
         }
@@ -2239,7 +2529,7 @@ async function sendMessage(content, autoSendBody = null) {
         } else {
             console.error('Chat error:', e);
             const provName = getProviderDef(state.settings.provider).name;
-            assistantMsg.content = `⚠️ **Error de conexión con ${provName}**\n\n\`${e.message}\`\n\nVerifica que el proveedor está configurado correctamente y que la API Key (si aplica) es válida.`;
+            assistantMsg.content = describeChatFailure(e, provName, e.failoverHops || []);
         }
         updateStreamingMessage(msgIdx, assistantMsg);
     } finally {
@@ -2252,6 +2542,7 @@ async function sendMessage(content, autoSendBody = null) {
             dom.stopBtn.classList.add('hidden');
             dom.sendBtn.classList.remove('hidden');
             noteGenerationOutcome(assistantMsg);
+            announce(tr('sr.done', 'Respuesta completada.'));
             chat.updatedAt = Date.now();
             saveState();
             renderChatList();
@@ -2288,6 +2579,8 @@ function _flushStreamRender() {
 }
 
 function processStreamToken(token, assistantMsg, msgIdx, ctx) {
+    // Primer texto recibido: el aviso «probando con otro motor» ya no aplica.
+    if (assistantMsg.loading) clearMessageLoadingState(assistantMsg);
     streamState.isInThinking = ctx.isInThinking;
     streamState.thinkingText = ctx.thinkingText;
     streamState.responseText = ctx.responseText;
@@ -2556,11 +2849,21 @@ function buildSystemContextRaw(chat, budget) {
  * Devuelve además cuántos se descartaron para poder avisar en la interfaz.
  */
 function applyHistoryBudget(entries, budget) {
+    // El último turno es intocable: la pregunta del usuario y todo lo que cuelga de
+    // ella (la llamada a una herramienta y su resultado). Conservar solo el último
+    // mensaje enviaba un resultado de búsqueda SIN la pregunta ni la llamada que
+    // lo originó, y el modelo respondía a ciegas o el proveedor rechazaba la petición.
+    let lastUser = -1;
+    for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].value?.role === 'user') { lastUser = i; break; }
+    }
+    const mustKeepFrom = lastUser >= 0 ? lastUser : entries.length - 1;
+
     let used = 0;
     const kept = [];
     for (let i = entries.length - 1; i >= 0; i--) {
         const cost = entries[i].tokens;
-        if (kept.length > 0 && used + cost > budget) break;
+        if (i < mustKeepFrom && kept.length > 0 && used + cost > budget) break;
         kept.unshift(entries[i]);
         used += cost;
     }
@@ -2586,6 +2889,15 @@ function noteContextTrim(chat, info) {
     else delete last.contextTrim;
 }
 
+// Texto de un mensaje del historial tal como debe SALIR hacia el motor. Con 🕶️
+// activo es obligatorio anonimizarlo: si el módulo no está, se corta el envío en
+// vez de mandarlo sin tratar.
+function outgoingHistoryText(text, chat) {
+    if (!state.settings.anonymizeOutgoing) return text;
+    if (typeof anonymizeHistoryText !== 'function') throw new Error('anonimizador no disponible');
+    return anonymizeHistoryText(text, chat);
+}
+
 // ─── Message builders per provider type ─────
 function buildApiMessages(chat) {
     // For Gemini and Anthropic, use their specific builders during streaming
@@ -2602,10 +2914,11 @@ function buildApiMessages(chat) {
     const entries = [];
     for (const msg of chat.messages) {
         if (msg.role === 'assistant' && msg.content === '' && msg.thinking === '' && !msg.tool_calls) continue;
-        const apiMsg = { role: msg.role, content: msg.content };
+        const apiMsg = { role: msg.role, content: outgoingHistoryText(msg.content, chat) };
         if (msg.images) apiMsg.images = msg.images;
         if (msg.tool_calls) apiMsg.tool_calls = msg.tool_calls;
-        entries.push({ value: apiMsg, tokens: estimateTokenCount(msg.content) });
+        if (msg.tool_call_id) apiMsg.tool_call_id = msg.tool_call_id;
+        entries.push({ value: apiMsg, tokens: estimateTokenCount(apiMsg.content) });
     }
 
     const { kept, dropped } = applyHistoryBudget(entries, historyBudget);
@@ -2633,8 +2946,9 @@ function buildGeminiMessages(chat) {
                 parts.push({ inline_data: { mime_type: mimeType, data: imgBase64 } });
             });
         }
-        parts.push({ text: msg.content || '' });
-        entries.push({ value: { role, parts }, tokens: estimateTokenCount(msg.content) });
+        const safeText = outgoingHistoryText(msg.content || '', chat);
+        parts.push({ text: safeText });
+        entries.push({ value: { role, parts }, tokens: estimateTokenCount(safeText) });
     }
 
     const { kept, dropped } = applyHistoryBudget(entries, historyBudget);
@@ -2665,8 +2979,9 @@ function buildAnthropicMessages(chat) {
                 content.push({ type: 'image', source: { type: 'base64', media_type: mimeType, data: imgBase64 } });
             });
         }
-        content.push({ type: 'text', text: msg.content || '' });
-        entries.push({ value: { role, content }, tokens: estimateTokenCount(msg.content) });
+        const safeText = outgoingHistoryText(msg.content || '', chat);
+        content.push({ type: 'text', text: safeText });
+        entries.push({ value: { role, content }, tokens: estimateTokenCount(safeText) });
     }
 
     const { kept, dropped } = applyHistoryBudget(entries, historyBudget);
@@ -2774,3 +3089,14 @@ function stopStreaming() {
         }, 4000);
     }
 }
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    hashString, renderMessages, showMetricsModal, clearMessageLoadingState,
+    inferMimeTypeFromBase64, normalizeImageMeta, supportsWebGPUImageAssist,
+    analyzeImagesForWebGPUInline, extractGeneratedText, runWebGPUGenerationInline,
+    shouldEmitWebGPUProgress, estimateInstallProgress, buildWebGPURepoUrl, formatErrorDetail,
+    improvePrompt, sendMessage, getPromptTokenBudget, PROJECT_DOCS_BUDGET_RATIO,
+    updateStreamingMessage, stopStreaming,
+};
+/* <<< exports <<< */

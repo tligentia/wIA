@@ -1,3 +1,28 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    renderAnonTypesPanel, updateAnonButtonUI,
+} from './08-anon.js?v=2610.AA';
+import {
+    loadLocalJson,
+} from './01-core.js?v=2610.AA';
+import {
+    saveState, state,
+} from './02-state.js?v=2610.AA';
+import {
+    renderWebGPUMonitor,
+} from './03-webgpu.js?v=2610.AA';
+import {
+    renderChatList, renderWelcomeStarters,
+} from './05-workspace.js?v=2610.AA';
+import {
+    renderMessages,
+} from './06-chat.js?v=2610.AA';
+import {
+    renderDocs,
+} from './10-docs.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 09-i18n.js
    Internacionalización (Español / Inglés)
@@ -81,7 +106,11 @@ function applyI18n(root = document) {
     });
     root.querySelectorAll('[data-i18n-title]').forEach(el => {
         const v = t(el.dataset.i18nTitle, null);
-        if (v !== null && v !== el.dataset.i18nTitle) el.setAttribute('title', v);
+        if (v !== null && v !== el.dataset.i18nTitle) {
+            el.setAttribute('title', v);
+            // Los botones de solo icono llevan aria-label = title: deben traducirse a la vez.
+            if (el.hasAttribute('aria-label')) el.setAttribute('aria-label', v);
+        }
     });
     root.querySelectorAll('[data-i18n-ph]').forEach(el => {
         const v = t(el.dataset.i18nPh, null);
@@ -133,3 +162,9 @@ function refreshLocalizedUI() {
     const sel = document.getElementById('languageSelect');
     if (sel) sel.value = state.settings.language || 'auto';
 }
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    loadTranslations, getLang, t, setLanguage, bindLangSwitch, refreshLocalizedUI,
+};
+/* <<< exports <<< */

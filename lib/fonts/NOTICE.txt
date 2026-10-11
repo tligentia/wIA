@@ -1,0 +1,13 @@
+Tipografías incluidas en wIA
+============================
+
+Inter            — Copyright (c) The Inter Project Authors (https://github.com/rsms/inter)
+JetBrains Mono   — Copyright (c) JetBrains s.r.o. (https://github.com/JetBrains/JetBrainsMono)
+
+Ambas se distribuyen bajo la SIL Open Font License, Version 1.1
+(https://openfontlicense.org), que permite usarlas, copiarlas y redistribuirlas
+—también incrustadas en una aplicación— siempre que se conserve este aviso.
+
+Los ficheros son los subconjuntos «latin» y «latin-ext» (woff2, fuente variable)
+tal como los sirve Google Fonts (fonts.gstatic.com), descargados el 2026-10-09.
+No se han modificado.

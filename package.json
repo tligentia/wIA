@@ -9,6 +9,9 @@
     "check:syntax": "node scripts/check-syntax.mjs",
     "check:handlers": "node scripts/check-handlers.mjs",
     "check:csp": "node scripts/check-csp.mjs",
+    "check:globals": "node scripts/check-globals.mjs",
+    "gen:modules": "node --expose-internals scripts/gen-modules.mjs",
+    "check:modules": "node --expose-internals scripts/gen-modules.mjs --check",
     "check:i18n": "node scripts/check-i18n.js",
     "build:data": "node scripts/build-data-bundle.mjs",
     "check:data": "node scripts/build-data-bundle.mjs --check",
@@ -22,6 +25,16 @@
     "test:providers": "node scripts/test-providers.mjs",
     "test:webgpu": "node scripts/test-webgpu-load.mjs",
     "test:server": "node scripts/test-server.mjs",
-    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:i18n && npm run check:data && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:server"
+    "test:tools": "node scripts/test-tools.mjs",
+    "test:anon-history": "node scripts/test-anon-history.mjs",
+    "test:backup": "node scripts/test-backup.mjs",
+    "test:chat-store": "node scripts/test-chat-store.mjs",
+    "test:protocols": "node scripts/test-protocols.mjs",
+    "test:notify": "node scripts/test-notify.mjs",
+    "test:bump": "node scripts/test-bump.mjs",
+    "test:slash": "node scripts/test-slash.mjs",
+    "test:failover": "node scripts/test-failover.mjs",
+    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:globals && npm run check:modules && npm run check:i18n && npm run check:data && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:tools && npm run test:anon-history && npm run test:backup && npm run test:chat-store && npm run test:protocols && npm run test:notify && npm run test:bump && npm run test:slash && npm run test:failover && npm run test:server",
+    "test:smoke": "node scripts/smoke-browser.mjs"
   }
 }

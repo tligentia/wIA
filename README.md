@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2608.AB)
+# wIA — Multi-Engine AI Chat Interface (v2610.AA)
 
 > **Creado por [Jesús de Pablos](https://jesus.depablos.es)** · Proyecto gratuito y de código abierto · Licencia MIT
 
@@ -46,6 +46,8 @@ Ideado, diseñado y desarrollado por **Jesús de Pablos** — [jesus.depablos.es
 - **🎨 3 Temas Visuales**: Oscuro Premium, Claro Premium y Vanilla (minimalista).
 - **🖼️ Soporte de Imágenes**: Envía imágenes para modelos multimodales (visión).
 - **🔎 Selector de Modelos por Funcionalidades**: El catálogo visual ahora filtra por `Visión`, `Thinking`, `Código`, `Tools`, `Multiidioma`, `Ligero`, `Grande`, `Gratis` y `Experimental`.
+- **🔁 Failover Automático entre Motores**: si el motor elegido falla antes de contestar (cupo agotado, caída, clave rechazada), prueba con otro ya configurado del mismo tipo (nunca de local a cloud ni al revés), pausa el que falló con una escalera de esperas (2 min → 10 min → 1 h → 24 h, o su `Retry-After`) y marca en el mensaje quién contestó. Se activa en Ajustes → Conexión.
+- **🆓 FreeLLMAPI**: la pasarela se ofrece con las estrategias `auto`, `auto:smart`, `auto:fast` y `auto:reliable`, muestra qué proveedor sirvió cada respuesta (`X-Routed-Via`) y localiza sola la pasarela en `:31415` (escritorio) o `:3001` (Docker).
 - **🧩 Alta Manual de Modelos WebGPU**: Puedes pegar directamente un repo o URL de Hugging Face para incorporar un modelo al catálogo WebGPU.
 
 ### Funcionalidades Avanzadas (Nuevas en v2604.BY)
@@ -155,8 +157,18 @@ Integrate) o instalaciones de Ollama sin CORS configurado. Detalles:
 - **Puerto/host configurables**: `PORT=3000 HOST=0.0.0.0 node server.js`.
   Bajo Plesk/Passenger el puerto lo inyecta el propio panel.
 - **Allowlist**: el proxy solo reenvía a hosts conocidos de proveedores de IA
-  y a direcciones privadas (localhost, RFC1918, `.local`). Para añadir otros:
+  y, **en uso local**, a direcciones privadas (localhost, RFC1918, `.local`: tu
+  Ollama o LM Studio). Para añadir otros:
   `CORS_PROXY_ALLOW="mi-host.com,otro.com" node server.js`.
+- **Con dominio propio, lo privado queda cerrado**: si arrancas con
+  `ALLOWED_HOSTS` o `TRUST_PROXY`, el proxy deja de alcanzar `127.0.0.1` y la red
+  privada del servidor (cualquiera que llegue por HTTP, no solo un navegador con
+  la app, podría usarlo como SSRF hacia el interior). Si de verdad lo necesitas:
+  `PROXY_ALLOW_PRIVATE=1`.
+- **Caché y compresión**: los estáticos llevan `ETag` (un fichero sin cambios
+  responde 304), `Cache-Control: no-cache` —`max-age` de un día para `lib/`— y se
+  comprimen con brotli/gzip (JS, CSS, JSON y WASM) cacheando el resultado en
+  memoria. Solo se admiten `GET` y `HEAD`.
 - **Solo atiende a la propia app**: el proxy rechaza peticiones cuyo `Host` no
   sea `localhost`, una IP o un dominio declarado (frena el *DNS rebinding*), y
   las que el navegador marca como ajenas (`Sec-Fetch-Site`). Si lo publicas con
@@ -233,8 +245,8 @@ cada modelo que uses.
 wIA/
 ├── index.html            # Estructura HTML principal
 ├── js/                   # Lógica de la app, dividida por dominios
-│   │                     # (scripts clásicos con ámbito global compartido;
-│   │                     #  el orden de carga en index.html importa)
+│   │                     # (módulos ES reales; sus import/export los genera
+│   │                     #  `npm run gen:modules`; el punto de entrada es main.js)
 │   ├── 01-core.js        #   Interceptor CORS, utilidades, saneado HTML,
 │   │                     #   registro de proveedores y catálogo WebGPU
 │   ├── 02-state.js       #   Estado global, referencias DOM, init,
@@ -243,8 +255,9 @@ wIA/
 │   │                     #   cliente del worker y despachadores
 │   ├── 04-providers.js   #   Conexión a proveedores y gestión de modelos
 │   ├── 05-workspace.js   #   PDF, documentos, adjuntos, proyectos y chats
-│   ├── 06-chat.js        #   Render de mensajes y streaming multi-protocolo
-│   └── 07-ui.js          #   Bindings, atajos, voz, exportación y arranque
+│   ├── 06-chat.js        #   Render de mensajes y un turno por protocolo
+│   │                     #   (streamOllama/OpenAI/Gemini/Anthropic, runWebGPUTurn)
+│   └── 07-ui.js          #   Bindings, atajos, voz, copias, accesibilidad, arranque
 ├── webgpu-worker.js      # Web Worker de inferencia (Transformers.js fuera
 │                         # del hilo principal; fallback automático a inline)
 ├── server.js             # Servidor estático + proxy CORS con allowlist
@@ -252,6 +265,8 @@ wIA/
 │                         #  funciona en hosting estático puro)
 ├── styles.css            # Sistema de diseño Antigravity (3 temas)
 ├── secure-gate.js        # Bloqueo local opcional por PIN
+├── portal-loader.js      # Carga la barra del portal solo si existe (../portal-nav.js)
+├── scripts/              # Comprobaciones y pruebas (npm test) y prueba en Chrome real
 ├── favicon.png           # Logotipo oficial de wIA
 ├── lib/                  # Dependencias locales (PDF.js)
 └── README.md             # Esta documentación
@@ -265,8 +280,11 @@ pueda romper la app ni inyectar código:
 - **[Marked.js](https://marked.js.org/) v15.0.12** (con SRI) — Renderizado de Markdown
 - **[Highlight.js](https://highlightjs.org/) v11.9.0** (con SRI) — Resaltado de sintaxis de código
 - **[Transformers.js](https://huggingface.co/docs/transformers.js/) v3.8.1** — Inferencia local WebGPU/WASM en navegador
-- **[Inter Font](https://fonts.google.com/specimen/Inter)** — Tipografía principal
-- **[JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono)** — Tipografía monoespaciada
+
+Las tipografías **ya no se piden a Google Fonts**: Inter y JetBrains Mono se
+sirven desde `lib/fonts/` (subconjuntos latin y latin-ext, fuente variable,
+licencia OFL; ver `lib/fonts/NOTICE.txt`). No se envía la IP del usuario a un
+tercero en cada carga y funciona sin conexión.
 
 ### Dependencias Locales
 - **[PDF.js](https://mozilla.github.io/pdf.js/)** — Extracción de texto de PDFs (100% local)
@@ -350,6 +368,17 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🕶️ **Qué se ha anonimizado, a la vista (v2610.AA)**: la insignia «N datos sensibles protegidos» de los mensajes con anonimización es ahora un **desplegable** (⌄): al pulsarla lista cada marcador con el valor real que ocultaba (`[DNI_001] → 12345678Z`), sin repetidos, y otro clic la vuelve a colapsar. Usa `<details>` nativo (accesible por teclado) y los valores salen del mapa cifrado del chat, solo en pantalla: lo que se envía a la IA no cambia. Mientras el mapa aún no está descifrado se ve la insignia simple de antes.
+- 🛠️ **Revisión general: fallos reales, privacidad y base de pruebas (v2610.AA)**. Salió de un análisis completo de la app; cada punto lleva su prueba.
+  - **La búsqueda web ya termina.** Cuando el modelo pedía buscar en Internet, la continuación se lanzaba con la generación aún activa y `sendMessage` salía en su primera línea: la respuesta no llegaba nunca y el chat se quedaba «generando». Ahora la continuación es una re-entrada explícita con **tope de 3 vueltas** por turno, respeta «Detener» y, con OpenAI/Groq/OpenRouter…, la llamada lleva `id`/`type`/argumentos en texto JSON y su respuesta cita `tool_call_id` (antes esos motores la rechazaban con un 400). El recorte de contexto además **conserva entero el último turno** —pregunta, llamada y resultado—, no solo el último mensaje: la segunda petición salía con el resultado de la búsqueda pero sin la pregunta que lo originó.
+  - **Anonimización sin fugas por el historial.** Con 🕶️ activo solo se anonimizaban el mensaje nuevo y el contexto de sistema: lo escrito antes de activarlo, o los datos reales que devolviera el modelo, se reenviaban en claro en cada petición. Ahora todo el historial (y el título automático) pasa por el anonimizador, memorizado por mensaje, y **si el anonimizador no está listo no se envía nada**. Las imágenes no se pueden anonimizar: se pide confirmación antes de enviarlas.
+  - **Proxy cerrado en despliegues públicos.** Con `ALLOWED_HOSTS`/`TRUST_PROXY` el proxy ya no alcanza `127.0.0.1` ni la red privada (un cliente sin navegador lo usaba como SSRF). `PROXY_ALLOW_PRIVATE=1` lo reabre de forma expresa.
+  - **Copia de seguridad portable.** El mapa de marcadores de cada chat va cifrado con la clave de *este* navegador, así que una copia restaurada en otro equipo conservaba los chats pero perdía el modo de revertirlos. Ahora la copia se puede **cifrar con contraseña** (PBKDF2-SHA256 600 000 iteraciones + AES-GCM) y lleva los mapas dentro; sin contraseña sale sin ellos y se avisa. Al importar se valida la forma de lo que viene en el fichero.
+  - **Una conversación = un registro, y varias pestañas sin pisarse.** Antes todo el historial era un único registro cifrado: cada guardado reescribía todo, y dos pestañas se sobrescribían. Ahora cada chat es `chat:<id>`, solo se escribe lo que cambió, el borrado y las escrituras son atómicos y las pestañas se avisan por `BroadcastChannel`. Un chat que no se pueda descifrar no se toca ni se borra. Se migra solo desde el formato anterior.
+  - **Limpieza.** `portal-nav.js` solo se carga si existe; las fuentes se alojan en `lib/fonts/` (adiós Google Fonts, también en la CSP); se escapan las últimas interpolaciones en atributos HTML; estáticos con ETag/304 y brotli/gzip; errores de lectura capturados; `POST` a estáticos → 405.
+  - **Módulos ES reales.** Los 12 ficheros de `js/` son módulos con `import`/`export` de verdad, cargados desde un único punto de entrada (`js/main.js`): modo estricto, ámbito propio —lo interno ya no se filtra al global— y dependencias explícitas (64 entre ficheros, 219 nombres compartidos). Los `import`/`export` **no se escriben a mano**: los calcula `scripts/gen-modules.mjs` con un análisis de ámbitos exacto (acorn, el parser que lleva Node) y los mantiene entre marcadores; `npm run gen:modules` los regenera y `check:modules` (en `npm test`) falla si algo se desfasa. Había ciclos (chat ↔ interfaz ↔ proyectos) y código de arranque que usa lo de otros módulos, así que el **orden de evaluación se conserva** (01 → 12) comprobando que ningún módulo usa al cargar algo de uno posterior y encadenando los imports (el primero de cada módulo es el del anterior; `main.js` importa el último). Un `import` no se puede reasignar, así que se vigila que ningún módulo asigne variables de otro (`stopWebGPUMonitor()` sustituye a la única asignación cruzada). **Las URLs llevan `?v=<versión>`** (imports, `index.html` y precache del SW; `version:bump` lo regenera, `test:bump` lo prueba): sin él, un navegador con el service worker anterior servía el `index.html` nuevo con los JS viejos de su caché y la app no arrancaba la primera vez tras actualizar. Las pruebas cargan el mismo fichero como script clásico en `vm` quitando solo las dos regiones generadas, y también se ejecutan en estricto (`WIA_STRICT=1`). La prueba en Chrome real recorre **103 controles** y falla ante cualquier excepción —la red que cazaría un import ausente—; se comprobó quitando uno a propósito. El análisis destapó además dos fallos que ya existían: un `catch` de WebGPU que usaba un `modelId` declarado dentro del `try` (al fallar la carga de un modelo, el registro del fallo lanzaba `ReferenceError`) y una llamada a un `showStatusMeta` que no existe en ningún sitio (elegir modelo con `//` lanzaba una excepción).
+  - **Mantenibilidad y accesibilidad.** `sendMessage` pasa de 944 a 251 líneas: un turno por protocolo. Avisos no bloqueantes (`notify`) en lugar de `alert()`, manejador global de errores, 40 diálogos con texto fijo ahora traducidos (es/en), los 15 modales declarados como `dialog` con foco que entra, no escapa y vuelve, botones de icono con nombre accesible, anuncio de inicio/fin de respuesta a lectores de pantalla y foco visible por teclado.
+  - **Pruebas.** Nuevas: `test:tools`, `test:anon-history`, `test:backup`, `test:chat-store`, `test:protocols`, `test:notify` y `check:globals` (nombres duplicados entre módulos), `check:modules` y `test:bump`, todas en `npm test`; y `npm run test:smoke`, que abre la app en un **Chrome real** por DevTools (sin dependencias) y comprueba arranque sin errores, diálogos y un turno de chat completo con búsqueda web. La CI lo ejecuta en un job aparte.
 - 🎫 **Suscripción de ChatGPT vía pasarela local (v2608.AB)**: nuevo motor **ChatGPT (suscripción)** que no habla con OpenAI, sino con una pasarela que corre en el equipo del usuario (`npx openai-oauth@latest`, Hermes y similares) y expone la cuenta de ChatGPT como API compatible con OpenAI en `http://127.0.0.1:10531/v1`, sin escribir ninguna clave en wIA. **No se puede hacer el inicio de sesión dentro de la app**: ese flujo es el del cliente Codex de OpenAI, que exige una redirección a `localhost` y llama a un backend sin CORS —una pestaña no puede hacer ninguna de las dos cosas—, y el «Sign in with ChatGPT» oficial para terceros entrega identidad, no acceso de inferencia con el plan del usuario. El diagnóstico del motor explica qué arrancar y advierte de que esas pasarelas son proyectos no oficiales, sujetos a los términos de OpenAI.
 - 🔀 **Motores renombrables, clonables y nuevo backend LocalAI (v2608.AA)**: cualquier motor —de serie o copia— se puede **renombrar** desde Ajustes → Conexión (`✎`); el rótulo se guarda aparte de la configuración, así que vaciando el campo se recupera el de fábrica y quien no lo toque sigue recibiendo los cambios del catálogo. Además, todo motor con endpoint propio se puede **duplicar** (`⧉`), de modo que se pueden tener varias conexiones del mismo tipo —dos Ollama en máquinas distintas, dos claves de OpenRouter— cada una con su URL, credencial, modelo y parámetros memorizados por separado. La copia parte de la configuración que tuviera el original en ese momento, no de los valores de fábrica, que es lo que hace útil clonar. Las copias se eliminan (🗑) sin tocar los motores de serie; al borrar una, los proyectos y agentes que la usaran vuelven a su motor base. Los clones se registran dentro de `PROVIDERS` heredando `type`/`auth` de su original, así que las decisiones que se tomaban por id —cabeceras extra de OpenRouter, tope de tokens de Groq, ayuda de diagnóstico, soporte de herramientas— ahora se resuelven por **motor base** y alcanzan también a las copias. WebGPU queda fuera: corre dentro de la propia pestaña y dos entradas compartirían runtime. Se añade además **LocalAI** al catálogo (API compatible con OpenAI, `:8080/v1`, clave opcional) por delante de Groq, con su propio diagnóstico de CORS. Los diálogos de duplicar, renombrar y eliminar son **propios de la app**, no `prompt()`/`confirm()`: el navegador los ignora sin avisar cuando la página va embebida en un iframe sin `allow-modals` (el portal) o si alguna vez se marcó «impedir que esta página cree más diálogos», y el botón parecía muerto. Los motores comerciales siguen llegando con la URL del proveedor puesta, y ahora, cuando se cambia o se borra, el campo **propone el endpoint oficial** con un clic para restaurarlo (Ollama remoto no propone nada: ahí el host lo pone el usuario). **Inicio de sesión OAuth (PKCE) en OpenRouter**: en lugar de pegar una API Key se puede pulsar «Conectar con OpenRouter», autorizar en su web y volver con una clave propia de la cuenta, que entra directa en la bóveda cifrada; la contraseña nunca pasa por wIA. Se eligió OpenRouter porque es el único proveedor del catálogo con un OAuth utilizable desde una app estática sin registrar un cliente por despliegue: **OpenAI, Anthropic, Groq y Nvidia no publican OAuth** para que un tercero llame a su API de inferencia, y **Gemini** exige registrar un `client_id` en Google Cloud con el dominio de retorno declarado. El botón solo aparece donde el flujo existe de verdad. Nueva prueba `test:providers` con 54 comprobaciones sobre renombrado, clonado, aislamiento de configuración, borrado y persistencia.
 - ⚡ **Runtime de inferencia auto-alojado con respaldo al CDN (v2607.BG)**: `transformers.min.js` y el backend WebGPU de onnxruntime (`lib/ort/*.mjs` + `.wasm`) pasan a servirse **desde el propio origen** en lugar de jsDelivr. Se elimina la resolución DNS + TLS + descarga de ~21 MB contra un tercero en cada primer uso, y —gracias a COOP/COEP— el binario llega ya en el mismo contexto aislado. Medido en local: **5,9 s frente a 9,2 s** de carga de modelo. **Sistema de respaldo en dos niveles**: antes de importar nada, `resolveTransformersSources()` sondea con `HEAD` el módulo local y los dos ficheros de `lib/ort/`, comprobando además que el `.mjs` se sirva con MIME de JavaScript (con `nosniff`, un `application/octet-stream` haría que el navegador rechazara el módulo y WebGPU se quedara sin backend); si algo falta o responde mal, se cae al CDN, y el origen resultante puede ser `local`, `mixto` o `cdn`. Si aun así el `import()` local fallara, se reintenta contra el CDN y se recuerda esa decisión. La misma lógica está replicada en el Web Worker. Se añade el MIME `.mjs` en `server.js` y `.htaccess`. Cobertura nueva en `test:webgpu` para los seis escenarios de respaldo. El service worker **precachea `transformers.min.js`** (868 KB) porque Chrome no intercepta el módulo de entrada que importa un worker, y deja los ~21 MB del `.wasm` al cacheo bajo demanda.

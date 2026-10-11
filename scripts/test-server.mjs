@@ -189,6 +189,38 @@ const raw = (path, headers, opts) => rawRequest(PORT, path, headers, opts);
     await new Promise(r => upstream.close(r));
 }
 
+// 11a. Estáticos: caché, compresión y métodos
+{
+    const { readFileSync } = await import('node:fs');
+    const original = readFileSync('js/01-core.js', 'utf8');
+    let r = await fetch(`${base}/js/01-core.js`, { headers: { 'accept-encoding': 'br' } });
+    const body = await r.text();
+    check('el JS sale comprimido con brotli', r.headers.get('content-encoding') === 'br', String(r.headers.get('content-encoding')));
+    check('y descomprime al original', body === original);
+    check('con Vary: Accept-Encoding', /accept-encoding/i.test(r.headers.get('vary') || ''));
+    const etag = r.headers.get('etag');
+    check('lleva ETag', !!etag, String(etag));
+    check('y se revalida siempre (no-cache)', /no-cache/.test(r.headers.get('cache-control') || ''), String(r.headers.get('cache-control')));
+    r = await fetch(`${base}/js/01-core.js`, { headers: { 'if-none-match': etag } });
+    check('un fichero sin cambios responde 304', r.status === 304, `status ${r.status}`);
+    r = await fetch(`${base}/js/01-core.js`, { headers: { 'accept-encoding': 'gzip' } });
+    check('gzip si el cliente no admite brotli', r.headers.get('content-encoding') === 'gzip', String(r.headers.get('content-encoding')));
+    r = await fetch(`${base}/js/01-core.js`, { headers: { 'accept-encoding': 'identity' } });
+    check('sin compresión si el cliente no la admite', !r.headers.get('content-encoding') && (await r.text()) === original);
+    r = await fetch(`${base}/lib/marked.min.js`);
+    check('las librerías de lib/ se reutilizan un día', /max-age=86400/.test(r.headers.get('cache-control') || ''), String(r.headers.get('cache-control')));
+    r = await fetch(`${base}/lib/fonts/inter-latin.woff2`);
+    check('las fuentes woff2 se sirven con su tipo', r.headers.get('content-type') === 'font/woff2' && (await r.arrayBuffer()).byteLength > 10000, String(r.headers.get('content-type')));
+    r = await fetch(`${base}/sw.js`);
+    check('el service worker nunca se cachea', /no-cache/.test(r.headers.get('cache-control') || '') && !/max-age/.test(r.headers.get('cache-control') || ''));
+    r = await fetch(`${base}/index.html`, { method: 'POST' });
+    check('POST a un estático → 405', r.status === 405, `status ${r.status}`);
+    r = await fetch(`${base}/index.html`, { method: 'HEAD' });
+    check('HEAD funciona y no trae cuerpo', r.status === 200 && (await r.text()) === '');
+    r = await fetch(`${base}/lib/ort/ort-wasm-simd-threaded.jsep.wasm`, { headers: { 'accept-encoding': 'identity' } });
+    check('el wasm se sirve con su tipo', r.headers.get('content-type') === 'application/wasm', String(r.headers.get('content-type')));
+}
+
 // 11b. Acceso directo al anonimizador
 {
     let r = await raw('/anon');
@@ -216,7 +248,37 @@ const raw = (path, headers, opts) => rawRequest(PORT, path, headers, opts);
     check('con TRUST_PROXY se atiende X-Forwarded-Host', r.status === 204, `status ${r.status}`);
     r = await rawRequest(PORT2, '/cors-proxy?health=1', { Host: 'otro.example' });
     check('y sigue rechazando dominios no declarados', r.status === 403, `status ${r.status}`);
+
+    // El SSRF que importa en un despliegue público: un cliente sin navegador
+    // (curl) que pone el Host correcto y pide un servicio interno.
+    const INNER = PORT + 3;
+    const inner = http.createServer((q, s) => s.end('SECRETO-INTERNO'));
+    await new Promise(res => inner.listen(INNER, '127.0.0.1', res));
+    const target = (u) => `/cors-proxy?url=${encodeURIComponent(u)}`;
+    r = await rawRequest(PORT2, target(`http://127.0.0.1:${INNER}/admin`), { Host: 'wia.example' });
+    check('con dominio propio, el proxy NO llega a 127.0.0.1', r.status === 403 && !String(r.body).includes('SECRETO'), `status ${r.status}`);
+    r = await rawRequest(PORT2, target('http://192.168.1.1/'), { Host: 'wia.example' });
+    check('ni a la red privada (RFC1918)', r.status === 403, `status ${r.status}`);
+    r = await rawRequest(PORT2, target('http://localhost:' + INNER + '/'), { Host: 'wia.example' });
+    check('ni por el nombre localhost', r.status === 403, `status ${r.status}`);
+    r = await rawRequest(PORT2, target('http://2130706433:' + INNER + '/'), { Host: 'wia.example' });
+    check('ni con la IP en decimal (2130706433)', r.status === 403, `status ${r.status}`);
+    r = await rawRequest(PORT2, target(`http://[::ffff:127.0.0.1]:${INNER}/`), { Host: 'wia.example' });
+    check('ni con IPv6 mapeada', r.status === 403, `status ${r.status}`);
     child2.kill();
+
+    // PROXY_ALLOW_PRIVATE=1 lo reabre de forma expresa
+    const PORT3 = PORT + 4;
+    const child3 = spawn(process.execPath, ['server.js'], {
+        cwd: process.cwd(),
+        env: { ...process.env, PORT: String(PORT3), HOST: '127.0.0.1', ALLOWED_HOSTS: 'wia.example', PROXY_ALLOW_PRIVATE: '1' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    await wait(900);
+    r = await rawRequest(PORT3, target(`http://127.0.0.1:${INNER}/admin`), { Host: 'wia.example' });
+    check('PROXY_ALLOW_PRIVATE=1 lo reabre a propósito', r.status === 200 && String(r.body).includes('SECRETO'), `status ${r.status}`);
+    child3.kill();
+    await new Promise(res => inner.close(res));
 }
 
 child.kill();

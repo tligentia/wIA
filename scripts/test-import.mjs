@@ -13,9 +13,10 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { resolve } from 'node:path';
 import { webcrypto } from 'node:crypto';
+import { classicSource } from './lib/generated-blocks.mjs';
 
 const root = process.cwd();
-const read = (p) => readFileSync(resolve(root, p), 'utf8');
+const read = (p) => classicSource(readFileSync, resolve(root, p));
 
 const noopEl = () => ({
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },

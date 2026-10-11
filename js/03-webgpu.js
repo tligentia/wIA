@@ -1,3 +1,26 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    dom, state, updateStatusMeta,
+} from './02-state.js?v=2610.AA';
+import {
+    WEBGPU_MODELS, _transformersSources, escapeHtml, getVisionAssistDef, importTransformers,
+    isRetryableWebGPULoadError, notify, trf, webgpuDtypeCandidates,
+} from './01-core.js?v=2610.AA';
+import {
+    populateModels,
+} from './04-providers.js?v=2610.AA';
+import {
+    analyzeImagesForWebGPUInline, buildWebGPURepoUrl, clearMessageLoadingState,
+    estimateInstallProgress, extractGeneratedText, formatErrorDetail, inferMimeTypeFromBase64,
+    normalizeImageMeta, runWebGPUGenerationInline, shouldEmitWebGPUProgress, stopStreaming,
+    updateStreamingMessage,
+} from './06-chat.js?v=2610.AA';
+import {
+    t,
+} from './09-i18n.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 03-webgpu.js
    Runtime WebGPU: caché, soporte, carga inline, worker client y despachadores
@@ -87,13 +110,19 @@ function _fmtBytes(mb) {
 
 let _webgpuMonitorTimer = null;
 
+/** Detiene el refresco en vivo del monitor (lo usa también 02-state al cambiar de motor). */
+function stopWebGPUMonitor() {
+    clearInterval(_webgpuMonitorTimer);
+    _webgpuMonitorTimer = null;
+}
+
 async function renderWebGPUMonitor() {
     const grid = document.getElementById('webgpuMonitorGrid');
     if (!grid) return;
     const panel = document.getElementById('webgpuInfoPanel');
     // Si el panel no está visible, detener el refresco en vivo
     if (!panel || panel.style.display === 'none') {
-        clearInterval(_webgpuMonitorTimer); _webgpuMonitorTimer = null;
+        stopWebGPUMonitor();
         return;
     }
 
@@ -272,7 +301,7 @@ async function _scanCachedWebGPUModels() {
 }
 
 async function deleteWebGPUModelCache(modelId) {
-    if (!confirm(`¿Estás seguro de que quieres borrar de la caché de tu navegador los archivos de ${modelId}? Se descargarán de nuevo cuando lo utilices.`)) {
+    if (!confirm(trf('dlg.cache.confirmDelete', '¿Estás seguro de que quieres borrar de la caché de tu navegador los archivos de {p0}? Se descargarán de nuevo cuando lo utilices.', { p0: modelId }))) {
         return false;
     }
     try {
@@ -311,7 +340,7 @@ async function deleteWebGPUModelCache(modelId) {
         return true;
     } catch (e) {
         console.error('[WebGPU] Failed to delete model cache:', e);
-        alert('Error al borrar los archivos de la caché.');
+        notify(trf('dlg.cache.deleteError', 'Error al borrar los archivos de la caché.'), 'error');
         return false;
     }
 }
@@ -1616,3 +1645,17 @@ async function analyzeImagesForWebGPU(imageMetaList = [], onProgress, userPrompt
     }
     return analyzeImagesForWebGPUInline(imageMetaList, onProgress, userPrompt);
 }
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    webgpuState, releaseWebGPUMemory, stopWebGPUMonitor, renderWebGPUMonitor,
+    startWebGPUMonitor, renderVisionChain, invalidateWebGPUCacheScan, getCachedWebGPUModels,
+    deleteWebGPUModelCache, checkWebGPUSupport, scheduleWebGPUPriming, configureOnnxRuntime,
+    loadWebGPUImageAssistPipeline, loadFlorence2VisionModel, runFlorence2Analysis,
+    loadVLMVisionModel, runVLMAnalysis, loadWoundClassifier, runWoundClassify,
+    formatWoundResult, loadDinoMedicalVisionModel, runDinoMedicalEmbedding, webgpuWorker,
+    updateGenerationStatus, WEBGPU_LOOP_STOP_NOTE, maybeStopRepetitionLoop,
+    splitWebGPUThinking, applyWebGPUStreamedText, loadWebGPUModel, warmUpActiveWebGPUModel,
+    runWebGPUGeneration, analyzeImagesForWebGPU,
+};
+/* <<< exports <<< */

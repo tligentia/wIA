@@ -1,6 +1,9 @@
 # Ejecuta la suite de comprobaciones de wIA en cada push y pull request.
-# Son pruebas puras de Node (sin dependencias ni navegador), así que el job
-# es rápido y no necesita instalar nada: el proyecto no tiene node_modules.
+# `test` son pruebas puras de Node (sin dependencias ni navegador): rápidas y sin
+# instalar nada, porque el proyecto no tiene node_modules. `smoke` abre la app en
+# un Chrome real (el que ya trae ubuntu-latest) y comprueba lo que un DOM
+# simulado no puede ver: carga de scripts, CSP, foco de diálogos y un turno de chat.
+
 name: CI
 
 on:
@@ -11,14 +14,31 @@ on:
 
 jobs:
   test:
-    name: Comprobaciones (sintaxis, CSP, i18n, arranque, RAG, WebGPU, servidor)
+    name: Comprobaciones (sintaxis, CSP, i18n, arranque, RAG, WebGPU, servidor, almacén)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: el WebSocket nativo que usa la prueba de navegador y fetch con
+      # cabeceras de compresión necesitan una versión reciente.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: npm test
+        run: npm test
+
+  smoke:
+    name: Prueba de humo en Chrome real
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
-      - name: npm test
-        run: npm test
+      - name: Prueba de humo
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: npm run test:smoke

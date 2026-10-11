@@ -1,3 +1,30 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    checkWebGPUSupport, deleteWebGPUModelCache, getCachedWebGPUModels,
+    invalidateWebGPUCacheScan, releaseWebGPUMemory, warmUpActiveWebGPUModel, webgpuState,
+    webgpuWorker,
+} from './03-webgpu.js?v=2610.AA';
+import {
+    MODEL_FILTER_ORDER, MODEL_FUNCTION_DEFS, PROVIDERS, TRANSFORMERS_VERSION,
+    UNCENSORED_NAME_HINTS, WEBGPU_BROKEN_MODELS, WEBGPU_MODELS, createPkceChallenge,
+    createPkceVerifier, describeWebGPULoadFailure, escapeHtml, getProviderBaseId,
+    getProviderOAuth, getVisionAssistDef, getWebGPUBrokenInfo, notify, tr, trf,
+} from './01-core.js?v=2610.AA';
+import {
+    applySettingsToUI, dom, getActiveProviderConfig, getAuthHeaders, getProviderDef,
+    getProviderLocality, isIncognitoMode, renderProviderOptions, saveState, state,
+    syncProviderToState, updateInputDisclaimer, updateModelContextIndicator,
+    updateSettingsActiveContext, updateStatusMeta,
+} from './02-state.js?v=2610.AA';
+import {
+    renderAttachmentPreview,
+} from './05-workspace.js?v=2610.AA';
+import {
+    supportsWebGPUImageAssist,
+} from './06-chat.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 04-providers.js
    Conexión a proveedores, metadatos de modelos y gestión de modelos Ollama
@@ -17,7 +44,19 @@ async function providerHttpError(response) {
             if (text && text.length < 240) detail = text;
         } catch (_) {}
     }
-    return new Error(`${response.status}: ${detail}`);
+    const error = new Error(`${response.status}: ${detail}`);
+    error.status = response.status;
+    error.retryAfterMs = parseRetryAfter(response.headers?.get?.('retry-after'));
+    return error;
+}
+
+// «Retry-After» llega en segundos o como fecha HTTP. 0 = no informado.
+function parseRetryAfter(value, now = Date.now()) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 0;
+    if (/^\d+(\.\d+)?$/.test(raw)) return Math.max(0, Math.round(parseFloat(raw) * 1000));
+    const when = Date.parse(raw);
+    return Number.isFinite(when) ? Math.max(0, when - now) : 0;
 }
 
 function describeConnectionError(error) {
@@ -48,6 +87,330 @@ function describeConnectionError(error) {
         };
     }
     return { code: 'provider', message: raw.slice(0, 180), status: 'Desconectado' };
+}
+
+// ─── Resiliencia entre motores (failover y pausas) ──────────────
+/**
+ * Lo que sigue es el núcleo —no el servidor— de lo que hace una pasarela como
+ * FreeLLMAPI: clasificar un fallo, poner en pausa el motor que lo causó con una
+ * escalera de esperas y escoger otro motor ya configurado. Son funciones sin
+ * red ni DOM para poder probarlas con reloj inyectado.
+ *
+ * Qué NO hace, a propósito:
+ *  · Nunca cruza de local a cloud ni al revés: una consulta que iba a un Ollama
+ *    de tu equipo no acaba en un tercero porque este se haya caído.
+ *  · Nunca salta a WebGPU (descargaría cientos de MB sin avisar).
+ *  · No reintenta una vez ha empezado a llegar texto: duplicaría o mezclaría
+ *    respuestas. Solo cubre fallos de conexión/cupo ANTES del primer token.
+ */
+const ENGINE_COOLDOWN_LADDER_MS = [2 * 60e3, 10 * 60e3, 60 * 60e3, 24 * 60 * 60e3];
+const ENGINE_COOLDOWN_WINDOW_MS = 24 * 60 * 60e3;   // los fallos solo escalan dentro de 24 h
+const ENGINE_COOLDOWN_TRANSIENT_MS = 90e3;           // 5xx, red y timeouts: no escalan
+const ENGINE_COOLDOWN_AUTH_MS = 10 * 60e3;           // clave rechazada o modelo inexistente
+const ENGINE_COOLDOWN_CREDIT_MS = 60 * 60e3;         // sin saldo: no se arregla en minutos
+const ENGINE_COOLDOWN_LOCAL_MS = 5e3;                // motor propio: se recupera enseguida
+const ENGINE_COOLDOWN_MAX_MS = 24 * 60 * 60e3;
+const ENGINE_COOLDOWN_STORAGE_KEY = 'wia_engine_cooldowns';
+const FAILOVER_MAX_HOPS = 2;                         // motores alternativos por mensaje
+
+let _engineCooldowns = null;
+
+/**
+ * classifyEngineFailure — qué ha pasado y si merece probar con otro motor.
+ *
+ * `retryable` = otro motor podría contestar a la MISMA petición. Un 400/413/422
+ * no lo es (la petición en sí es mala), y un error desconocido tampoco: ante la
+ * duda se muestra el error en vez de reenviar el mensaje a un tercero.
+ */
+function classifyEngineFailure(error) {
+    const raw = String(error?.message || error || '');
+    let status = Number(error?.status) || 0;
+    if (!status) {
+        const m = /^(?:error:\s*)?([45]\d\d)\b/i.exec(raw.trim());
+        if (m) status = Number(m[1]);
+    }
+    const retryAfterMs = Math.max(0, Number(error?.retryAfterMs) || 0);
+    const out = (kind, retryable) => ({ kind, retryable, status, retryAfterMs });
+
+    if (status === 429) return out('rate_limit', true);
+    if (status === 402) return out('credit', true);
+    if (status === 401 || status === 403) return out('auth', true);
+    if (status === 404) return out('model', true);
+    if (status === 408 || status === 425) return out('timeout', true);
+    if (status >= 500) return out('server', true);
+    if (status >= 400) return out('client', false);
+
+    const low = raw.toLowerCase();
+    if (error?.name === 'TimeoutError' || low.includes('timed out') || low.includes('timeout')) return out('timeout', true);
+    if (low.includes('failed to fetch') || low.includes('networkerror') || low.includes('network error')
+        || low.includes('econnrefused') || low.includes('proxy error') || low.includes('load failed')) return out('network', true);
+    return out('unknown', false);
+}
+
+function _engineCooldownStore() {
+    if (_engineCooldowns) return _engineCooldowns;
+    _engineCooldowns = {};
+    try {
+        const saved = JSON.parse(localStorage.getItem(ENGINE_COOLDOWN_STORAGE_KEY) || '{}');
+        if (saved && typeof saved === 'object') _engineCooldowns = saved;
+    } catch (_) { /* sin almacenamiento: solo en memoria */ }
+    return _engineCooldowns;
+}
+
+function _persistEngineCooldowns() {
+    // En incógnito no se deja rastro de qué motores se han usado.
+    if (typeof isIncognitoMode === 'function' && isIncognitoMode()) return;
+    try { localStorage.setItem(ENGINE_COOLDOWN_STORAGE_KEY, JSON.stringify(_engineCooldownStore())); } catch (_) {}
+}
+
+// El 404 «modelo no encontrado» pausa solo ese modelo; el resto, el motor entero.
+function _engineCooldownKey(providerId, model, kind) {
+    return kind === 'model' ? `${providerId}|${model || ''}` : providerId;
+}
+
+function _isLocalEngine(providerId) {
+    const cfg = state.settings.providerConfigs?.[providerId] || {};
+    return getProviderLocality(providerId, cfg.url || getProviderDef(providerId)?.defaultUrl || '').mode === 'local';
+}
+
+/**
+ * markEngineFailure — anota el fallo y devuelve hasta cuándo queda en pausa.
+ *
+ *  · 429/402 sin «Retry-After»: escalera 2 min → 10 min → 1 h → 24 h dentro de
+ *    una ventana móvil de 24 h.
+ *  · Con «Retry-After»: se obedece (es un dato, no una suposición) y no escala.
+ *  · 5xx / red / timeout: 90 s fijos, no escalan.
+ *  · Motor local (localhost, red privada): 5 s, sin escalar.
+ */
+function markEngineFailure(providerId, model, failure, now = Date.now()) {
+    // Una petición mala (400/413/422) o un error que no se entiende no dice nada
+    // de la salud del motor: pausarlo castigaría al motor por culpa del mensaje.
+    if (!providerId || !failure || !failure.retryable) return { key: '', until: now, ms: 0 };
+    const store = _engineCooldownStore();
+    const key = _engineCooldownKey(providerId, model, failure.kind);
+    const entry = store[key] || { hits: [], until: 0, kind: '' };
+    entry.hits = (entry.hits || []).filter(t => now - t < ENGINE_COOLDOWN_WINDOW_MS);
+
+    let ms;
+    if (_isLocalEngine(providerId)) {
+        ms = ENGINE_COOLDOWN_LOCAL_MS;
+    } else if (failure.retryAfterMs > 0 && (failure.kind === 'rate_limit' || failure.kind === 'credit' || failure.kind === 'server')) {
+        ms = Math.min(Math.max(failure.retryAfterMs, 5e3), ENGINE_COOLDOWN_MAX_MS);
+    } else if (failure.kind === 'rate_limit' || failure.kind === 'credit') {
+        entry.hits.push(now);
+        ms = ENGINE_COOLDOWN_LADDER_MS[Math.min(entry.hits.length, ENGINE_COOLDOWN_LADDER_MS.length) - 1];
+        if (failure.kind === 'credit') ms = Math.max(ms, ENGINE_COOLDOWN_CREDIT_MS);
+    } else if (failure.kind === 'auth' || failure.kind === 'model') {
+        ms = ENGINE_COOLDOWN_AUTH_MS;
+    } else {
+        ms = ENGINE_COOLDOWN_TRANSIENT_MS;
+    }
+    entry.until = now + ms;
+    entry.kind = failure.kind;
+    store[key] = entry;
+    _persistEngineCooldowns();
+    return { key, until: entry.until, ms };
+}
+
+// Un éxito borra la pausa y la escalera: el motor vuelve a estar sano.
+function markEngineSuccess(providerId, model) {
+    const store = _engineCooldownStore();
+    let changed = false;
+    for (const key of [providerId, `${providerId}|${model || ''}`]) {
+        if (store[key]) { delete store[key]; changed = true; }
+    }
+    if (changed) _persistEngineCooldowns();
+}
+
+/** Milisegundos de pausa que le quedan a un motor (0 = disponible). */
+function getEngineCooldown(providerId, model, now = Date.now()) {
+    const store = _engineCooldownStore();
+    const until = Math.max(
+        store[providerId]?.until || 0,
+        store[`${providerId}|${model || ''}`]?.until || 0,
+    );
+    return Math.max(0, until - now);
+}
+
+function clearEngineCooldowns() {
+    _engineCooldowns = {};
+    _persistEngineCooldowns();
+}
+
+function _engineIsUsable(providerId) {
+    const def = getProviderDef(providerId);
+    if (!def || def.type === 'webgpu') return false;
+    const cfg = state.settings.providerConfigs?.[providerId] || {};
+    if (!(cfg.url || def.defaultUrl)) return false;
+    if (def.auth === 'apikey') return !!cfg.apiKey;
+    return true;
+}
+
+/**
+ * getFailoverCandidates — motores alternativos para una petición, por orden.
+ *
+ * Mismo tipo de ejecución que el motor de origen (local↔local, cloud↔cloud),
+ * con credenciales o sin ellas si no las necesita, fuera de pausa y sin los ya
+ * probados. Orden: los que respondieron bien hace poco, luego favoritos, luego
+ * uso reciente y por último el resto. El modelo es el último que funcionó en
+ * ese motor, o el que tiene configurado.
+ */
+function getFailoverCandidates(primaryId, { exclude = [], now = Date.now() } = {}) {
+    const primaryCfg = state.settings.providerConfigs?.[primaryId] || {};
+    const wantMode = getProviderLocality(primaryId, primaryCfg.url || getProviderDef(primaryId)?.defaultUrl || '').mode;
+    const skip = new Set([primaryId, ...exclude.map(e => (typeof e === 'string' ? e : e?.provider))]);
+    const history = Array.isArray(state.settings.modelSuccessHistory) ? state.settings.modelSuccessHistory : [];
+    const favorites = Array.isArray(state.settings.favoriteProviders) ? state.settings.favoriteProviders : [];
+    const usage = Array.isArray(state.settings.providerUsageHistory) ? state.settings.providerUsageHistory : [];
+    const rank = (list, id) => { const i = list.indexOf(id); return i < 0 ? 1e6 : i; };
+
+    return Object.keys(PROVIDERS)
+        .filter(id => !skip.has(id) && _engineIsUsable(id))
+        .map((id, order) => {
+            const cfg = state.settings.providerConfigs?.[id] || {};
+            const def = getProviderDef(id);
+            const url = cfg.url || def.defaultUrl || '';
+            const learned = history.find(e => e.provider === id)?.model;
+            const model = learned || cfg.model || def.defaultModel || '';
+            const seen = state.providerAvailability?.[id];
+            const recentlyDown = seen && (seen.status === 'unavailable' || seen.status === 'error')
+                && now - (seen.checkedAt || 0) < 10 * 60e3;
+            return {
+                provider: id, model, order,
+                mode: getProviderLocality(id, url).mode,
+                paused: getEngineCooldown(id, model, now) > 0,
+                down: !!recentlyDown,
+                score: [history.findIndex(e => e.provider === id) < 0 ? 1e6 : history.findIndex(e => e.provider === id),
+                        rank(favorites, id), rank(usage, id), order],
+            };
+        })
+        .filter(c => c.model && c.mode === wantMode && !c.paused && !c.down)
+        .sort((a, b) => {
+            for (let i = 0; i < a.score.length; i++) if (a.score[i] !== b.score[i]) return a.score[i] - b.score[i];
+            return 0;
+        })
+        .map(({ provider, model }) => ({ provider, model }));
+}
+
+/**
+ * withEngineOverride — ejecuta `fn` con OTRO motor activo y lo deja todo como
+ * estaba. Los constructores de petición leen state.settings (URL, clave,
+ * modelo), así que se cambian de forma temporal; saveState usa la instantánea
+ * (state._engineOverride) para no guardar nunca el motor provisional.
+ */
+async function withEngineOverride(providerId, model, fn) {
+    const keys = ['provider', 'ollamaUrl', 'model', 'apiKey', 'temperature', 'topP', 'topK', 'maxTokens'];
+    const snapshot = {};
+    keys.forEach(k => { snapshot[k] = state.settings[k]; });
+    state._engineOverride = snapshot;
+    try {
+        state.settings.provider = providerId;
+        syncProviderToState();
+        if (model) state.settings.model = model;
+        updateStatusMeta();
+        return await fn();
+    } finally {
+        keys.forEach(k => { state.settings[k] = snapshot[k]; });
+        state._engineOverride = null;
+        updateStatusMeta();
+    }
+}
+
+/**
+ * describeChatFailure — texto del error de un envío, según lo que ha pasado.
+ * Antes todo error decía «verifica la API Key», incluso un 429 de cuota.
+ * `hops` son los motores ya probados antes de rendirse.
+ */
+function describeChatFailure(error, providerName, hops = []) {
+    const failure = classifyEngineFailure(error);
+    const detail = String(error?.message || error || '').replace(/^(?:error:\s*)?[45]\d\d:?\s*/i, '').slice(0, 300);
+    const wait = failure.retryAfterMs > 0 ? Math.max(1, Math.round(failure.retryAfterMs / 1000)) : 0;
+    const tried = hops.length
+        ? `\n\n*${tr('chat.failover.tried', 'Motores probados')}: ${hops.map(h => `${h.provider}${h.status ? ` (${h.status})` : ''}`).join(', ')}.*`
+        : '';
+    let head;
+    switch (failure.kind) {
+        case 'rate_limit':
+            head = `⚠️ **${trf('chat.err.rate', 'Cupo agotado en {name}', { name: providerName })}**\n\n`
+                + (wait ? `${trf('chat.err.rateWait', 'Puedes reintentar en unos {s} s.', { s: wait })} ` : '')
+                + tr('chat.err.rateHint', 'Elige otro motor o activa el failover automático en Ajustes para que wIA lo haga solo.');
+            break;
+        case 'credit':
+            head = `⚠️ **${trf('chat.err.credit', '{name} no tiene saldo o créditos', { name: providerName })}**\n\n`
+                + tr('chat.err.creditHint', 'Revisa el plan de la cuenta o cambia de motor.');
+            break;
+        case 'auth':
+            head = `⚠️ **${trf('chat.err.auth', '{name} ha rechazado las credenciales', { name: providerName })}**\n\n`
+                + tr('chat.err.authHint', 'Comprueba que la API Key es de este motor, que no ha caducado y que tiene permisos.');
+            break;
+        case 'model':
+            head = `⚠️ **${trf('chat.err.model', '{name} no encuentra el modelo', { name: providerName })}**\n\n`
+                + tr('chat.err.modelHint', 'Elige otro modelo de la lista del motor: puede haber sido retirado.');
+            break;
+        case 'server':
+            head = `⚠️ **${trf('chat.err.server', '{name} no está respondiendo bien', { name: providerName })}**\n\n`
+                + tr('chat.err.serverHint', 'Es un fallo del servicio, no de tu configuración. Reintenta en un momento o cambia de motor.');
+            break;
+        default:
+            head = `⚠️ **Error de conexión con ${providerName}**\n\n`
+                + 'Verifica que el proveedor está configurado correctamente y que la API Key (si aplica) es válida.';
+    }
+    return `${head}${detail ? `\n\n\`${detail}\`` : ''}${tried}`;
+}
+
+// ─── FreeLLMAPI: estrategias de enrutado y puerto ──────────────
+// La pasarela decide el motor según el «modelo»: «auto» usa la cadena activa y
+// «auto:<estrategia>» reordena por inteligencia, velocidad o fiabilidad. No
+// salen en su /v1/models, así que se ofrecen aquí; sin ellas el modelo por
+// defecto «auto» no estaba en la lista y la validación lo sustituía por el
+// primer modelo del catálogo, anulando el enrutado.
+const FREELLMAPI_STRATEGIES = [
+    ['auto', 'Automático (cadena activa)', 'chat.free.auto'],
+    ['auto:balanced', 'Equilibrado', 'chat.free.balanced'],
+    ['auto:smart', 'El más capaz', 'chat.free.smart'],
+    ['auto:fast', 'El más rápido', 'chat.free.fast'],
+    ['auto:reliable', 'El más fiable', 'chat.free.reliable'],
+];
+
+function withGatewayStrategies(models) {
+    const have = new Set(models.map(m => m.name));
+    const own = FREELLMAPI_STRATEGIES
+        .filter(([id]) => !have.has(id))
+        .map(([id, label, key]) => ({
+            name: id,
+            label: `🆓 ${tr(key, label)}`,
+            desc: tr('chat.free.desc', 'La pasarela elige el proveedor y cambia solo si uno agota su cupo.'),
+            capabilities: ['tools'],
+        }));
+    return [...own, ...models];
+}
+
+const FREELLMAPI_DEFAULT_URL = 'http://localhost:31415/v1';
+// 31415 es el puerto de la app de escritorio; el instalador Docker publica 3001.
+const FREELLMAPI_ALT_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001'];
+
+/**
+ * ¿Hay una FreeLLMAPI en este origen? Sin enviar ninguna credencial: su
+ * /api/ping contesta y /v1/models sin clave devuelve un JSON de error 401 (o la
+ * lista). Un servicio cualquiera en el 3001 no cumple las dos cosas.
+ */
+async function looksLikeFreeLLMAPI(origin) {
+    try {
+        const ping = await fetch(`${origin}/api/ping`, { signal: AbortSignal.timeout(2500) });
+        if (!ping.ok) return false;
+        const res = await fetch(`${origin}/v1/models`, { signal: AbortSignal.timeout(2500) });
+        const body = await res.json().catch(() => null);
+        return !!body && (Array.isArray(body.data) || (res.status === 401 && !!body.error));
+    } catch (_) {
+        return false;
+    }
+}
+
+async function findFreeLLMAPIAltUrl() {
+    for (const origin of FREELLMAPI_ALT_ORIGINS) {
+        if (await looksLikeFreeLLMAPI(origin)) return `${origin}/v1`;
+    }
+    return null;
 }
 
 function configureConnectionHelp(failure = {}) {
@@ -94,9 +457,9 @@ function configureConnectionHelp(failure = {}) {
         );
     } else if (baseId === 'freellmapi') {
         items.push(
-            ['1. Arranca FreeLLMAPI', `wIA no habla con ningún proveedor en este motor: se conecta a la pasarela FreeLLMAPI, que debe estar en marcha y responder en ${escapeHtml(endpoint)}.<code class="connection-help-command">curl -fsSL https://freellmapi.co/install.sh | bash</code>`],
+            ['1. Arranca FreeLLMAPI', `wIA no habla con ningún proveedor en este motor: se conecta a la pasarela FreeLLMAPI, que debe estar en marcha y responder en ${escapeHtml(endpoint)}.<code class="connection-help-command">curl -fsSL https://freellmapi.co/install.sh | bash</code>Ese instalador usa Docker y publica el puerto <strong>3001</strong>; la app de escritorio usa el <strong>31415</strong>. wIA prueba ambos, pero si la tuya escucha en otro, cambia la URL (termina en <code class="connection-help-command">/v1</code>).`],
             ['2. Usa su clave unificada', 'En el panel de FreeLLMAPI (página Keys) copia la clave que empieza por <code class="connection-help-command">freellmapi-</code> y pégala como API Key. Las claves de cada proveedor se configuran allí, no en wIA.'],
-            ['3. Si el navegador la bloquea', 'Ejecuta wIA con su servidor (node server.js): su proxy local alcanza la pasarela aunque esta no acepte llamadas directas desde el navegador.']
+            ['3. Si el navegador la bloquea', 'Ejecuta wIA con su servidor (<code class="connection-help-command">node server.js</code>): su proxy local alcanza la pasarela. Sin ese servidor, la pasarela solo acepta navegadores que figuren en su variable <code class="connection-help-command">DASHBOARD_ORIGINS</code>: añade ahí el origen de wIA y reinicia FreeLLMAPI.']
         );
     } else if (baseId === 'localai') {
         items.push(
@@ -382,6 +745,9 @@ async function checkProviderStatus(options = {}) {
                 context: m.context_length || m.context_window || m.max_context_length,
                 repoUrl: m.website || m.url || null
             }));
+            // Una pasarela decide el motor según el «modelo»: se ofrecen sus
+            // estrategias (auto, auto:smart…) aunque no vengan en el catálogo.
+            if (getProviderBaseId(providerId) === 'freellmapi') models = withGatewayStrategies(models);
             
         } else if (provType === 'gemini') {
             // Gemini REST API
@@ -571,6 +937,23 @@ async function checkProviderStatus(options = {}) {
         const failure = describeConnectionError(e);
         setProviderAvailability(providerId, failure.code === 'network' ? 'unavailable' : 'error', failure.status);
         const isCors = failure.code === 'network';
+
+        // La app de escritorio de FreeLLMAPI escucha en :31415 y su instalador
+        // Docker en :3001. Si la URL es la de fábrica y no hay nadie, se busca en
+        // el otro puerto (sin enviar la clave) y se pasa a él, avisando.
+        if (isCors && getProviderBaseId(providerId) === 'freellmapi'
+            && String(state.settings.ollamaUrl || '').replace(/\/+$/, '') === FREELLMAPI_DEFAULT_URL) {
+            const altUrl = await findFreeLLMAPIAltUrl();
+            if (altUrl && runId === providerStatusRun && state.settings.provider === providerId) {
+                state.settings.ollamaUrl = altUrl;
+                getActiveProviderConfig().url = altUrl;
+                saveState();
+                if (dom.ollamaUrl) dom.ollamaUrl.value = altUrl;
+                console.info(`[FreeLLMAPI] No había nada en ${FREELLMAPI_DEFAULT_URL}; usando la pasarela de ${altUrl}.`);
+                return checkProviderStatus(options);
+            }
+        }
+
         dom.statusText.textContent = failure.status;
         dom.improvePromptBtn?.classList.add('hidden');
         
@@ -820,6 +1203,14 @@ function toggleFavoriteModel(modelId, providerId = state.settings.provider) {
     saveState();
     if (state.rawModels) populateModels(state.rawModels);
 }
+// 🔁 Failover automático entre motores (ver sendWithFailover en 06-chat.js).
+(function bindFailoverUI() {
+    dom.autoFailoverToggle?.addEventListener('change', (event) => {
+        state.settings.autoFailover = event.target.checked;
+        saveState();
+    });
+})();
+
 window.toggleFavoriteModel = toggleFavoriteModel;
 
 function getModelPrice(m) {
@@ -1005,7 +1396,7 @@ function saveWebGPUCustomModels(customModels) {
 function addManualWebGPUModel(inputValue) {
     const modelId = parseHuggingFaceModelId(inputValue);
     if (!modelId) {
-        alert('Pega un repo válido de Hugging Face o una URL completa, por ejemplo: onnx-community/Qwen2.5-Coder-7B-Instruct');
+        notify(trf('dlg.webgpu.invalidRepo', 'Pega un repo válido de Hugging Face o una URL completa, por ejemplo: onnx-community/Qwen2.5-Coder-7B-Instruct'), 'error');
         return false;
     }
 
@@ -1045,7 +1436,7 @@ async function removeManualWebGPUModel(modelId) {
     const current = getWebGPUCustomModels();
     const def = current.find(m => m.id === modelId);
     if (!def) return false;
-    if (!confirm(`¿Quitar «${def.label || modelId}» de tus modelos añadidos manualmente?\n\nSe eliminará del catálogo y se borrarán sus archivos de la caché del navegador. No afecta al repositorio original en Hugging Face.`)) {
+    if (!confirm(trf('dlg.webgpu.removeCustom', '¿Quitar «{p0}» de tus modelos añadidos manualmente?\n\nSe eliminará del catálogo y se borrarán sus archivos de la caché del navegador. No afecta al repositorio original en Hugging Face.', { p0: def.label || modelId }))) {
         return false;
     }
 
@@ -1446,7 +1837,7 @@ function populateModels(models) {
             }
 
             if (card.dataset.disabled === 'true') {
-                alert('Este modelo ya está identificado y catalogado, pero todavía no está habilitado para el chat WebGPU actual.');
+                notify(trf('dlg.webgpu.notEnabled', 'Este modelo ya está identificado y catalogado, pero todavía no está habilitado para el chat WebGPU actual.'), 'info');
                 return;
             }
 
@@ -1555,7 +1946,7 @@ async function renderManagedModelList() {
                 <div class="model-list-item">
                     <div class="model-item-info">
                         <span class="model-item-name">${escapeHtml(m.name)}</span>
-                        <span class="model-item-size">${sizeGB} GB — ${m.details?.parameter_size || 'N/A'}</span>
+                        <span class="model-item-size">${sizeGB} GB — ${escapeHtml(m.details?.parameter_size || 'N/A')}</span>
                     </div>
                     <button class="btn-icon remove-model-btn" data-delete-model="${escapeHtml(m.name)}" title="Eliminar modelo">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -1578,7 +1969,7 @@ async function renderManagedModelList() {
 }
 
 async function deleteModel(name) {
-    if (!confirm(`¿Estás seguro de que quieres eliminar el modelo "${name}"? Esta acción liberará espacio en disco pero no se puede deshacer.`)) return;
+    if (!confirm(trf('dlg.ollama.confirmDelete', '¿Estás seguro de que quieres eliminar el modelo "{p0}"? Esta acción liberará espacio en disco pero no se puede deshacer.', { p0: name }))) return;
 
     try {
         const headers = getAuthHeaders();
@@ -1593,7 +1984,7 @@ async function deleteModel(name) {
         renderManagedModelList();
         checkProviderStatus(); // Refresh global catalogue
     } catch (e) {
-        alert(`Error: ${e.message}`);
+        notify(trf('dlg.error.generic', 'Error: {p0}', { p0: e.message }), 'error');
     }
 }
 
@@ -1662,3 +2053,14 @@ async function pullModel(name) {
 
 window.deleteModel = deleteModel;
 window.pullModel = pullModel;
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    providerHttpError, parseRetryAfter, FAILOVER_MAX_HOPS, classifyEngineFailure,
+    markEngineFailure, markEngineSuccess, getEngineCooldown, getFailoverCandidates,
+    withEngineOverride, describeChatFailure, prepareModelPanelForProvider, startProviderOAuth,
+    finishProviderOAuth, setConnectionValidationFeedback, detectLocalProviderAvailability,
+    checkProviderStatus, recordWebGPUModelReport, getWebGPUCustomModels, addManualWebGPUModel,
+    updateVisionIndicator, discoverWebGPUModels, populateModels, openModelManager, pullModel,
+};
+/* <<< exports <<< */

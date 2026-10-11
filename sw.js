@@ -10,15 +10,15 @@
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v2608.AB';
+const CACHE = 'wia-shell-v2610.AA';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).
 const CORE = [
     './', './index.html', './styles.css',
-    './js/01-core.js', './js/02-state.js', './js/03-webgpu.js', './js/04-providers.js',
-    './js/05-workspace.js', './js/06-chat.js', './js/07-ui.js', './js/08-anon.js',
-    './js/09-i18n.js', './js/10-docs.js', './js/11-rag.js', './js/12-pwa.js',
+    './js/main.js?v=2610.AA', './js/01-core.js?v=2610.AA', './js/02-state.js?v=2610.AA', './js/03-webgpu.js?v=2610.AA', './js/04-providers.js?v=2610.AA',
+    './js/05-workspace.js?v=2610.AA', './js/06-chat.js?v=2610.AA', './js/07-ui.js?v=2610.AA', './js/08-anon.js?v=2610.AA',
+    './js/09-i18n.js?v=2610.AA', './js/10-docs.js?v=2610.AA', './js/11-rag.js?v=2610.AA', './js/12-pwa.js?v=2610.AA',
     './lang/es.json', './lang/en.json',
     './lang/docs/es.json', './lang/docs/en.json',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
@@ -40,7 +40,8 @@ const CORE = [
     // misma caché la primera vez que se usa, así que el offline con PDF sigue
     // funcionando a partir de entonces.
     './lib/pdf.min.js', './Plantilla/Version.js',
-    './secure-gate.js', './webgpu-worker.js', './agents.json', './webgpu-models.json',
+    './secure-gate.js', './portal-loader.js', './webgpu-worker.js', './agents.json', './webgpu-models.json',
+    './lib/fonts/inter-latin.woff2', './lib/fonts/jetbrains-mono-latin.woff2',
     './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png',
 ];
 

@@ -25,6 +25,7 @@
 # servidor no los reconoce (sirve modelos locales sin avisos de MIME).
 <IfModule mod_mime.c>
     AddType application/wasm .wasm
+    AddType font/woff2 .woff2
     AddType application/octet-stream .onnx
     # onnxruntime importa su backend de WebGPU como módulo desde lib/ort/*.mjs.
     # Si Apache no lo sirve como JavaScript, el navegador se niega a ejecutarlo
@@ -41,7 +42,7 @@
     Header always set Cross-Origin-Opener-Policy "same-origin"
     Header always set Cross-Origin-Embedder-Policy "credentialless"
     # Ver scripts/csp-policy.mjs — mantener sincronizado (npm run check:csp)
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src *; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src *; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'"
     # El service worker no debe cachearse o los despliegues tardan en propagarse.
     <FilesMatch "sw\.js$">
         Header set Cache-Control "no-cache"

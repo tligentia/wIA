@@ -11,9 +11,10 @@
 import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { resolve } from 'node:path';
+import { classicSource } from './lib/generated-blocks.mjs';
 
 const root = process.cwd();
-const read = (p) => readFileSync(resolve(root, p), 'utf8');
+const read = (p) => classicSource(readFileSync, resolve(root, p));
 
 // ── DOM mínimo: los módulos solo consultan nodos que aquí no existen ──
 const noopEl = () => ({

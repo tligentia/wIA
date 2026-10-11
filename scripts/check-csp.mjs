@@ -15,9 +15,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CSP_POLICY } from './csp-policy.mjs';
+import { classicSource } from './lib/generated-blocks.mjs';
 
 const root = process.cwd();
-const read = (p) => readFileSync(resolve(root, p), 'utf8');
+const read = (p) => classicSource(readFileSync, resolve(root, p));
 
 let failures = 0;
 const check = (name, ok, extra = '') => {

@@ -1,3 +1,47 @@
+/* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+// El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
+import {
+    improvePrompt, renderMessages, sendMessage, showMetricsModal, stopStreaming,
+} from './06-chat.js?v=2610.AA';
+import {
+    PROVIDERS, WEBGPU_MODELS, applyProviderNames, debounce, escapeHtml, getDefaultProviderName,
+    isCloneableProvider, isCustomProvider, notify, tr, trf,
+} from './01-core.js?v=2610.AA';
+import {
+    $, $$, applyImportedSettings, applyPostResetUI, applySettingsToUI, applyTheme,
+    backupCrypto, chatStore, cloneProvider, deleteCustomProvider, describeDroppedKeys, dom,
+    getActiveProviderConfig, getAuthHeaders, getOrderedProviderEntries, getProviderDef, init,
+    isConversationPersistenceDisabled, markProviderUsed, purgeConversationStore,
+    renameProvider, renderProviderOptions, resetProjectsAndChatsState,
+    saveCurrentProviderConfig, saveState, saveStateNow, secretVault, settingsWithoutSecrets,
+    state, syncProviderToState, updateApiKeyFormatHint, updateModelContextIndicator,
+    updateProviderUI, updateProviderUrlSuggestion, updateStatusMeta,
+} from './02-state.js?v=2610.AA';
+import {
+    loadWebGPUModel, releaseWebGPUMemory, renderVisionChain, renderWebGPUMonitor,
+    scheduleWebGPUPriming, warmUpActiveWebGPUModel, webgpuState, webgpuWorker,
+} from './03-webgpu.js?v=2610.AA';
+import {
+    addManualWebGPUModel, checkProviderStatus, discoverWebGPUModels, getEngineCooldown,
+    openModelManager, populateModels, prepareModelPanelForProvider, pullModel,
+    setConnectionValidationFeedback, startProviderOAuth, updateVisionIndicator,
+} from './04-providers.js?v=2610.AA';
+import {
+    applyAgentEngine, clearOrderQueue, createChatFromUI, createProject, deleteChat,
+    deleteProject, duplicateProject, exportAgentToFile, findInstalledCatalogAgent,
+    getActiveChat, getEditingProject, handleFiles, handleProjectFiles, installAgentDefinition,
+    openProjectEditor, removeAttachment, removeOrder, renderAgentCatalog, renderAgentsGallery,
+    renderChatList, renderOrderQueue, renderProjectSelect, renderWelcomeStarters,
+    runOrderQueue, runSingleOrder, switchChat, switchProject, tryQueueOrder,
+} from './05-workspace.js?v=2610.AA';
+import {
+    anonChatState, anonymizeHistoryText, renderAnonTypesPanel,
+} from './08-anon.js?v=2610.AA';
+import {
+    setLanguage,
+} from './09-i18n.js?v=2610.AA';
+/* <<< imports <<< */
+
 /* ============================================
    wIA — 07-ui.js
    Bindings de eventos, atajos, voz, exportación y arranque
@@ -372,7 +416,7 @@ function bindEvents() {
         // Update UI with new provider's config
         dom.ollamaUrl.value = state.settings.ollamaUrl;
         if (dom.apiKeyInput) dom.apiKeyInput.value = state.settings.apiKey || '';
-        dom.modelSelect.innerHTML = `<option value="${state.settings.model}" selected>${state.settings.model}</option>`;
+        dom.modelSelect.innerHTML = `<option value="${escapeHtml(state.settings.model)}" selected>${escapeHtml(state.settings.model)}</option>`;
         
         updateProviderUI();
         renderProviderOptions();
@@ -643,10 +687,10 @@ function bindEvents() {
                         const notice = describeDroppedKeys(droppedKeys);
                         alert(tr('import.settingsRestored', 'Ajustes restaurados. Tus API keys guardadas se conservan.') + (notice ? '\n\n' + notice : ''));
                     } else {
-                        alert('El archivo no parece contener ajustes válidos de wIA.');
+                        notify(trf('dlg.settings.invalid', 'El archivo no parece contener ajustes válidos de wIA.'), 'error');
                     }
                 } catch (err) {
-                    alert('Error al leer el archivo de configuración: ' + err.message);
+                    notify(trf('dlg.settings.readError', 'Error al leer el archivo de configuración: {p0}', { p0: err.message }), 'error');
                 }
             };
             reader.readAsText(file);
@@ -656,28 +700,7 @@ function bindEvents() {
 
     // ─── Copia de seguridad COMPLETA (proyectos, agentes, chats, ajustes) ───
     if (dom.exportAllBtn) {
-        dom.exportAllBtn.addEventListener('click', () => {
-            const backup = {
-                _type: 'wia-backup',
-                _version: window.APP_VERSION || '',
-                _exportedAt: new Date().toISOString(),
-                _note: 'API keys excluidas por seguridad; vuelve a introducirlas tras importar.',
-                projects: state.projects,
-                chats: state.chats,
-                activeProjectId: state.activeProjectId,
-                orderQueue: state.orderQueue || [],
-                // Ajustes sin las claves API (los agentes viven dentro de projects).
-                settings: settingsWithoutSecrets(state.settings),
-            };
-            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            const stamp = new Date().toISOString().slice(0, 10);
-            a.href = url;
-            a.download = `wIA_backup_${stamp}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        });
+        dom.exportAllBtn.addEventListener('click', () => exportFullBackup().catch(err => notify(trf('dlg.backup.exportError', 'Error al exportar: {p0}', { p0: err.message }), 'error')));
     }
 
     if (dom.importAllBtn) {
@@ -686,40 +709,8 @@ function bindEvents() {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = async (ev) => {
-                try {
-                    const data = JSON.parse(ev.target.result);
-                    if (!data || data._type !== 'wia-backup' || !Array.isArray(data.projects) || !Array.isArray(data.chats)) {
-                        alert('El archivo no parece una copia de seguridad completa de wIA.');
-                        return;
-                    }
-                    const n = data.projects.length + data.chats.length;
-                    if (!confirm(`Esto REEMPLAZARÁ tus proyectos, agentes y chats actuales por los del archivo (${data.projects.length} proyectos, ${data.chats.length} chats). Tus API keys se conservan. ¿Continuar?`)) return;
-                    state.projects = data.projects;
-                    state.chats = data.chats;
-                    state.chats.forEach(c => { if (!c.projectId) c.projectId = 'general'; });
-                    // Conserva las API keys actuales (el backup no las incluye),
-                    // salvo las de motores a los que el fichero cambia la URL.
-                    const droppedKeys = data.settings ? applyImportedSettings(data.settings) : [];
-                    if (data.activeProjectId && state.projects.find(p => p.id === data.activeProjectId)) {
-                        state.activeProjectId = data.activeProjectId;
-                    } else if (!state.projects.find(p => p.id === state.activeProjectId)) {
-                        state.activeProjectId = state.projects[0]?.id || 'general';
-                    }
-                    if (Array.isArray(data.orderQueue)) state.orderQueue = data.orderQueue;
-                    await saveStateNow();
-                    applySettingsToUI();
-                    renderProjectSelect();
-                    renderChatList();
-                    if (typeof renderOrderQueue === 'function') renderOrderQueue();
-                    // force: los chats se han sustituido en bloque; un chat
-                    // restaurado puede conservar el mismo id y contenido distinto.
-                    if (typeof renderMessages === 'function') renderMessages({ force: true });
-                    const notice = describeDroppedKeys(droppedKeys);
-                    alert(`Copia de seguridad restaurada: ${n} elementos. Recuerda revisar tus API keys en Ajustes.` + (notice ? '\n\n' + notice : ''));
-                } catch (err) {
-                    alert('Error al leer la copia de seguridad: ' + err.message);
-                }
+            reader.onload = (ev) => {
+                importFullBackup(ev.target.result).catch(err => notify(trf('dlg.backup.readError', 'Error al leer la copia de seguridad: {p0}', { p0: err.message }), 'error'));
             };
             reader.readAsText(file);
             dom.importAllFile.value = '';
@@ -842,7 +833,7 @@ function bindEvents() {
 
     document.getElementById('webgpuReleaseBtn')?.addEventListener('click', () => {
         const loaded = webgpuState.loadedModelId || webgpuWorker.loadedModelId;
-        if (!loaded && !webgpuState.isLoading) { alert('No hay ningún modelo cargado en memoria ahora mismo.'); return; }
+        if (!loaded && !webgpuState.isLoading) { notify(trf('dlg.webgpu.noneLoaded', 'No hay ningún modelo cargado en memoria ahora mismo.'), 'info'); return; }
         releaseWebGPUMemory();
     });
 
@@ -850,9 +841,9 @@ function bindEvents() {
         const btn = e.currentTarget;
         const modelId = state.settings.model;
         const modelDef = WEBGPU_MODELS.find(m => m.id === modelId);
-        if (!modelDef) { alert('Selecciona primero un modelo WebGPU.'); return; }
-        if (webgpuState.loadedModelId === modelId) { alert('El modelo ya está cargado y listo.'); return; }
-        if (webgpuState.isLoading) { alert('Ya hay una carga en curso.'); return; }
+        if (!modelDef) { notify(trf('dlg.webgpu.pickFirst', 'Selecciona primero un modelo WebGPU.'), 'info'); return; }
+        if (webgpuState.loadedModelId === modelId) { notify(trf('dlg.webgpu.alreadyLoaded', 'El modelo ya está cargado y listo.'), 'info'); return; }
+        if (webgpuState.isLoading) { notify(trf('dlg.webgpu.loading', 'Ya hay una carga en curso.'), 'info'); return; }
         const original = btn.textContent;
         btn.disabled = true; btn.textContent = '⏳ Preparando…';
         try {
@@ -861,7 +852,7 @@ function bindEvents() {
             renderWebGPUMonitor();
         } catch (err) {
             console.warn('[WebGPU] preparar modelo falló:', err);
-            alert('No se pudo preparar el modelo: ' + (err?.message || err));
+            notify(trf('dlg.webgpu.prepareError', 'No se pudo preparar el modelo: {p0}', { p0: (err?.message || err) }), 'error');
         } finally {
             btn.disabled = false; btn.textContent = original;
         }
@@ -892,7 +883,7 @@ function bindEvents() {
                     pin: dom.privacyLockPin?.value || ''
                 });
             } catch (e) {
-                alert(e.message);
+                notify(e.message, 'error');
                 return;
             }
         }
@@ -963,28 +954,23 @@ Cuando generes código:
     });
 
     $('#clearHistoryBtn')?.addEventListener('click', () => {
-        if (!confirm('⚠️ ¿Seguro que quieres borrar todo el historial, chats, proyectos y documentos persistentes? Tus ajustes se conservarán.')) return;
+        if (!confirm(trf('dlg.history.confirmClear', '⚠️ ¿Seguro que quieres borrar todo el historial, chats, proyectos y documentos persistentes? Tus ajustes se conservarán.'))) return;
 
         resetProjectsAndChatsState();
         localStorage.removeItem('antigravity_chats');
         localStorage.removeItem('antigravity_projects');
-        idbStore.del('chats').catch(() => {});
-        idbStore.del('projects').catch(() => {});
-        saveState();
+        purgeConversationStore().then(() => saveState());
         applyPostResetUI({ preserveSettings: true });
-        alert('Historial limpiado. Tus ajustes se han conservado.');
+        notify(trf('dlg.history.cleared', 'Historial limpiado. Tus ajustes se han conservado.'), 'info');
     });
 
     $('#factoryResetBtn')?.addEventListener('click', async () => {
-        if (!confirm('⚠️ ¿Estás completamente seguro de que quieres restaurar wIA de fábrica? Se borrarán historial, proyectos y ajustes.')) return;
+        if (!confirm(trf('dlg.factory.confirm', '⚠️ ¿Estás completamente seguro de que quieres restaurar wIA de fábrica? Se borrarán historial, proyectos y ajustes.'))) return;
 
         localStorage.removeItem('antigravity_chats');
         localStorage.removeItem('antigravity_projects');
         localStorage.removeItem('antigravity_settings');
-        try {
-            await idbStore.del('chats');
-            await idbStore.del('projects');
-        } catch (e) { /* si IDB falla, el reload sigue adelante */ }
+        await purgeConversationStore(); // si IDB falla, el reload sigue adelante
         location.reload();
     });
 
@@ -1120,7 +1106,7 @@ Cuando generes código:
 
     dom.deleteProjectBtn.addEventListener('click', () => {
         const proj = getEditingProject();
-        if (confirm(`¿Estás seguro de que quieres eliminar el agente/proyecto ${proj.name} y TODOS sus chats contenidos?`)) {
+        if (confirm(trf('dlg.project.confirmDelete', '¿Estás seguro de que quieres eliminar el agente/proyecto {p0} y TODOS sus chats contenidos?', { p0: proj.name }))) {
             deleteProject(proj.id);
             renderAgentsGallery();
             dom.projectModal.classList.add('hidden');
@@ -1145,10 +1131,10 @@ Cuando generes código:
             try {
                 const { project, warnings } = installAgentDefinition(JSON.parse(ev.target.result), { activate: true });
                 dom.agentsModal.classList.add('hidden');
-                const extra = warnings.length ? `\n\nAvisos:\n· ${warnings.join('\n· ')}` : '';
-                alert(`Agente «${project.name}» importado y activado.${extra}`);
+                const extra = warnings.length ? trf('dlg.agent.warnings', '\n\nAvisos:\n· {p0}', { p0: warnings.join('\n· ') }) : '';
+                notify(trf('dlg.agent.imported', 'Agente «{p0}» importado y activado.', { p0: project.name }) + extra, 'info');
             } catch (err) {
-                alert('No se pudo importar el agente: ' + err.message);
+                notify(trf('dlg.agent.importError', 'No se pudo importar el agente: {p0}', { p0: err.message }), 'error');
             }
         };
         reader.readAsText(file);
@@ -1174,7 +1160,7 @@ Cuando generes código:
         saveState();
         switchProject(project.id);
         dom.agentsModal.classList.add('hidden');
-        alert(`Agente «${project.name}» instalado desde el catálogo y activado.`);
+        notify(trf('dlg.agent.installed', 'Agente «{p0}» instalado desde el catálogo y activado.', { p0: project.name }), 'info');
     });
 
     dom.newAgentBtn?.addEventListener('click', () => {
@@ -1224,7 +1210,7 @@ Cuando generes código:
         chatToMove = chatId;
         const currentChat = state.chats.find(c => c.id === chatId);
         dom.moveProjectSelect.innerHTML = state.projects.map(p => 
-            `<option value="${p.id}" ${p.id === currentChat.projectId ? 'disabled' : ''}>${escapeHtml(p.name)} ${p.id === currentChat.projectId ? '(Actual)' : ''}</option>`
+            `<option value="${escapeHtml(p.id)}" ${p.id === currentChat.projectId ? 'disabled' : ''}>${escapeHtml(p.name)} ${p.id === currentChat.projectId ? '(Actual)' : ''}</option>`
         ).join('');
         dom.moveModal.classList.remove('hidden');
     };
@@ -1401,8 +1387,69 @@ function formatDate(timestamp) {
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 }
 
+// ─── Accesibilidad: etiquetas, foco en diálogos ─────────────────────────
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const visibleFocusables = (root) => [...root.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null || el === document.activeElement);
+
+function initA11y() {
+    // 1) Botones de solo icono creados dinámicamente: su nombre accesible es su title.
+    const labelIconButtons = (root) => {
+        const list = root.matches?.('button[title]:not([aria-label])') ? [root] : [];
+        root.querySelectorAll?.('button[title]:not([aria-label])').forEach(b => list.push(b));
+        for (const b of list) {
+            if ((b.textContent || '').replace(/[\s\W_]/g, '').length <= 2) b.setAttribute('aria-label', b.getAttribute('title'));
+        }
+    };
+    labelIconButtons(document.body);
+    new MutationObserver((muts) => {
+        for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) labelIconButtons(n);
+    }).observe(document.body, { childList: true, subtree: true });
+
+    // 2) Diálogos: al abrir, el foco entra; al cerrar, vuelve a donde estaba.
+    const previousFocus = new WeakMap();
+    const watch = (overlay) => {
+        new MutationObserver(() => {
+            const open = !overlay.classList.contains('hidden');
+            if (open && !overlay._wiaOpen) {
+                overlay._wiaOpen = true;
+                previousFocus.set(overlay, document.activeElement);
+                const target = visibleFocusables(overlay).find(el => !el.matches('.close-btn, [aria-label="Cerrar"]')) || overlay.querySelector('.modal');
+                if (target) { if (!target.hasAttribute('tabindex') && target.classList.contains('modal')) target.tabIndex = -1; target.focus?.(); }
+            } else if (!open && overlay._wiaOpen) {
+                overlay._wiaOpen = false;
+                const prev = previousFocus.get(overlay);
+                if (prev && document.contains(prev)) prev.focus?.();
+            }
+        }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
+    };
+    document.querySelectorAll('.modal-overlay').forEach(watch);
+
+    // 3) Tab no sale del diálogo abierto; Escape lo cierra (si no lo hace ya otro manejador).
+    document.addEventListener('keydown', (e) => {
+        // Con varios diálogos apilados, el activo es el que contiene el foco (si no,
+        // el último abierto): un Escape cierra UNO, no todos.
+        const openOnes = [...document.querySelectorAll('.modal-overlay:not(.hidden)')];
+        const open = openOnes.find(o => o.contains(document.activeElement)) || openOnes.pop();
+        if (!open) return;
+        if (e.key === 'Tab') {
+            const items = visibleFocusables(open);
+            if (!items.length) { e.preventDefault(); return; }
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && (document.activeElement === first || !open.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && (document.activeElement === last || !open.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+        } else if (e.key === 'Escape') {
+            // Otros manejadores (ajustes, borrado, gestor de modelos) cierran los suyos; para el resto:
+            setTimeout(() => {
+                if (open.classList.contains('hidden') || !document.contains(open)) return;
+                (open.querySelector('[class*="close-"], .modal-header .btn-icon, [data-close-modal]') || open.querySelector('.btn-secondary'))?.click();
+            }, 0);
+        }
+    });
+}
+
 // ─── Start ──────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+    try { initA11y(); } catch (e) { console.warn('[a11y] no se pudo iniciar:', e); }
     if (window.SecureGate?.init) {
         window.SecureGate.init(init);
     } else {
@@ -1523,6 +1570,212 @@ window.exportChat = function(chatId) {
     URL.revokeObjectURL(url);
 };
 
+// ─── Copias de seguridad: contraseña, exportar, restaurar ───────────────
+
+/**
+ * askPassphrase — diálogo propio para pedir una contraseña sin mostrarla.
+ * Devuelve el texto, '' si se elige «sin contraseña» (solo con allowSkip) o
+ * null si se cancela.
+ */
+function askPassphrase({ title, message, confirmField = false, allowSkip = false }) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        const box = document.createElement('div');
+        box.className = 'modal modal-small';
+        const mk = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text) el.textContent = text; return el; };
+        const header = mk('div', 'modal-header');
+        header.appendChild(mk('h2', '', title));
+        const body = mk('div', 'modal-body');
+        const msg = mk('p', 'setting-help-text', message);
+        const pass1 = mk('input', 'setting-input'); pass1.type = 'password'; pass1.autocomplete = 'new-password';
+        pass1.placeholder = tr('backup.pass.placeholder', 'Contraseña');
+        pass1.setAttribute('aria-label', pass1.placeholder);
+        const pass2 = confirmField ? mk('input', 'setting-input') : null;
+        if (pass2) {
+            pass2.type = 'password'; pass2.autocomplete = 'new-password';
+            pass2.placeholder = tr('backup.pass.repeat', 'Repite la contraseña');
+            pass2.setAttribute('aria-label', pass2.placeholder);
+            pass2.style.marginTop = '8px';
+        }
+        const err = mk('div', 'setting-help-text'); err.style.color = 'var(--danger)'; err.setAttribute('role', 'alert');
+        const actions = mk('div', 'modal-actions');
+        actions.style.cssText = 'margin-top:16px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
+        const bCancel = mk('button', 'btn-secondary', tr('backup.pass.cancel', 'Cancelar'));
+        const bSkip = allowSkip ? mk('button', 'btn-secondary', tr('backup.pass.skip', 'Sin contraseña')) : null;
+        const bOk = mk('button', 'btn-primary', tr('backup.pass.ok', 'Aceptar'));
+        [bCancel, bSkip, bOk].forEach(b => { if (b) { b.type = 'button'; actions.appendChild(b); } });
+        body.append(msg, pass1, ...(pass2 ? [pass2] : []), err, actions);
+        box.append(header, body);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        pass1.focus();
+
+        const done = (v) => { overlay.remove(); resolve(v); };
+        const submit = () => {
+            const v = pass1.value;
+            if (!v) { err.textContent = tr('backup.pass.empty', 'Escribe una contraseña.'); return; }
+            if (confirmField) {
+                if (v.length < 8) { err.textContent = tr('backup.pass.short', 'Usa al menos 8 caracteres.'); return; }
+                if (v !== pass2.value) { err.textContent = tr('backup.pass.mismatch', 'Las contraseñas no coinciden.'); return; }
+            }
+            done(v);
+        };
+        bOk.addEventListener('click', submit);
+        bCancel.addEventListener('click', () => done(null));
+        if (bSkip) bSkip.addEventListener('click', () => done(''));
+        overlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submit();
+            else if (e.key === 'Escape') { e.stopPropagation(); done(null); }
+        });
+    });
+}
+
+/**
+ * exportFullBackup — descarga todos los datos. Si algún chat usa
+ * anonimización, su mapa de marcadores (datos reales) viaja DENTRO del fichero
+ * para poder revertirlos en otro navegador, y por eso solo se incluye cifrado
+ * con contraseña. Sin contraseña la copia sale igualmente, pero sin esos mapas.
+ */
+async function exportFullBackup() {
+    const anonMaps = {};
+    for (const chat of state.chats) {
+        if (!chat.anonVault) continue;
+        try {
+            const dec = await secretVault.decrypt(chat.anonVault);
+            if (dec) anonMaps[chat.id] = JSON.parse(dec);
+        } catch (_) { /* mapa ilegible: esa conversación no podrá revertirse */ }
+    }
+    const hasMaps = Object.keys(anonMaps).length > 0;
+
+    let passphrase = '';
+    if (backupCrypto.available()) {
+        passphrase = await askPassphrase({
+            title: tr('backup.pass.exportTitle', 'Proteger la copia'),
+            message: hasMaps
+                ? tr('backup.pass.exportMaps', 'Algunos chats usan anonimización. Con contraseña, la copia incluye los datos reales para poder restaurarlos en otro navegador. Sin contraseña, esos datos NO se incluyen y los marcadores no podrán revertirse fuera de este navegador.')
+                : tr('backup.pass.exportMsg', 'Puedes cifrar la copia con una contraseña. Guárdala: si la pierdes, no hay forma de recuperar el contenido.'),
+            confirmField: true,
+            allowSkip: true,
+        });
+        if (passphrase === null) return;
+    } else if (hasMaps) {
+        alert(tr('backup.noCrypto', 'Esta página no está en un contexto seguro (HTTPS o localhost): no se puede cifrar la copia. Saldrá sin los mapas de anonimización.'));
+    }
+
+    const includeMaps = hasMaps && !!passphrase;
+    const backup = {
+        _type: 'wia-backup',
+        _version: window.APP_VERSION || '',
+        _exportedAt: new Date().toISOString(),
+        _note: 'API keys excluidas por seguridad; vuelve a introducirlas tras importar.',
+        projects: state.projects,
+        // El `anonVault` va cifrado con la clave de ESTE navegador: fuera de él es
+        // ilegible, así que se sustituye por el mapa (solo dentro de un sobre cifrado).
+        chats: state.chats.map(({ anonVault, ...rest }) => rest),
+        activeProjectId: state.activeProjectId,
+        orderQueue: state.orderQueue || [],
+        settings: settingsWithoutSecrets(state.settings),
+    };
+    if (includeMaps) backup.anonMaps = anonMaps;
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    const out = passphrase
+        ? await backupCrypto.seal(backup, passphrase, { _version: backup._version, _exportedAt: backup._exportedAt })
+        : backup;
+    const blob = new Blob([JSON.stringify(out, null, passphrase ? 0 : 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `wIA_backup_${stamp}${passphrase ? '.cifrada' : ''}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (hasMaps && !includeMaps) {
+        alert(tr('backup.mapsOmitted', 'Copia descargada SIN los mapas de anonimización: los marcadores ([Nombre_001]…) no podrán revertirse fuera de este navegador.'));
+    }
+}
+
+/** importFullBackup — restaura una copia (cifrada o no) tras confirmar. */
+async function importFullBackup(text) {
+    let data = JSON.parse(text);
+    if (data && data._type === 'wia-backup-enc') {
+        if (!backupCrypto.available()) {
+            alert(tr('backup.noCrypto.import', 'Para abrir una copia cifrada hace falta HTTPS o localhost.'));
+            return;
+        }
+        let opened = null;
+        let message = tr('backup.pass.importMsg', 'Esta copia está cifrada. Escribe su contraseña.');
+        while (!opened) {
+            const pass = await askPassphrase({ title: tr('backup.pass.importTitle', 'Copia cifrada'), message });
+            if (pass === null) return;
+            try { opened = await backupCrypto.open(data, pass); }
+            catch (e) {
+                if (e.message === 'bad-envelope') { alert(tr('backup.bad', 'El archivo de copia cifrada no es válido.')); return; }
+                message = tr('backup.pass.wrong', 'Contraseña incorrecta, o el archivo está dañado. Inténtalo de nuevo.');
+            }
+        }
+        data = opened;
+    }
+    if (!data || data._type !== 'wia-backup' || !Array.isArray(data.projects) || !Array.isArray(data.chats)) {
+        notify(trf('dlg.backup.notBackup', 'El archivo no parece una copia de seguridad completa de wIA.'), 'error');
+        return;
+    }
+    // Lo que viene en un fichero es dato ajeno: se descarta lo que no tenga la
+    // forma mínima (ids de texto, mensajes en lista) en vez de dejar que rompa la
+    // interfaz o se cuele en atributos HTML.
+    const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    data.projects = data.projects.filter(p => isObj(p) && typeof p.id === 'string' && p.id && typeof p.name === 'string')
+        .map(p => ({ ...p, documents: Array.isArray(p.documents) ? p.documents.filter(d => isObj(d) && typeof d.id === 'string') : [] }));
+    data.chats = data.chats.filter(c => isObj(c) && typeof c.id === 'string' && c.id && Array.isArray(c.messages))
+        .map(c => ({ ...c, title: typeof c.title === 'string' ? c.title : 'Conversación', messages: c.messages.filter(m => isObj(m) && typeof m.role === 'string') }));
+    if (!data.projects.some(p => p.id === 'general')) data.projects.unshift({ id: 'general', name: 'General', systemPrompt: '', documents: [] });
+    const n = data.projects.length + data.chats.length;
+    if (!confirm(trf('dlg.backup.confirmReplace', 'Esto REEMPLAZARÁ tus proyectos, agentes y chats actuales por los del archivo ({p0} proyectos, {p1} chats). Tus API keys se conservan. ¿Continuar?', { p0: data.projects.length, p1: data.chats.length }))) return;
+
+    state.projects = data.projects;
+    state.chats = data.chats;
+    state.chats.forEach(c => { if (!c.projectId) c.projectId = 'general'; });
+
+    // Mapas de anonimización: se vuelven a cifrar con la clave de ESTE navegador.
+    // El estado en memoria de los chats anteriores deja de valer.
+    for (const k of Object.keys(anonChatState)) delete anonChatState[k];
+    let restoredMaps = 0;
+    if (data.anonMaps && typeof data.anonMaps === 'object') {
+        for (const chat of state.chats) {
+            const map = data.anonMaps[chat.id];
+            if (map && typeof map === 'object') {
+                chat.anonVault = await secretVault.encrypt(JSON.stringify(map));
+                restoredMaps++;
+            }
+        }
+    }
+
+    // Conserva las API keys actuales (el backup no las incluye),
+    // salvo las de motores a los que el fichero cambia la URL.
+    const droppedKeys = data.settings ? applyImportedSettings(data.settings) : [];
+    if (data.activeProjectId && state.projects.find(p => p.id === data.activeProjectId)) {
+        state.activeProjectId = data.activeProjectId;
+    } else if (!state.projects.find(p => p.id === state.activeProjectId)) {
+        state.activeProjectId = state.projects[0]?.id || 'general';
+    }
+    if (Array.isArray(data.orderQueue)) state.orderQueue = data.orderQueue;
+    chatStore.projectsLocked = false; // el usuario ha elegido qué conservar
+    await saveStateNow({ full: true });
+    applySettingsToUI();
+    renderProjectSelect();
+    renderChatList();
+    if (typeof renderOrderQueue === 'function') renderOrderQueue();
+    // force: los chats se han sustituido en bloque; un chat
+    // restaurado puede conservar el mismo id y contenido distinto.
+    if (typeof renderMessages === 'function') renderMessages({ force: true });
+    const notice = describeDroppedKeys(droppedKeys);
+    notify(trf('dlg.backup.restored', 'Copia de seguridad restaurada: {p0} elementos. Recuerda revisar tus API keys en Ajustes.', { p0: n })
+        + (restoredMaps ? '\n\n' + trf('dlg.backup.mapsRestored', '🕶️ Se han restaurado los mapas de anonimización de {p0} chat(s).', { p0: restoredMaps }) : '')
+        + (notice ? '\n\n' + notice : ''), 'info');
+}
+
 window.exportChatJSON = function(chatId) {
     const chat = state.chats.find(c => c.id === chatId);
     if (!chat) return;
@@ -1556,7 +1809,7 @@ window.importChat = function() {
                     switchChat(chatData.id);
                 }
             } catch (err) {
-                alert('Error al importar: archivo JSON inválido');
+                notify(trf('dlg.chat.importInvalid', 'Error al importar: archivo JSON inválido'), 'error');
             }
         };
         reader.readAsText(file);
@@ -1712,14 +1965,28 @@ async function autoTitleChat(chatId) {
     const userMsg = chat.messages.find(m => m.role === 'user');
     const assistantMsg = chat.messages.find(m => m.role === 'assistant');
     if (!userMsg || !assistantMsg || !assistantMsg.content) return;
+    // Un error («⚠️ …») no resume la conversación: no se gasta otra petición en titularla.
+    if (assistantMsg.content.startsWith('⚠️')) return;
     
     // Mark to prevent re-running
     chat.autoTitled = true;
     
     const providerDef = getProviderDef(state.settings.provider);
     if (!providerDef) return;
+    // Titular es accesorio: si el motor acaba de fallar (y la respuesta vino de
+    // otro por el failover), no se le manda otra petición que fallará igual.
+    if (typeof getEngineCooldown === 'function' && getEngineCooldown(state.settings.provider, state.settings.model) > 0) return;
     
-    const titlePrompt = `Genera un título muy breve (máximo 6 palabras) que resuma esta conversación. Responde SOLO con el título, sin comillas ni puntuación extra.\n\nUsuario: ${userMsg.content.substring(0, 200)}\nAsistente: ${assistantMsg.content.substring(0, 200)}`;
+    // El título también viaja al motor: con 🕶️ activo, igual que el resto.
+    let titleUser = userMsg.content;
+    let titleAssistant = assistantMsg.content;
+    if (state.settings.anonymizeOutgoing) {
+        try {
+            titleUser = anonymizeHistoryText(titleUser, chat);
+            titleAssistant = anonymizeHistoryText(titleAssistant, chat);
+        } catch (_) { return; } // sin anonimizador, mejor sin título automático
+    }
+    const titlePrompt = `Genera un título muy breve (máximo 6 palabras) que resuma esta conversación. Responde SOLO con el título, sin comillas ni puntuación extra.\n\nUsuario: ${titleUser.substring(0, 200)}\nAsistente: ${titleAssistant.substring(0, 200)}`;
     
     try {
         const type = providerDef.type;
@@ -1827,8 +2094,8 @@ function renderPMCategories() {
     cats.forEach(cat => {
         const count = promptLibrary.prompts.filter(p => p.categoryId === cat.id).length;
         const active = cat.id === pmActiveCategory ? 'active' : '';
-        html += `<button class="pm-cat-item ${active}" data-cat-id="${cat.id}">
-            <span class="pm-cat-icon">${cat.icon}</span>
+        html += `<button class="pm-cat-item ${active}" data-cat-id="${escapeHtml(cat.id)}">
+            <span class="pm-cat-icon">${escapeHtml(cat.icon)}</span>
             <span>${escapeHtml(cat.name)}</span>
             <span class="pm-cat-count">${count}</span>
         </button>`;
@@ -1876,7 +2143,7 @@ function renderPMPromptList() {
 
     let html = '';
     prompts.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).forEach(p => {
-        html += `<div class="pm-prompt-card" data-prompt-id="${p.id}">
+        html += `<div class="pm-prompt-card" data-prompt-id="${escapeHtml(p.id)}">
             <div class="pm-prompt-title">${escapeHtml(p.title)}</div>
             <div class="pm-prompt-preview">${escapeHtml(p.content)}</div>
             <div class="pm-prompt-actions">
@@ -1899,7 +2166,7 @@ function renderPMPromptList() {
             renderPMPromptList();
         });
         card.querySelector('[data-action="delete"]')?.addEventListener('click', () => {
-            if (!confirm('¿Eliminar este prompt?')) return;
+            if (!confirm(trf('dlg.prompt.confirmDelete', '¿Eliminar este prompt?'))) return;
             promptLibrary.prompts = promptLibrary.prompts.filter(p => p.id !== id);
             savePromptLibrary();
             renderPMCategories();
@@ -1945,7 +2212,7 @@ function renderPMForm(existing) {
         const title = document.getElementById('pmFormTitle').value.trim();
         const content = document.getElementById('pmFormContent').value.trim();
         const categoryId = document.getElementById('pmFormCategory').value;
-        if (!title || !content) return alert('Título y contenido son obligatorios.');
+        if (!title || !content) return notify(trf('dlg.prompt.required', 'Título y contenido son obligatorios.'), 'error');
 
         if (existing) {
             existing.title = title;
@@ -2010,7 +2277,7 @@ function confirmSavePrompt() {
     const title = dom.savePromptTitle.value.trim();
     const content = dom.savePromptContent.value.trim();
     const categoryId = dom.savePromptCategory.value;
-    if (!title || !content) return alert('Título y contenido son obligatorios.');
+    if (!title || !content) return notify(trf('dlg.prompt.required', 'Título y contenido son obligatorios.'), 'error');
 
     promptLibrary.prompts.push({
         id: generatePromptId(),
@@ -2166,14 +2433,14 @@ function renderSlashCategories(query) {
     slashState.items = cats.map(c => ({ type: 'category', ...c }));
 
     if (slashState.items.length === 0) {
-        dom.slashDropdownList.innerHTML = `<div class="slash-empty">No se encontraron categorías para "/${query}"</div>`;
+        dom.slashDropdownList.innerHTML = `<div class="slash-empty">No se encontraron categorías para "/${escapeHtml(query)}"</div>`;
         return;
     }
 
     dom.slashDropdownList.innerHTML = slashState.items.map((item, i) => {
         const count = promptLibrary.prompts.filter(p => p.categoryId === item.id).length;
         return `<button class="slash-item ${i === slashState.selectedIndex ? 'active' : ''}" data-idx="${i}">
-            <span class="slash-item-icon">${item.icon}</span>
+            <span class="slash-item-icon">${escapeHtml(item.icon)}</span>
             <div class="slash-item-info">
                 <div class="slash-item-title">${escapeHtml(item.name)}</div>
             </div>
@@ -2265,14 +2532,14 @@ function renderEngineSlashProviders(query) {
     modelSlashState.items = providers.map(p => ({ type: 'provider', id: p.id, name: p.name, icon: p.icon, favorite: p.favorite }));
 
     if (modelSlashState.items.length === 0) {
-        dom.modelSlashDropdownList.innerHTML = `<div class="slash-empty">No se encontraron motores para "///${query}"</div>`;
+        dom.modelSlashDropdownList.innerHTML = `<div class="slash-empty">No se encontraron motores para "///${escapeHtml(query)}"</div>`;
         return;
     }
     let html = `<div class="slash-dropdown-heading">⚙️ Elegir motor de IA · luego // para elegir modelo</div>`;
     html += modelSlashState.items.map((item, i) => {
         const isCurrent = item.id === state.settings.provider;
         return `<button class="slash-item ${i === modelSlashState.selectedIndex ? 'active' : ''}" data-idx="${i}">
-            <span class="slash-item-icon">${item.icon}</span>
+            <span class="slash-item-icon">${escapeHtml(item.icon)}</span>
             <div class="slash-item-info">
                 <div class="slash-item-title">${item.favorite ? '★ ' : ''}${escapeHtml(item.name)}${isCurrent ? ' <span class="slash-current">· actual</span>' : ''}</div>
             </div>
@@ -2300,7 +2567,12 @@ function bindModelSlashItemClicks() {
     });
 }
 
-function selectSlashItem(idx) {
+/**
+ * selectSlashItem — elige un elemento del selector `/`.
+ * Con `send`, un prompt se LANZA directamente (Intro); sin él, solo se inserta en
+ * la caja para editarlo antes de enviar (Tab o clic).
+ */
+function selectSlashItem(idx, { send = false } = {}) {
     const item = slashState.items[idx];
     if (!item) return;
 
@@ -2317,10 +2589,18 @@ function selectSlashItem(idx) {
         dom.messageInput.value = '/';
         renderSlashCategories('');
     } else if (item.type === 'prompt') {
+        hideSlashDropdown();
+        if (send) {
+            // Misma ruta que el botón de enviar: sendMessage vacía la caja y adjunta lo pendiente.
+            dom.messageInput.value = '';
+            autoResizeTextarea();
+            updateSendButton();
+            sendMessage(item.content);
+            return;
+        }
         dom.messageInput.value = item.content;
         autoResizeTextarea();
         updateSendButton();
-        hideSlashDropdown();
         dom.messageInput.focus();
     }
 }
@@ -2349,7 +2629,6 @@ async function selectModelSlashItem(idx) {
         updateSendButton();
         hideModelSlashDropdown();
         dom.messageInput.focus();
-        showStatusMeta && showStatusMeta(`Modelo: ${item.label}`);
     } else if (item.type === 'agent') {
         // Cambia de agente (@): con su motor, sus iniciadores y sus chats.
         dom.messageInput.value = '';
@@ -2375,7 +2654,6 @@ async function selectModelSlashItem(idx) {
         updateSendButton();
         hideModelSlashDropdown();
         dom.messageInput.focus();
-        showStatusMeta && showStatusMeta(`Motor: ${getProviderDef(item.id).name}`);
     }
 }
 
@@ -2390,6 +2668,13 @@ function handleSlashKeydown(e) {
             slashState.selectedIndex = Math.max(slashState.selectedIndex - 1, 0);
             updateSlashHighlight();
         } else if (e.key === 'Enter') {
+            // Intro lanza el prompt directamente; en una categoría, la abre.
+            if (slashState.items.length > 0) {
+                e.preventDefault();
+                selectSlashItem(slashState.selectedIndex, { send: true });
+            }
+        } else if (e.key === 'Tab') {
+            // Tab solo inserta el prompt, para editarlo antes de enviarlo.
             if (slashState.items.length > 0) {
                 e.preventDefault();
                 selectSlashItem(slashState.selectedIndex);
@@ -2552,3 +2837,11 @@ function bindSlashCommandEvents() {
     });
 })();
 // wIA Dynamic Version Hook Trigger
+
+/* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
+export {
+    openSettings, showConnectionValidationResult, bindEvents, closeSidebar, autoResizeTextarea,
+    updateSendButton, scrollToBottom, formatDate, autoTitleChat, loadPromptLibrary,
+    bindSlashCommandEvents,
+};
+/* <<< exports <<< */
