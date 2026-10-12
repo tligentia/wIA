@@ -230,6 +230,7 @@
   "anon.tool.found": "Datos protegidos: {n}",
   "legal.ack": "Entendido",
   "anon.tool.edited": "✏️ Resultado editado a mano: se recalcula si cambias el texto original.",
+  "anon.tool.reviewed": "🛡️ Se han anonimizado {n} dato(s) nuevo(s) añadidos al resultado.",
   "anon.tool.btn.title": "Abrir la ventana del anonimizador: pega un texto o carga un archivo y descarga la versión anonimizada",
   "anon.tool.file": "📂 Cargar archivo…",
   "anon.tool.file.title": "Carga un archivo de texto (.md, .txt, .csv, .json, .html, .pdf…) para anonimizarlo; se procesa en este navegador",

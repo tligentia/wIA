@@ -2,19 +2,19 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AJ';
+} from './07-ui.js?v=2610.AK';
 import {
     debounce, escapeHtml, loadLocalJson, tr,
-} from './01-core.js?v=2610.AJ';
+} from './01-core.js?v=2610.AK';
 import {
     dom, saveState, secretVault, state,
-} from './02-state.js?v=2610.AJ';
+} from './02-state.js?v=2610.AK';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AJ';
+} from './05-workspace.js?v=2610.AK';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AJ';
+} from './06-chat.js?v=2610.AK';
 /* <<< imports <<< */
 
 /* ============================================
@@ -366,6 +366,8 @@ const anonTool = {
     openedByLink: false,
     fileName: '',      // archivo cargado en la ventana (para nombrar la descarga)
     outputDirty: false, // el usuario ha editado a mano el resultado: no se pisa al repintar
+    extraEntities: [],  // datos nuevos hallados al revisar lo escrito a mano en el resultado
+    lastReview: 0,      // nº de datos anonimizados en la última revisión del resultado editado
     session: { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} },
 };
 
@@ -394,6 +396,8 @@ function resetAnonToolSession() {
     anonTool.session = { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} };
     anonTool.fileName = '';
     anonTool.outputDirty = false;
+    anonTool.extraEntities = [];
+    anonTool.lastReview = 0;
 }
 
 // Tope de lo que se procesa de una vez: el motor analiza ~100 KB por segundo y
@@ -474,6 +478,8 @@ async function loadAnonToolFile(file) {
         document.getElementById('anonToolInput').value = text;
         anonTool.fileName = file.name;
         anonTool.outputDirty = false;
+        anonTool.extraEntities = [];
+        anonTool.lastReview = 0;
         return '';
     } catch (e) {
         return tr('anon.tool.file.error', 'No se pudo leer el archivo: {error}').replace('{error}', e?.message || String(e));
@@ -526,7 +532,7 @@ function renderAnonTool() {
     if (!anonTool.outputDirty) output.value = result.text;
     const dl = document.getElementById('anonToolDownload');
     if (dl) dl.disabled = !output.value;
-    renderAnonReport(restoring ? [] : result.entities);
+    renderAnonReport(restoring ? [] : result.entities.concat(anonTool.extraEntities));
     if (!summary) return;
     summary.replaceChildren();
     const known = Object.keys(anonTool.session.placeholderToValue).length;
@@ -559,6 +565,47 @@ function renderAnonTool() {
         note.textContent = tr('anon.tool.edited', '✏️ Resultado editado a mano: se recalcula si cambias el texto original.');
         summary.append(note);
     }
+    if (anonTool.lastReview > 0) appendReviewNote(summary);
+}
+
+/** Aviso de que al revisar lo escrito en el resultado se han anonimizado datos nuevos. */
+function appendReviewNote(summary) {
+    summary.querySelector('.anon-tool-reviewed')?.remove();
+    if (anonTool.lastReview <= 0) return;
+    const note = document.createElement('span');
+    note.className = 'anon-tool-chip anon-tool-reviewed';
+    note.textContent = tr('anon.tool.reviewed', '🛡️ Se han anonimizado {n} dato(s) nuevo(s) añadidos al resultado.').replace('{n}', anonTool.lastReview);
+    summary.append(note);
+}
+
+/**
+ * reviewAnonOutput — revisa lo que el usuario ha escrito o pegado EN EL RESULTADO.
+ * El resultado ya está anonimizado, pero al editarlo a mano pueden colarse datos
+ * reales nuevos (un nombre, un teléfono…). Se pasa el motor de detección sobre
+ * el texto: los marcadores existentes no se vuelven a detectar, y lo nuevo recibe
+ * marcador con la MISMA sesión, así que es coherente con el resto.
+ * Devuelve cuántos datos nuevos se han anonimizado.
+ */
+function reviewAnonOutput() {
+    if (anonTool.mode !== 'anon') return 0;
+    const out = document.getElementById('anonToolOutput');
+    if (!out || !out.value.trim()) return 0;
+    const before = out.value;
+    const res = runAnonTool(before, 'anon');
+    if (res.notReady || !res.entities.length) return 0;
+    // Mantiene el cursor a la misma distancia del final del texto.
+    const fromEnd = before.length - (out.selectionEnd ?? before.length);
+    out.value = res.text;
+    const pos = Math.max(0, res.text.length - fromEnd);
+    try { out.setSelectionRange(pos, pos); } catch (_) {}
+    anonTool.extraEntities.push(...res.entities);
+    anonTool.lastReview += res.entities.length;
+    renderAnonReport(runAnonTool(document.getElementById('anonToolInput').value, 'anon').entities.concat(anonTool.extraEntities));
+    const summary = document.getElementById('anonToolSummary');
+    if (summary) appendReviewNote(summary);
+    const dl = document.getElementById('anonToolDownload');
+    if (dl) dl.disabled = !out.value;
+    return res.entities.length;
 }
 
 function openAnonTool({ fromLink = false } = {}) {
@@ -585,8 +632,10 @@ function bindAnonTool() {
     const $id = (id) => document.getElementById(id);
     if (!$id('anonToolModal')) return;
     const rerender = debounce(renderAnonTool, 150);
+    // Tras una pausa al escribir en el resultado, se revisa si se coló algo sensible.
+    const reviewOutputSoon = debounce(reviewAnonOutput, 600);
     // Cambiar el original recalcula el resultado (y descarta lo editado a mano).
-    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; rerender(); });
+    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; anonTool.extraEntities = []; anonTool.lastReview = 0; rerender(); });
     // El resultado también se puede editar: se conserva hasta que cambie el original.
     $id('anonToolOutput')?.addEventListener('input', () => {
         anonTool.outputDirty = true;
@@ -600,6 +649,7 @@ function bindAnonTool() {
             note.textContent = tr('anon.tool.edited', '✏️ Resultado editado a mano: se recalcula si cambias el texto original.');
             summary.append(note);
         }
+        reviewOutputSoon();
     });
     $id('anonToolOpenBtn')?.addEventListener('click', () => {
         dom.settingsModal?.classList.add('hidden');
@@ -620,6 +670,7 @@ function bindAnonTool() {
         if (error && summary) summary.textContent = error;
     });
     $id('anonToolDownload')?.addEventListener('click', () => {
+        reviewAnonOutput();
         const text = $id('anonToolOutput').value;
         if (!text) return;
         const kind = anonTool.mode === 'restore' ? 'restaurado' : 'anonimizado';
@@ -637,6 +688,8 @@ function bindAnonTool() {
         $id('anonToolInput').value = '';
         anonTool.fileName = '';
         anonTool.outputDirty = false;
+        anonTool.extraEntities = [];
+        anonTool.lastReview = 0;
         renderAnonTool();
         $id('anonToolInput').focus();
     };
@@ -648,6 +701,7 @@ function bindAnonTool() {
         renderAnonTool();
     });
     $id('anonToolCopy')?.addEventListener('click', async (e) => {
+        reviewAnonOutput();
         const text = $id('anonToolOutput').value;
         if (!text) return;
         const btn = e.currentTarget;
@@ -670,6 +724,7 @@ function bindAnonTool() {
         // original: los datos reales no llegan ni a la caja de mensaje. Se deja
         // 🕶️ activado por si se escribe algo más antes de enviar; los marcadores
         // ya puestos no se vuelven a detectar.
+        reviewAnonOutput();
         const text = $id('anonToolOutput').value.trim();
         if (!text) return;
         toggleAnonMode(true);

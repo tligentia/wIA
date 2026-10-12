@@ -3,19 +3,19 @@
 import {
     createChat, generateTitle, getActiveChat, getActiveProject, renderAttachmentPreview,
     renderChatList, showChat,
-} from './05-workspace.js?v=2610.AJ';
+} from './05-workspace.js?v=2610.AK';
 import {
     CHARS_PER_TOKEN, CONTEXT_SAFETY_MARGIN_TOKENS, MOBILE_SAFE_WEBGPU_MODEL, WEBGPU_MODELS,
     WEBGPU_PROGRESS_UI_MIN_DELTA_PCT, WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS,
     WEBGPU_TEXT_FALLBACK_MODEL, announce, escapeHtml, estimateTokenCount, getProviderBaseId,
     getVisionAssistDef, importTransformers, isHeavyForMobile, isMobileDevice, notify,
     sanitizeRenderedHtml, tr, trf,
-} from './01-core.js?v=2610.AJ';
+} from './01-core.js?v=2610.AK';
 import {
     applySettingsToUI, dom, formatTokens, getActiveProviderConfig, getAuthHeaders,
     getCompactModelLabel, getCompactProviderLabel, getProviderDef, saveCurrentProviderConfig,
     saveState, state, syncProviderToState, updateInputDisclaimer,
-} from './02-state.js?v=2610.AJ';
+} from './02-state.js?v=2610.AK';
 import {
     WEBGPU_LOOP_STOP_NOTE, analyzeImagesForWebGPU, applyWebGPUStreamedText, checkWebGPUSupport,
     formatWoundResult, loadDinoMedicalVisionModel, loadFlorence2VisionModel,
@@ -23,26 +23,26 @@ import {
     maybeStopRepetitionLoop, runDinoMedicalEmbedding, runFlorence2Analysis, runVLMAnalysis,
     runWebGPUGeneration, runWoundClassify, splitWebGPUThinking, updateGenerationStatus,
     webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AJ';
+} from './03-webgpu.js?v=2610.AK';
 import {
     FAILOVER_MAX_HOPS, checkProviderStatus, classifyEngineFailure, describeChatFailure,
     getEngineCooldown, getFailoverCandidates, getWebGPUCustomModels, markEngineFailure,
     markEngineSuccess, parseRetryAfter, providerHttpError, recordWebGPUModelReport,
     withEngineOverride,
-} from './04-providers.js?v=2610.AJ';
+} from './04-providers.js?v=2610.AK';
 import {
     autoResizeTextarea, autoTitleChat, scrollToBottom, updateSendButton,
-} from './07-ui.js?v=2610.AJ';
+} from './07-ui.js?v=2610.AK';
 import {
     anonChatState, anonymizeHistoryText, anonymizeOutgoingText, anonymizeTextSync,
     deanonymizeForDisplay, ensureAnonReady, listAnonItems, persistAnonVault, restoreAnonText,
-} from './08-anon.js?v=2610.AJ';
+} from './08-anon.js?v=2610.AK';
 import {
     t,
-} from './09-i18n.js?v=2610.AJ';
+} from './09-i18n.js?v=2610.AK';
 import {
     formatRagContext, prepareRagContext,
-} from './11-rag.js?v=2610.AJ';
+} from './11-rag.js?v=2610.AK';
 /* <<< imports <<< */
 
 /* ============================================

@@ -230,6 +230,7 @@
   "anon.tool.found": "Protected items: {n}",
   "legal.ack": "Got it",
   "anon.tool.edited": "✏️ Result edited by hand: it is recalculated if you change the original text.",
+  "anon.tool.reviewed": "🛡️ {n} new item(s) added to the result were anonymized.",
   "anon.tool.btn.title": "Open the anonymizer window: paste text or load a file and download the anonymized version",
   "anon.tool.file": "📂 Load file…",
   "anon.tool.file.title": "Load a text file (.md, .txt, .csv, .json, .html, .pdf…) to anonymize it; it is processed in this browser",
