@@ -2,19 +2,19 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AL';
+} from './07-ui.js?v=2610.AM';
 import {
     debounce, escapeHtml, loadLocalJson, tr,
-} from './01-core.js?v=2610.AL';
+} from './01-core.js?v=2610.AM';
 import {
     dom, saveState, secretVault, state,
-} from './02-state.js?v=2610.AL';
+} from './02-state.js?v=2610.AM';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AL';
+} from './05-workspace.js?v=2610.AM';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AL';
+} from './06-chat.js?v=2610.AM';
 /* <<< imports <<< */
 
 /* ============================================
@@ -729,10 +729,16 @@ function bindAnonTool() {
         if (!text) return;
         toggleAnonMode(true);
         closeAnonTool();
-        dom.messageInput.value = text;
+        // Se añade a continuación de lo que ya hubiera en la caja, en un párrafo
+        // aparte, para no perder lo que el usuario estuviera escribiendo.
+        const current = dom.messageInput.value.replace(/\s+$/, '');
+        dom.messageInput.value = current ? `${current}\n\n${text}` : text;
         if (typeof autoResizeTextarea === 'function') autoResizeTextarea();
         if (typeof updateSendButton === 'function') updateSendButton();
         dom.messageInput.focus();
+        const end = dom.messageInput.value.length;
+        try { dom.messageInput.setSelectionRange(end, end); } catch (_) {}
+        dom.messageInput.scrollTop = dom.messageInput.scrollHeight;
     });
     // Los tipos activos se cambian en Ajustes: al volver, el resultado se recalcula.
     window.addEventListener('hashchange', () => { if (isAnonDeepLink()) openAnonTool({ fromLink: true }); });
