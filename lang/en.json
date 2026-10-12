@@ -375,7 +375,7 @@
   "anon.ai.failed": "⚠️ The local AI could not review the text; the internal system is used.",
   "anon.terms.title": "Custom terms",
   "anon.terms.help": "Names, organizations, addresses or other data you want ALWAYS anonymized, even if the system does not recognize them. Case and accents are ignored. You can add several separated by “;” or by line.",
-  "anon.terms.placeholder": "E.g.: Jesús de Pablos; Project Chimera",
+  "anon.terms.placeholder": "E.g.: Lía Marto; Project Alfa",
   "anon.terms.add": "Add",
   "anon.terms.clear": "Remove all",
   "anon.terms.clearConfirm": "Remove all custom terms?",

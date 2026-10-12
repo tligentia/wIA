@@ -375,7 +375,7 @@
   "anon.ai.failed": "⚠️ La IA local no ha podido revisar el texto; se usa el sistema interno.",
   "anon.terms.title": "Términos propios",
   "anon.terms.help": "Nombres, organizaciones, direcciones u otros datos que quieres que se anonimicen SIEMPRE, aunque el sistema no los reconozca. No distingue mayúsculas ni tildes. Puedes añadir varios separados por «;» o por línea.",
-  "anon.terms.placeholder": "Ej.: Jesús de Pablos; Proyecto Quimera",
+  "anon.terms.placeholder": "Ej.: Lía Marto; Proyecto Alfa",
   "anon.terms.add": "Añadir",
   "anon.terms.clear": "Quitar todos",
   "anon.terms.clearConfirm": "¿Quitar todos los términos propios?",

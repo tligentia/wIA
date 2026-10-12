@@ -55,7 +55,7 @@ hides('tarjetas Visa, Mastercard y Amex', 'Visa 4111 1111 1111 1111, MC 5500-000
 hides('nombre del diccionario con apellidos', 'Hablé con Juan Pérez García ayer.', ['Juan', 'Pérez', 'García']);
 hides('nombre que no está en el diccionario, por su apellido', 'La paciente Marta Gutiérrez Soler firmó.', ['Gutiérrez', 'Soler']);
 hides('nombre introducido por un tratamiento', 'También Dña. Rocío Jurado y el Sr. Bermúdez Ochandiano.', ['Rocío', 'Jurado', 'Bermúdez', 'Ochandiano']);
-hides('nombre escrito sin tildes (Jesús → Jesus)', 'Procurador:\nJesus de Pablos', ['Jesus', 'Pablos']);
+hides('nombre escrito sin tildes (Jesús → Jesus)', 'Procurador:\nJesus de Pinares', ['Jesus', 'Pinares']);
 hides('apellidos sin tildes (García → Garcia)', 'Habló con Maria Garcia Lopez.', ['Maria', 'Garcia', 'Lopez']);
 check('un nombre no se extiende por un salto de línea',
     anon('Partes\nLaura Fernández López firmó.').anonymizedText.startsWith('Partes\n[Nombre_'),
