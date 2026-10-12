@@ -5994,3 +5994,33 @@ body.mobile-device .webgpu-mobile-note {
 @media (max-width: 480px) {
     .site-footer .footer-bottom { flex-wrap: wrap; justify-content: center; row-gap: 6px; }
 }
+
+/* ── Aviso de cookies al abrir la aplicación ── */
+.cookie-notice {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    z-index: 900;                 /* sobre la interfaz, bajo los modales (1000) y el bloqueo */
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: min(720px, calc(100vw - 24px));
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg, 14px);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-secondary);
+}
+.cookie-notice.hidden { display: none; }
+.cookie-notice-icon { flex: 0 0 auto; color: var(--accent-primary); }
+.cookie-notice-text { flex: 1 1 auto; margin: 0; font-size: 0.8rem; line-height: 1.5; }
+.cookie-notice-text a { margin-left: 4px; color: var(--accent-primary); font-weight: 600; text-decoration: underline; white-space: nowrap; }
+.cookie-notice .btn-primary { flex: 0 0 auto; }
+@media (max-width: 560px) {
+    .cookie-notice { flex-wrap: wrap; bottom: 8px; }
+    .cookie-notice-icon { display: none; }
+    .cookie-notice .btn-primary { width: 100%; }
+}
+@media print { .cookie-notice { display: none; } }

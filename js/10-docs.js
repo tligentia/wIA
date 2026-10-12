@@ -2,10 +2,10 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     getLang,
-} from './09-i18n.js?v=2610.AK';
+} from './09-i18n.js?v=2610.AL';
 import {
     escapeHtml, loadLocalJson,
-} from './01-core.js?v=2610.AK';
+} from './01-core.js?v=2610.AL';
 /* <<< imports <<< */
 
 /* ============================================
@@ -162,6 +162,7 @@ function openLegal(section) {
     if (!modal) return;
     if (LEGAL_IDS.includes(section)) _legalSection = section;
     modal.classList.remove('hidden');
+    syncCookieNotice();
     renderLegal();
     document.getElementById('legalBody')?.scrollTo({ top: 0 });
     try { history.replaceState(null, '', `${location.pathname}${location.search}${LEGAL_HASH}${_legalSection}`); } catch (_) {}
@@ -170,6 +171,7 @@ function openLegal(section) {
 
 function closeLegal() {
     document.getElementById('privacyModal')?.classList.add('hidden');
+    syncCookieNotice();
     // Se limpia la marca para que recargar no vuelva a abrirlo.
     if (location.hash.startsWith(LEGAL_HASH)) {
         try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
@@ -180,6 +182,37 @@ function legalSectionFromHash() {
     if (!location.hash.startsWith(LEGAL_HASH)) return null;
     const id = location.hash.slice(LEGAL_HASH.length);
     return LEGAL_IDS.includes(id) ? id : null;
+}
+
+// ─── Aviso de cookies al abrir la aplicación ───
+// Informativo: wIA solo usa almacenamiento técnico (exento de consentimiento, art. 22.2 LSSI-CE),
+// así que no hay nada que aceptar ni rechazar. Se recuerda que se ha visto para no repetirlo.
+const COOKIE_NOTICE_KEY = 'wia_cookie_notice_seen';
+
+function cookieNoticeSeen() {
+    try { return localStorage.getItem(COOKIE_NOTICE_KEY) !== null; } catch (_) { return false; }
+}
+
+function syncCookieNotice() {
+    const notice = document.getElementById('cookieNotice');
+    if (!notice) return;
+    // Mientras la ventana legal está abierta no se muestra (sin marcarlo como visto).
+    notice.classList.toggle('hidden', cookieNoticeSeen() || isLegalOpen());
+}
+
+function bindCookieNotice() {
+    const notice = document.getElementById('cookieNotice');
+    if (!notice) return;
+    document.getElementById('cookieNoticeOk')?.addEventListener('click', () => {
+        // Sin almacenamiento disponible el aviso vuelve a salir en la próxima visita; nada más.
+        try { localStorage.setItem(COOKIE_NOTICE_KEY, new Date().toISOString()); } catch (_) {}
+        notice.classList.add('hidden');
+    });
+    document.getElementById('cookieNoticeLink')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openLegal('cookies');
+    });
+    syncCookieNotice();
 }
 
 function bindLegal() {
@@ -202,6 +235,7 @@ function bindLegal() {
     if (initial) openLegal(initial);
 }
 bindLegal();
+bindCookieNotice();
 
 /* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 export {

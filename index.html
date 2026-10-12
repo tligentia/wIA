@@ -1245,6 +1245,19 @@
         </div>
     </div>
 
+    <!-- Aviso de cookies al abrir la aplicación: informativo (solo almacenamiento técnico del navegador). -->
+    <div class="cookie-notice hidden" id="cookieNotice" role="region" aria-label="Cookies">
+        <svg class="cookie-notice-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/>
+            <path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/>
+        </svg>
+        <p class="cookie-notice-text">
+            <span data-i18n="legal.cookies.text">wIA no instala cookies propias: solo usa almacenamiento técnico de tu navegador para guardar tus conversaciones y ajustes. No hay analítica, publicidad ni seguimiento.</span>
+            <a href="#legal/cookies" id="cookieNoticeLink" data-i18n="legal.cookies.link">Política de cookies</a>
+        </p>
+        <button type="button" class="btn-primary btn-sm" id="cookieNoticeOk" data-i18n="legal.ack">Entendido</button>
+    </div>
+
     <!-- Información legal: aviso legal, privacidad, cookies y cumplimiento (contenido en lang/legal/*.json) -->
     <div class="modal-overlay hidden" id="privacyModal">
         <div class="modal modal-wide legal-modal" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
@@ -1268,6 +1281,7 @@
                     <div id="legalDisclaimerBody">
                         <p><strong>wIA es un proyecto educativo y experimental, sin finalidad comercial.</strong> No es un producto ni un servicio profesional: se ofrece «tal cual», sin garantías de ningún tipo y sin contraprestación.</p>
                         <p><strong>El uso que se haga de wIA es totalmente responsabilidad del usuario</strong>: lo que escribe, los datos y documentos que carga, los motores y proveedores que conecta, las claves que introduce y lo que hace con las respuestas. Los modelos de IA pueden equivocarse o inventar contenido y <strong>no sustituyen el criterio ni el asesoramiento de un profesional</strong> (jurídico, médico, financiero u otro).</p>
+                        <p><strong>wIA no utiliza servidores propios</strong> para procesar ni guardar tus datos: <strong>todo se ejecuta y se memoriza en la memoria del navegador del usuario</strong> (conversaciones, documentos, ajustes y claves). Solo los motores de IA externos que el usuario conecte reciben lo que les envía.</p>
                     </div>
                 </section>
                 <nav class="legal-tabs" id="legalTabs" role="tablist" aria-label="Secciones legales"></nav>
@@ -1467,7 +1481,7 @@
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AK"></script>
+    <script type="module" src="js/main.js?v=2610.AL"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>

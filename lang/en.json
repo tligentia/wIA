@@ -229,6 +229,8 @@
   "anon.tool.none": "No sensitive data detected with the active types.",
   "anon.tool.found": "Protected items: {n}",
   "legal.ack": "Got it",
+  "legal.cookies.text": "wIA sets no cookies of its own: it only uses your browser’s technical storage to keep your conversations and settings. There is no analytics, advertising or tracking.",
+  "legal.cookies.link": "Cookie policy",
   "anon.tool.edited": "✏️ Result edited by hand: it is recalculated if you change the original text.",
   "anon.tool.reviewed": "🛡️ {n} new item(s) added to the result were anonymized.",
   "anon.tool.btn.title": "Open the anonymizer window: paste text or load a file and download the anonymized version",
