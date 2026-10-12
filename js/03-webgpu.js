@@ -2,23 +2,23 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     dom, state, updateStatusMeta,
-} from './02-state.js?v=2610.AQ';
+} from './02-state.js?v=2610.AR';
 import {
     WEBGPU_MODELS, _transformersSources, escapeHtml, getVisionAssistDef, importTransformers,
-    isRetryableWebGPULoadError, notify, trf, webgpuDtypeCandidates,
-} from './01-core.js?v=2610.AQ';
+    isRetryableWebGPULoadError, notify, tr, trf, webgpuDtypeCandidates,
+} from './01-core.js?v=2610.AR';
 import {
     populateModels,
-} from './04-providers.js?v=2610.AQ';
+} from './04-providers.js?v=2610.AR';
 import {
     analyzeImagesForWebGPUInline, buildWebGPURepoUrl, clearMessageLoadingState,
     estimateInstallProgress, extractGeneratedText, formatErrorDetail, inferMimeTypeFromBase64,
     normalizeImageMeta, runWebGPUGenerationInline, shouldEmitWebGPUProgress, stopStreaming,
     updateStreamingMessage,
-} from './06-chat.js?v=2610.AQ';
+} from './06-chat.js?v=2610.AR';
 import {
     t,
-} from './09-i18n.js?v=2610.AQ';
+} from './09-i18n.js?v=2610.AR';
 /* <<< imports <<< */
 
 /* ============================================
@@ -41,6 +41,7 @@ const webgpuState = {
     fp16Supported: null,      // shader-f16 disponible en el adaptador
     executionMode: null,      // null = sin decidir, 'worker' | 'inline'
     activeStopper: null,      // StoppingCriteria de la generación inline en curso
+    generating: false,        // Hay una generación (chat o respuesta única) usando el pipeline
     cancelRequested: false,   // Cooperative cancellation during model boot
     cachedModelIds: new Set(),// Set of model IDs currently cached in browser
     adapterInfo: null,        // { vendor, architecture, description } del adaptador
@@ -1627,13 +1628,75 @@ async function warmUpActiveWebGPUModel() {
 window.warmUpActiveWebGPUModel = warmUpActiveWebGPUModel;
 
 async function runWebGPUGeneration(pipe, promptInput, assistantMsg, msgIdx) {
-    if (pipe?.__omnimodal) {
-        return runWebGPUOmnimodalGeneration(pipe, promptInput, assistantMsg, msgIdx);
+    // El pipeline es uno solo: si el anonimizador tiene una consulta en vuelo
+    // (ventana del anonimizador abierta a la vez), el chat espera su turno.
+    await _webgpuCompleteChain;
+    webgpuState.generating = true;
+    try {
+        if (pipe?.__omnimodal) {
+            return await runWebGPUOmnimodalGeneration(pipe, promptInput, assistantMsg, msgIdx);
+        }
+        if (pipe && pipe.__worker) {
+            return await runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msgIdx);
+        }
+        return await runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx);
+    } finally {
+        webgpuState.generating = false;
     }
-    if (pipe && pipe.__worker) {
-        return runWebGPUGenerationViaWorker(pipe, promptInput, assistantMsg, msgIdx);
+}
+
+// ─── Respuesta única (sin chat) ──────────────
+/**
+ * completeWebGPU — una consulta no-streaming al modelo del navegador: sistema +
+ * usuario → texto. La usa el modo IA del anonimizador. Reutiliza el modelo ya
+ * cargado para el chat (o lo carga si hace falta), responde de forma
+ * determinista (do_sample:false) y se encola con otras consultas iguales porque
+ * el pipeline admite una sola generación a la vez. Devuelve solo la respuesta
+ * (sin el razonamiento de modelos tipo R1).
+ */
+let _webgpuCompleteChain = Promise.resolve();
+
+function completeWebGPU(system, user, opts = {}) {
+    const run = _webgpuCompleteChain.then(() => _completeWebGPUNow(system, user, opts));
+    _webgpuCompleteChain = run.catch(() => {});
+    return run;
+}
+
+async function _completeWebGPUNow(system, user, { maxTokens = 400, onProgress = null, timeoutMs = 180000 } = {}) {
+    const modelId = String(state.settings.model || '').trim();
+    if (!modelId) throw new Error(tr('anon.ai.reason.model', 'Selecciona un modelo en el motor local.'));
+    const def = WEBGPU_MODELS.find(m => m.id === modelId);
+    if (def?.omnimodal) throw new Error(tr('anon.ai.reason.webgpuModel', 'Este modelo del navegador es multimodal y no sirve para anonimizar; elige uno de texto.'));
+    if (webgpuState.generating) throw new Error(tr('anon.ai.reason.busy', 'El modelo del navegador está generando otra respuesta.'));
+
+    let pipe = webgpuState.loadedModelId === modelId ? webgpuState.pipeline : null;
+    if (!pipe) pipe = await loadWebGPUModel(modelId, onProgress, def?.task || 'text-generation');
+    if (!pipe || pipe.__omnimodal) throw new Error(tr('anon.ai.reason.busy', 'El modelo del navegador está generando otra respuesta.'));
+
+    const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
+    webgpuState.generating = true;
+    try {
+        let raw;
+        if (pipe.__worker) {
+            try {
+                const done = await webgpuWorker.call({
+                    type: 'generate',
+                    input: { messages },
+                    options: { max_new_tokens: maxTokens, do_sample: false, repetition_penalty: 1.0 },
+                }, {}, timeoutMs);
+                raw = extractGeneratedText(done.result);
+            } catch (e) {
+                webgpuWorker.interrupt();       // que un timeout no deje al modelo generando
+                throw e;
+            }
+        } else {
+            raw = extractGeneratedText(await pipe(messages, { max_new_tokens: maxTokens, do_sample: false }));
+        }
+        const parts = splitWebGPUThinking(raw || '');
+        return parts.content || raw || '';
+    } finally {
+        webgpuState.generating = false;
     }
-    return runWebGPUGenerationInline(pipe, promptInput, assistantMsg, msgIdx);
 }
 
 async function analyzeImagesForWebGPU(imageMetaList = [], onProgress, userPrompt = '') {
@@ -1656,6 +1719,6 @@ export {
     formatWoundResult, loadDinoMedicalVisionModel, runDinoMedicalEmbedding, webgpuWorker,
     updateGenerationStatus, WEBGPU_LOOP_STOP_NOTE, maybeStopRepetitionLoop,
     splitWebGPUThinking, applyWebGPUStreamedText, loadWebGPUModel, warmUpActiveWebGPUModel,
-    runWebGPUGeneration, analyzeImagesForWebGPU,
+    runWebGPUGeneration, completeWebGPU, analyzeImagesForWebGPU,
 };
 /* <<< exports <<< */

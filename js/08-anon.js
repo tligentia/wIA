@@ -2,19 +2,22 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AQ';
+} from './07-ui.js?v=2610.AR';
 import {
-    debounce, escapeHtml, loadLocalJson, notify, tr,
-} from './01-core.js?v=2610.AQ';
+    WEBGPU_MODELS, debounce, escapeHtml, getWebGPUBrokenInfo, loadLocalJson, notify, tr,
+} from './01-core.js?v=2610.AR';
 import {
     dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
-} from './02-state.js?v=2610.AQ';
+} from './02-state.js?v=2610.AR';
+import {
+    checkWebGPUSupport, completeWebGPU, webgpuState,
+} from './03-webgpu.js?v=2610.AR';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AQ';
+} from './05-workspace.js?v=2610.AR';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AQ';
+} from './06-chat.js?v=2610.AR';
 /* <<< imports <<< */
 
 /* ============================================
@@ -280,10 +283,12 @@ function deanonymizeForDisplay(text) {
 // datos que el sistema interno no reconoce. El interno SIEMPRE se aplica (la IA
 // solo suma), y la IA solo se usa si el motor activo es IA Local VERIFICADO: el
 // texto sin anonimizar jamás se envía a un motor que no sea de tu equipo o red.
-const ANON_AI_ENGINES = ['ollama', 'openai'];     // HTTP; WebGPU corre en un worker sin API de una sola respuesta
+const ANON_AI_ENGINES = ['ollama', 'openai'];     // HTTP; WebGPU (en el navegador) va aparte con completeWebGPU
 const ANON_AI_CHUNK = 2600;                        // caracteres por consulta
+const ANON_AI_CHUNK_BROWSER = 1100;                // el modelo del navegador es pequeño: trozos más cortos
 const ANON_AI_MAX_CHUNKS = 10;                     // tope por texto (~26 000 caracteres)
 const _aiVerify = { key: '', at: 0, ok: false, reason: '' };
+let _aiVerifyPending = '';                          // motor+modelo cuya verificación está en curso
 
 function _aiEngineKey() {
     return `${state.settings.provider}|${state.settings.ollamaUrl}|${state.settings.model}`;
@@ -293,7 +298,16 @@ function _aiEngineKey() {
 function localAIStatus() {
     const prov = getProviderDef(state.settings.provider);
     if (prov.type === 'webgpu') {
-        return { ok: false, reason: tr('anon.ai.reason.webgpu', 'El modelo del navegador (WebGPU) todavía no admite anonimizar con IA: usa un motor local como Ollama, LM Studio o LocalAI.') };
+        // Corre en esta pestaña: el texto no sale del equipo. Hace falta un modelo
+        // de texto que no conste como roto y un navegador con WebGPU real (en WASM
+        // iría demasiado lento para revisar textos).
+        const model = String(state.settings.model || '').trim();
+        if (!model) return { ok: false, reason: tr('anon.ai.reason.model', 'Selecciona un modelo en el motor local.') };
+        const def = WEBGPU_MODELS.find(m => m.id === model);
+        if (def?.omnimodal) return { ok: false, reason: tr('anon.ai.reason.webgpuModel', 'Este modelo del navegador es multimodal y no sirve para anonimizar; elige uno de texto.') };
+        if (getWebGPUBrokenInfo(model)) return { ok: false, reason: tr('anon.ai.reason.webgpuBroken', 'Este modelo del navegador consta como no funcional en este equipo; elige otro.') };
+        if (webgpuState.supported === 'wasm') return { ok: false, reason: tr('anon.ai.reason.webgpuNoGpu', 'Este navegador no tiene WebGPU con aceleración: anonimizar con IA iría demasiado lento. Usa un motor local como Ollama.') };
+        return { ok: true, reason: '' };
     }
     if (!ANON_AI_ENGINES.includes(prov.type)) {
         return { ok: false, reason: tr('anon.ai.reason.engine', 'El motor «{name}» no admite anonimizar con IA; hace falta un motor local (Ollama, LM Studio o LocalAI).').replace('{name}', prov.name) };
@@ -320,6 +334,15 @@ async function verifyLocalAI({ force = false } = {}) {
     const prov = getProviderDef(state.settings.provider);
     const base = String(state.settings.ollamaUrl || '').trim().replace(/\/+$/, '');
     let result;
+    if (prov.type === 'webgpu') {
+        // Sin red que consultar: se comprueba el adaptador. El modelo se carga al
+        // primer uso (si ya está en memoria por el chat, se reutiliza).
+        const support = await checkWebGPUSupport();
+        result = support === 'webgpu' ? { ok: true, reason: '' }
+            : { ok: false, reason: tr('anon.ai.reason.webgpuNoGpu', 'Este navegador no tiene WebGPU con aceleración: anonimizar con IA iría demasiado lento. Usa un motor local como Ollama.') };
+        Object.assign(_aiVerify, { key, at: Date.now(), ok: result.ok, reason: result.reason });
+        return result;
+    }
     try {
         const url = prov.type === 'ollama' ? `${base}/api/tags` : `${base}/models`;
         const res = await fetch(url, { headers: getAuthHeaders(), signal: AbortSignal.timeout(5000) });
@@ -343,6 +366,21 @@ async function _localAIComplete(system, user) {
     const st = localAIStatus();          // última barrera: nada sale si ya no es local
     if (!st.ok) throw new Error(st.reason);
     const prov = getProviderDef(state.settings.provider);
+    if (prov.type === 'webgpu') {
+        // El modelo del navegador puede tener que descargarse la primera vez: se
+        // refleja en la nota de la ventana del anonimizador (si está abierta).
+        let shownLoading = false;
+        const onProgress = (pct) => {
+            shownLoading = true;
+            anonTool.aiNote = tr('anon.ai.loadingModel', '⬇ Cargando el modelo del navegador… {pct}%').replace('{pct}', Math.round(pct || 0));
+            setAnonAINote();
+        };
+        try {
+            return await completeWebGPU(ANON_AI_SYSTEM_BROWSER, user, { maxTokens: 450, onProgress });
+        } finally {
+            if (shownLoading) { anonTool.aiNote = ''; setAnonAINote(); }
+        }
+    }
     const base = String(state.settings.ollamaUrl || '').trim().replace(/\/+$/, '');
     const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
     const signal = AbortSignal.timeout(90000);
@@ -374,6 +412,13 @@ const ANON_AI_SYSTEM = 'Eres un detector de datos personales para anonimizar tex
     + 'del texto, que identifican a personas (nombre y apellidos), organizaciones, direcciones o lugares concretos, o cualquier otro dato '
     + 'personal. No incluyas marcadores como [Nombre_001], ni palabras comunes, ni explicaciones. Si no hay ninguno, {"items":[]}.';
 
+// Variante para modelos pequeños del navegador: más corta, con un ejemplo de la
+// forma de la respuesta. Lo que devuelvan igualmente se valida contra el texto.
+const ANON_AI_SYSTEM_BROWSER = 'Detecta datos personales en el texto del usuario. Responde SOLO con JSON: '
+    + '{"items":[{"text":"…","type":"nombre|empresa|direccion|dato"}]}. '
+    + '"text" es el fragmento copiado EXACTAMENTE del texto: nombres de personas, empresas, direcciones, lugares concretos u otros datos personales. '
+    + 'Si no hay ninguno: {"items":[]}. Ejemplo de respuesta: {"items":[{"text":"Marta Soler","type":"nombre"},{"text":"Calle Olmo 4","type":"direccion"}]}.';
+
 function _parseAIItems(raw) {
     let data = null;
     const txt = String(raw || '');
@@ -391,13 +436,14 @@ function _parseAIItems(raw) {
  * tamaño razonable y que no son un marcador. Divide los textos largos.
  */
 async function aiDetectTerms(text) {
+    const size = getProviderDef(state.settings.provider).type === 'webgpu' ? ANON_AI_CHUNK_BROWSER : ANON_AI_CHUNK;
     const paragraphs = String(text || '').split(/\n{2,}/);
     const chunks = [];
     let cur = '';
     for (const p of paragraphs) {
-        if (cur && cur.length + p.length + 2 > ANON_AI_CHUNK) { chunks.push(cur); cur = ''; }
+        if (cur && cur.length + p.length + 2 > size) { chunks.push(cur); cur = ''; }
         cur = cur ? `${cur}\n\n${p}` : p;
-        while (cur.length > ANON_AI_CHUNK * 1.5) { chunks.push(cur.slice(0, ANON_AI_CHUNK)); cur = cur.slice(ANON_AI_CHUNK); }
+        while (cur.length > size * 1.5) { chunks.push(cur.slice(0, size)); cur = cur.slice(size); }
     }
     if (cur.trim()) chunks.push(cur);
     const found = new Map();
@@ -576,9 +622,18 @@ function renderAnonModeUI() {
     });
     let help;
     if (wanted === 'ai') {
+        const key = _aiEngineKey();
+        const checked = st.ok && _aiVerify.key === key;
         if (anonAIActive()) help = tr('anon.mode.help.ai', 'IA local activa: el modelo revisa el texto además del sistema interno. El texto no sale de tu equipo.');
-        else if (!st.ok) help = tr('anon.mode.help.unavailable', 'IA no disponible ahora: {reason} Se usa el sistema interno.').replace('{reason}', st.reason);
-        else help = tr('anon.mode.verifying', 'Verificando el motor local…');
+        else if (!st.ok || (checked && !_aiVerify.ok)) help = tr('anon.mode.help.unavailable', 'IA no disponible ahora: {reason} Se usa el sistema interno.').replace('{reason}', st.ok ? _aiVerify.reason : st.reason);
+        else {
+            help = tr('anon.mode.verifying', 'Verificando el motor local…');
+            // Se cambió de motor o modelo desde la última comprobación: se verifica ahora.
+            if (_aiVerifyPending !== key) {
+                _aiVerifyPending = key;
+                verifyLocalAI().then(renderAnonModeUI).catch(() => {}).finally(() => { _aiVerifyPending = ''; });
+            }
+        }
     } else {
         help = st.ok
             ? tr('anon.mode.help.internal.canAI', 'Sistema interno (reglas y diccionarios). Puedes reforzarlo con tu modelo local.')

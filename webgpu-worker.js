@@ -7,7 +7,8 @@
      → {id, type:'probe'}                                → {id, type:'done', device, fp16}
      → {id, type:'prime'}                                → {id, type:'done', device, fp16, primed}
      → {id, type:'load', modelId, task, dtypeCandidates} → {id, type:'progress', ...}* + {id, type:'done', dtype, device}
-     → {id, type:'generate', input, options}             → {id, type:'token', text}* + {id, type:'done', text, tokenCount}
+     → {id, type:'generate', input, options}             → {id, type:'token', text}* + {id, type:'done', result, tokenCount}
+         (options.do_sample:false → respuesta determinista, sin streaming útil: la usa el anonimizador)
      → {id, type:'caption', images:[{dataUrl,name}]}     → {id, type:'progress', ...}* + {id, type:'done', captions}
      → {type:'interrupt'}                                → corta generación y marca carga como cancelada
      → {type:'dispose'}                                  → libera el pipeline activo
@@ -244,13 +245,18 @@ async function handleGenerate(msg) {
 
     let tokenCount = 0;
 
+    // do_sample:false (voraz, sin temperatura) es para tareas de extracción que
+    // piden una respuesta repetible; el chat siempre muestrea.
+    const sample = options?.do_sample !== false;
     const generationOptions = {
         max_new_tokens: options?.max_new_tokens || 2048,
-        temperature: options?.temperature ?? 0.7,
-        top_p: options?.top_p ?? 0.9,
-        repetition_penalty: 1.1,
-        do_sample: true,
+        repetition_penalty: options?.repetition_penalty ?? 1.1,
+        do_sample: sample,
     };
+    if (sample) {
+        generationOptions.temperature = options?.temperature ?? 0.7;
+        generationOptions.top_p = options?.top_p ?? 0.9;
+    }
 
     if (hf.TextStreamer && pipe.tokenizer) {
         generationOptions.streamer = new hf.TextStreamer(pipe.tokenizer, {

@@ -2,13 +2,13 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     state,
-} from './02-state.js?v=2610.AQ';
+} from './02-state.js?v=2610.AR';
 import {
     getWebGPUCustomModels,
-} from './04-providers.js?v=2610.AQ';
+} from './04-providers.js?v=2610.AR';
 import {
     t,
-} from './09-i18n.js?v=2610.AQ';
+} from './09-i18n.js?v=2610.AR';
 /* <<< imports <<< */
 
 /* ============================================

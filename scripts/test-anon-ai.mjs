@@ -121,6 +121,68 @@ console.log('\n5. IA local que no responde\n');
     check('el envío no se bloquea y el interno anonimiza', r.ok === true && !r.text.includes('Pérez'), r.text);
 }
 
+// ── 6. Modo IA con el modelo del navegador (WebGPU) ─────────────────────────
+console.log('\n6. Modo IA con WebGPU (modelo del navegador)\n');
+{
+    const { h, calls } = harness();
+    // El worker real no existe en Node: se simula su protocolo (generate → done con result).
+    // Un modelo del catálogo, ya «cargado» (pipeline = marcador de worker).
+    h.run(`
+        globalThis.__gen = [];
+        state.settings.provider = 'webgpu';
+        state.settings.model = WEBGPU_MODELS.find(m => !m.omnimodal).id;
+        state.settings.anonMode = 'ai';
+        webgpuState.supported = 'webgpu';
+        webgpuState.pipeline = { __worker: true };
+        webgpuState.loadedModelId = state.settings.model;
+        webgpuWorker.call = async (msg) => {
+            globalThis.__gen.push(msg);
+            const body = JSON.stringify({ items: [{ text: 'Galáctica Zeta', type: 'empresa' }, { text: 'Inventado', type: 'nombre' }] });
+            return { type: 'done', tokenCount: 9, result: [{ generated_text: [msg.input.messages[0], msg.input.messages[1], { role: 'assistant', content: body }] }] };
+        };
+    `);
+    const status = JSON.parse(h.run('JSON.stringify(localAIStatus())'));
+    check('el modelo del navegador cuenta como IA Local utilizable', status.ok === true, JSON.stringify(status));
+    const anonymize = await chatFor(h);
+    const r = await anonymize('Trabajo en Galáctica Zeta con Juan Pérez.');
+    const gens = JSON.parse(h.run('JSON.stringify(globalThis.__gen)'));
+    check('se consulta al modelo del navegador (una vez, sin red)', gens.length === 1 && calls.length === 0, `gens=${gens.length} red=${calls.length}`);
+    check('consulta determinista (do_sample:false) con sistema + texto', gens[0]?.options?.do_sample === false
+        && gens[0].input.messages[0].role === 'system' && gens[0].input.messages[1].content.includes('Galáctica Zeta'), JSON.stringify(gens[0]?.options));
+    check('lo que señala el modelo se anonimiza y el interno sigue aplicando', !r.text.includes('Galáctica') && !r.text.includes('Pérez'), r.text);
+    check('un término que no está en el texto se descarta', r.ai.used === true && r.ai.added === 1 && !r.text.includes('Inventado'), JSON.stringify(r.ai));
+}
+{
+    // Modelo multimodal o navegador sin WebGPU: no se usa la IA y el interno sigue funcionando.
+    const { h, calls } = harness();
+    h.run(`state.settings.provider = 'webgpu'; state.settings.anonMode = 'ai'; webgpuState.supported = 'wasm';
+           state.settings.model = WEBGPU_MODELS.find(m => !m.omnimodal).id;`);
+    const st = JSON.parse(h.run('JSON.stringify(localAIStatus())'));
+    check('sin WebGPU acelerado no se ofrece el modo IA', st.ok === false && /WebGPU/.test(st.reason), st.reason);
+    const anonymize = await chatFor(h);
+    const r = await anonymize('Habló Juan Pérez.');
+    check('el envío no se bloquea: se usa el sistema interno', r.ok === true && !r.text.includes('Pérez') && r.ai.used === false, JSON.stringify(r.ai));
+    check('y no se hace ninguna petición', calls.length === 0);
+    const omni = WEBGPU_OMNI_CHECK();
+    function WEBGPU_OMNI_CHECK() {
+        const id = h.run(`(WEBGPU_MODELS.find(m => m.omnimodal) || {}).id || ''`);
+        if (!id) return null;
+        h.run(`webgpuState.supported = 'webgpu'; state.settings.model = ${JSON.stringify(id)};`);
+        return JSON.parse(h.run('JSON.stringify(localAIStatus())'));
+    }
+    if (omni) check('un modelo multimodal no sirve para anonimizar', omni.ok === false, omni.reason);
+}
+{
+    // El chat y el anonimizador comparten un único pipeline: si ya hay una generación, se avisa.
+    const { h } = harness();
+    h.run(`state.settings.provider = 'webgpu'; webgpuState.supported = 'webgpu';
+           state.settings.model = WEBGPU_MODELS.find(m => !m.omnimodal).id;
+           webgpuState.pipeline = { __worker: true }; webgpuState.loadedModelId = state.settings.model;
+           webgpuState.generating = true;`);
+    const msg = await withTimeout(h.run(`completeWebGPU('s','u').then(() => 'ok', e => e.message)`));
+    check('no lanza una segunda generación sobre el mismo pipeline', msg !== 'ok' && /generando/i.test(msg), msg);
+}
+
 await settle();
 if (failures) { console.error(`\n✖ ${failures} comprobaciones fallidas.`); process.exit(1); }
 console.log('\n✔ Interno / IA local y términos propios correctos.');
