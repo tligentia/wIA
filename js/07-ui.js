@@ -2,11 +2,11 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     improvePrompt, renderMessages, sendMessage, showMetricsModal, stopStreaming,
-} from './06-chat.js?v=2610.AH';
+} from './06-chat.js?v=2610.AI';
 import {
     PROVIDERS, WEBGPU_MODELS, applyProviderNames, debounce, escapeHtml, getDefaultProviderName,
     isCloneableProvider, isCustomProvider, notify, tr, trf,
-} from './01-core.js?v=2610.AH';
+} from './01-core.js?v=2610.AI';
 import {
     $, $$, applyImportedSettings, applyPostResetUI, applySettingsToUI, applyTheme,
     backupCrypto, chatStore, cloneProvider, deleteCustomProvider, describeDroppedKeys, dom,
@@ -16,16 +16,16 @@ import {
     saveCurrentProviderConfig, saveState, saveStateNow, secretVault, settingsWithoutSecrets,
     state, syncProviderToState, updateApiKeyFormatHint, updateModelContextIndicator,
     updateProviderUI, updateProviderUrlSuggestion, updateStatusMeta,
-} from './02-state.js?v=2610.AH';
+} from './02-state.js?v=2610.AI';
 import {
     loadWebGPUModel, releaseWebGPUMemory, renderVisionChain, renderWebGPUMonitor,
     scheduleWebGPUPriming, warmUpActiveWebGPUModel, webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AH';
+} from './03-webgpu.js?v=2610.AI';
 import {
     addManualWebGPUModel, checkProviderStatus, discoverWebGPUModels, getEngineCooldown,
     openModelManager, populateModels, prepareModelPanelForProvider, pullModel,
     setConnectionValidationFeedback, startProviderOAuth, updateVisionIndicator,
-} from './04-providers.js?v=2610.AH';
+} from './04-providers.js?v=2610.AI';
 import {
     applyAgentEngine, clearOrderQueue, createChatFromUI, createProject, deleteChat,
     deleteProject, duplicateProject, exportAgentToFile, findInstalledCatalogAgent,
@@ -33,13 +33,13 @@ import {
     openProjectEditor, removeAttachment, removeOrder, renderAgentCatalog, renderAgentsGallery,
     renderChatList, renderOrderQueue, renderProjectSelect, renderWelcomeStarters,
     runOrderQueue, runSingleOrder, switchChat, switchProject, tryQueueOrder,
-} from './05-workspace.js?v=2610.AH';
+} from './05-workspace.js?v=2610.AI';
 import {
     anonChatState, anonymizeHistoryText, renderAnonTypesPanel, restoreAnonText,
-} from './08-anon.js?v=2610.AH';
+} from './08-anon.js?v=2610.AI';
 import {
     setLanguage,
-} from './09-i18n.js?v=2610.AH';
+} from './09-i18n.js?v=2610.AI';
 /* <<< imports <<< */
 
 /* ============================================
@@ -1001,7 +1001,7 @@ Cuando generes código:
     });
 
     // Close modals on overlay click
-    [dom.settingsModal, dom.deleteModal, dom.moveModal, dom.privacyModal].forEach(modal => {
+    [dom.settingsModal, dom.deleteModal, dom.moveModal].forEach(modal => {
         if(modal) {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) modal.classList.add('hidden');
@@ -1012,17 +1012,7 @@ Cuando generes código:
     // Improve Prompt
     dom.improvePromptBtn?.addEventListener('click', improvePrompt);
 
-    // Privacy Modal
-    dom.openPrivacy?.addEventListener('click', (e) => {
-        e.preventDefault();
-        dom.privacyModal.classList.remove('hidden');
-    });
-
-    [dom.closePrivacy, dom.closePrivacyBtn].forEach(btn => {
-        btn?.addEventListener('click', () => {
-            dom.privacyModal.classList.add('hidden');
-        });
-    });
+    // El modal de información legal (privacidad, cookies…) se gestiona en 10-docs.js (bindLegal).
 
     // Toolbar events
     dom.sidebarNewChatBtn?.addEventListener('click', () => {

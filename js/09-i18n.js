@@ -2,25 +2,25 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     renderAnonTypesPanel, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AH';
+} from './08-anon.js?v=2610.AI';
 import {
     loadLocalJson,
-} from './01-core.js?v=2610.AH';
+} from './01-core.js?v=2610.AI';
 import {
     saveState, state,
-} from './02-state.js?v=2610.AH';
+} from './02-state.js?v=2610.AI';
 import {
     renderWebGPUMonitor,
-} from './03-webgpu.js?v=2610.AH';
+} from './03-webgpu.js?v=2610.AI';
 import {
     renderChatList, renderWelcomeStarters,
-} from './05-workspace.js?v=2610.AH';
+} from './05-workspace.js?v=2610.AI';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AH';
+} from './06-chat.js?v=2610.AI';
 import {
-    renderDocs,
-} from './10-docs.js?v=2610.AH';
+    renderDocs, renderLegal,
+} from './10-docs.js?v=2610.AI';
 /* <<< imports <<< */
 
 /* ============================================
@@ -151,6 +151,7 @@ function refreshLocalizedUI() {
     updateLangSwitchUI();
     // Partes generadas por JS que contienen texto traducible.
     try { if (typeof renderDocs === 'function') renderDocs(); } catch (e) {}
+    try { if (typeof renderLegal === 'function') renderLegal(); } catch (e) {}
     try { if (typeof renderWelcomeStarters === 'function') renderWelcomeStarters(); } catch (e) {}
     try { if (typeof renderChatList === 'function') renderChatList(); } catch (e) {}
     // force: los mensajes llevan textos traducidos (tarjeta de error, insignias)

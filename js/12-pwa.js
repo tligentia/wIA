@@ -1,6 +1,6 @@
 /* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
-import './11-rag.js?v=2610.AH';
+import './11-rag.js?v=2610.AI';
 /* <<< imports <<< */
 
 /* ============================================

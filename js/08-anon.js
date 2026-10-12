@@ -2,19 +2,19 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AH';
+} from './07-ui.js?v=2610.AI';
 import {
     debounce, escapeHtml, loadLocalJson, tr,
-} from './01-core.js?v=2610.AH';
+} from './01-core.js?v=2610.AI';
 import {
     dom, saveState, secretVault, state,
-} from './02-state.js?v=2610.AH';
+} from './02-state.js?v=2610.AI';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AH';
+} from './05-workspace.js?v=2610.AI';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AH';
+} from './06-chat.js?v=2610.AI';
 /* <<< imports <<< */
 
 /* ============================================
@@ -365,6 +365,7 @@ const anonTool = {
     mode: 'anon',
     openedByLink: false,
     fileName: '',      // archivo cargado en la ventana (para nombrar la descarga)
+    outputDirty: false, // el usuario ha editado a mano el resultado: no se pisa al repintar
     session: { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} },
 };
 
@@ -392,6 +393,7 @@ function urlWithoutAnonLink(loc = window.location) {
 function resetAnonToolSession() {
     anonTool.session = { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} };
     anonTool.fileName = '';
+    anonTool.outputDirty = false;
 }
 
 // Tope de lo que se procesa de una vez: el motor analiza ~100 KB por segundo y
@@ -471,6 +473,7 @@ async function loadAnonToolFile(file) {
         if (!String(text).trim()) return tr('anon.tool.file.empty', 'El archivo no contiene texto que anonimizar.');
         document.getElementById('anonToolInput').value = text;
         anonTool.fileName = file.name;
+        anonTool.outputDirty = false;
         return '';
     } catch (e) {
         return tr('anon.tool.file.error', 'No se pudo leer el archivo: {error}').replace('{error}', e?.message || String(e));
@@ -518,9 +521,11 @@ function renderAnonTool() {
     if (toChat) toChat.hidden = restoring;
 
     const result = runAnonTool(input.value);
-    output.value = result.text;
+    // Si el usuario ha corregido el resultado a mano, un repintado que no viene
+    // de cambiar el original (carga de reglas, cambio de idioma…) no lo pisa.
+    if (!anonTool.outputDirty) output.value = result.text;
     const dl = document.getElementById('anonToolDownload');
-    if (dl) dl.disabled = !result.text;
+    if (dl) dl.disabled = !output.value;
     renderAnonReport(restoring ? [] : result.entities);
     if (!summary) return;
     summary.replaceChildren();
@@ -548,6 +553,12 @@ function renderAnonTool() {
             summary.append(chip);
         }
     }
+    if (anonTool.outputDirty) {
+        const note = document.createElement('span');
+        note.className = 'anon-tool-chip anon-tool-edited';
+        note.textContent = tr('anon.tool.edited', '✏️ Resultado editado a mano: se recalcula si cambias el texto original.');
+        summary.append(note);
+    }
 }
 
 function openAnonTool({ fromLink = false } = {}) {
@@ -574,7 +585,22 @@ function bindAnonTool() {
     const $id = (id) => document.getElementById(id);
     if (!$id('anonToolModal')) return;
     const rerender = debounce(renderAnonTool, 150);
-    $id('anonToolInput')?.addEventListener('input', rerender);
+    // Cambiar el original recalcula el resultado (y descarta lo editado a mano).
+    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; rerender(); });
+    // El resultado también se puede editar: se conserva hasta que cambie el original.
+    $id('anonToolOutput')?.addEventListener('input', () => {
+        anonTool.outputDirty = true;
+        const dl = $id('anonToolDownload');
+        if (dl) dl.disabled = !$id('anonToolOutput').value;
+        // Sin reanalizar el original en cada pulsación: solo se avisa de la edición.
+        const summary = $id('anonToolSummary');
+        if (summary && !summary.querySelector('.anon-tool-edited')) {
+            const note = document.createElement('span');
+            note.className = 'anon-tool-chip anon-tool-edited';
+            note.textContent = tr('anon.tool.edited', '✏️ Resultado editado a mano: se recalcula si cambias el texto original.');
+            summary.append(note);
+        }
+    });
     $id('anonToolOpenBtn')?.addEventListener('click', () => {
         dom.settingsModal?.classList.add('hidden');
         openAnonTool();
@@ -610,6 +636,7 @@ function bindAnonTool() {
         // otro modo y no tiene sentido como entrada de este.
         $id('anonToolInput').value = '';
         anonTool.fileName = '';
+        anonTool.outputDirty = false;
         renderAnonTool();
         $id('anonToolInput').focus();
     };
@@ -639,10 +666,12 @@ function bindAnonTool() {
         if (typeof openSettings === 'function') openSettings('anon');
     });
     $id('anonToolToChat')?.addEventListener('click', () => {
-        const text = $id('anonToolInput').value.trim();
+        // Al chat va la versión ANONIMIZADA (la del panel derecho), nunca el
+        // original: los datos reales no llegan ni a la caja de mensaje. Se deja
+        // 🕶️ activado por si se escribe algo más antes de enviar; los marcadores
+        // ya puestos no se vuelven a detectar.
+        const text = $id('anonToolOutput').value.trim();
         if (!text) return;
-        // Al chat va el ORIGINAL con 🕶️ activado: así el marcador lo pone el
-        // propio chat y la respuesta se restaura sola en pantalla.
         toggleAnonMode(true);
         closeAnonTool();
         dom.messageInput.value = text;

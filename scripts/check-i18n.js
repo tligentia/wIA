@@ -187,3 +187,45 @@ if (docsProblems) {
   process.exit(1);
 }
 console.log('Documentación en paridad entre idiomas. ✅');
+
+/* ── Información legal (lang/legal/*.json) ──────────────────────────────────
+   Aviso legal, privacidad, cookies y cumplimiento: los dos idiomas deben tener
+   las mismas secciones, en el mismo orden, y el disclaimer inicial en ambos.
+   ────────────────────────────────────────────────────────────────────────── */
+const LEGAL_DIR = join(LANG_DIR, 'legal');
+let legalProblems = 0;
+const legalPacks = {};
+for (const lang of langs) {
+  const path = join(LEGAL_DIR, `${lang}.json`);
+  try {
+    const pack = JSON.parse(readFileSync(path, 'utf8'));
+    if (!Array.isArray(pack.sections) || !pack.sections.length) throw new Error('falta el array «sections»');
+    if (!pack.disclaimer || !String(pack.disclaimer.html || '').trim() || !String(pack.disclaimer.title || '').trim()) {
+      throw new Error('falta el disclaimer inicial («disclaimer.title» y «disclaimer.html»)');
+    }
+    const bad = pack.sections.filter((s) => !s || !s.id || !String(s.title || '').trim() || !String(s.html || '').trim());
+    if (bad.length) throw new Error(`${bad.length} sección(es) sin id, título o contenido`);
+    legalPacks[lang] = pack;
+  } catch (e) {
+    console.error(`✖ lang/legal/${lang}.json — ${e.message}`);
+    legalProblems++;
+  }
+}
+if (!legalProblems) {
+  const refIds = legalPacks[REFERENCE].sections.map((s) => s.id);
+  for (const lang of langs) {
+    if (lang === REFERENCE) continue;
+    const ids = legalPacks[lang].sections.map((s) => s.id);
+    if (ids.join('|') === refIds.join('|')) {
+      console.log(`✔ lang/legal/${lang}.json — ${ids.length} secciones, en paridad con ${REFERENCE}`);
+      continue;
+    }
+    legalProblems++;
+    console.error(`✖ lang/legal/${lang}.json — secciones distintas de las de ${REFERENCE}`);
+  }
+}
+if (legalProblems) {
+  console.error('\nLa información legal no está en paridad entre idiomas.');
+  process.exit(1);
+}
+console.log('Información legal en paridad entre idiomas. ✅');

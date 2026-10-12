@@ -2065,6 +2065,33 @@ select.setting-input {
     opacity: 0.8;
 }
 
+/* Acceso directo al anonimizador, a la derecha del candado del pie. */
+.footer-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.footer-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.footer-icon-btn:hover,
+.footer-icon-btn:focus-visible {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    background: var(--accent-subtle);
+}
+
 /* Versión junto al logo con el estilo de SiMuDeFi (text-[10px] font-light
    gray-400): texto fino y discreto, sin chapa. */
 .app-version {
@@ -5849,4 +5876,121 @@ body.mobile-device .webgpu-mobile-note {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+/* ── Información legal (aviso legal, privacidad, cookies, cumplimiento) ── */
+.modal.legal-modal {
+    width: 96vw;
+    max-width: 880px;
+    max-height: 92vh;
+}
+.legal-header { align-items: flex-start; }
+.legal-header h2 { margin: 2px 0 0; }
+.legal-eyebrow {
+    margin: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-primary);
+}
+.legal-body { font-size: 0.86rem; line-height: 1.65; color: var(--text-secondary); }
+
+/* El disclaimer es lo primero y no puede pasar desapercibido. */
+.legal-disclaimer {
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border: 2px solid var(--warning, #d97706);
+    border-left-width: 6px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--warning, #d97706) 12%, transparent);
+    color: var(--text-primary);
+}
+.legal-disclaimer h3 {
+    margin: 0 0 8px;
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+.legal-disclaimer p { margin: 0 0 8px; font-size: 0.88rem; color: var(--text-primary); }
+.legal-disclaimer p:last-child { margin-bottom: 0; }
+
+.legal-tabs {
+    position: sticky;
+    top: -12px;
+    z-index: 2;
+    display: flex;
+    gap: 4px;
+    margin: 0 -4px 12px;
+    padding: 6px 4px 0;
+    overflow-x: auto;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+.legal-tab {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-tertiary);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.legal-tab:hover { color: var(--text-primary); }
+.legal-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+
+.legal-content { outline: none; }
+.legal-section-title { margin: 4px 0 8px; font-size: 1.05rem; color: var(--text-primary); }
+.legal-content h3:not(.legal-section-title) {
+    margin: 18px 0 6px;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+}
+.legal-content p { margin: 0 0 10px; font-size: 0.86rem; color: var(--text-secondary); }
+.legal-content ul { margin: 0 0 10px; padding-left: 20px; }
+.legal-content li { margin-bottom: 4px; }
+.legal-content a { color: var(--accent-primary); text-decoration: underline; }
+.legal-content code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--text-primary);
+}
+.legal-table-wrap {
+    margin: 8px 0 14px;
+    overflow-x: auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+.legal-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 0.76rem; }
+.legal-table th,
+.legal-table td {
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.legal-table th { background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 600; }
+.legal-table tr:last-child td { border-bottom: 0; }
+.legal-updated {
+    margin: 18px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+}
+@media (max-width: 720px) {
+    .modal.legal-modal { width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; }
+}
+
+/* Pie en pantallas estrechas: en una sola fila el enlace de privacidad quedaba
+   fuera de la pantalla; se reparte en dos filas centradas. */
+@media (max-width: 480px) {
+    .site-footer .footer-bottom { flex-wrap: wrap; justify-content: center; row-gap: 6px; }
 }

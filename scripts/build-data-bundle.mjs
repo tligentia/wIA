@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 export const DATA_FILES = [
     'lang/es.json', 'lang/en.json',
     'lang/docs/es.json', 'lang/docs/en.json',
+    'lang/legal/es.json', 'lang/legal/en.json',
     'agents.json',
     'lib/anonimae-rules.json',
     'webgpu-models.json',

@@ -366,16 +366,6 @@
                                 </svg>
                             </button>
 
-                            <button class="btn-icon toolbar-btn" id="anonToolBtn" data-i18n-title="anon.tool.btn.title"
-                                title="Abrir la ventana del anonimizador: pega un texto o carga un archivo y descarga la versión anonimizada" aria-label="Abrir la ventana del anonimizador">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                    <path d="M14 2v6h6"/>
-                                    <path d="M8 13h8" stroke-width="3.5"/>
-                                    <path d="M8 18h5"/>
-                                </svg>
-                            </button>
-
                             <button class="btn-icon toolbar-btn vision-indicator hidden" id="visionIndicator"
                                 title="Análisis de imagen activo. Las imágenes que adjuntes se describen localmente con el modelo de visión antes de pasarlas al chat." aria-label="Análisis de imagen activo. Las imágenes que adjuntes se describen localmente con el modelo de visión antes de pasarlas al chat.">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -434,16 +424,27 @@
             <!-- Site Footer -->
             <footer class="site-footer">
                 <div class="footer-bottom">
-                    <a href="https://tligent.com/" class="footer-left-link" target="_blank" rel="noopener">
-                        <span class="copyright">© 2026 TLIGENT IA</span>
-                        <span class="lock-icon">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    <div class="footer-left">
+                        <a href="https://tligent.com/" class="footer-left-link" target="_blank" rel="noopener">
+                            <span class="copyright">© 2026 TLIGENT IA</span>
+                            <span class="lock-icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                            </span>
+                        </a>
+                        <button type="button" class="footer-icon-btn" id="anonToolBtn" data-i18n-title="anon.tool.btn.title"
+                            title="Abrir la ventana del anonimizador: pega un texto o carga un archivo y descarga la versión anonimizada" aria-label="Abrir la ventana del anonimizador">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <path d="M14 2v6h6"/>
+                                <path d="M8 13h8" stroke-width="3.5"/>
+                                <path d="M8 18h5"/>
                             </svg>
-                        </span>
-                    </a>
+                        </button>
+                    </div>
                     <div class="footer-center">
                         <a href="https://jesus.depablos.es" class="footer-author-link" target="_blank" rel="author noopener"
                             title="wIA es una creación de Jesús de Pablos — visita su web">
@@ -1244,11 +1245,14 @@
         </div>
     </div>
 
-    <!-- Privacy & Cookies Modal -->
+    <!-- Información legal: aviso legal, privacidad, cookies y cumplimiento (contenido en lang/legal/*.json) -->
     <div class="modal-overlay hidden" id="privacyModal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
-            <div class="modal-header">
-                <h2 id="privacyModalTitle">Cookies y Privacidad</h2>
+        <div class="modal modal-wide legal-modal" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
+            <div class="modal-header legal-header">
+                <div>
+                    <p class="legal-eyebrow" id="legalEyebrow">Información legal</p>
+                    <h2 id="privacyModalTitle">Aviso legal, privacidad y cookies</h2>
+                </div>
                 <button class="btn-icon" id="closePrivacy" title="Cerrar" aria-label="Cerrar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round">
@@ -1256,29 +1260,22 @@
                     </svg>
                 </button>
             </div>
-            <div class="modal-body">
-                <div class="setting-group">
-                    <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">Transparencia IA
-                    </h3>
-                    <p style="margin-bottom: 16px;">El 100% de los contenidos, textos y código de esta página han sido
-                        creados mediante herramientas de Inteligencia Artificial.</p>
-                </div>
-                <div class="setting-group">
-                    <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">Compromiso de
-                        Privacidad</h3>
-                    <p style="margin-bottom: 12px;">Esta web es una herramienta informativa. No recopila, ni transmite
-                        ningún dato del usuario. Nuestra web es 100% estática y de ejecución local.</p>
-                    <p style="margin-bottom: 12px;">Todos los chats, archivos adjuntos y configuraciones se almacenan
-                        exclusivamente en tu navegador (LocalStorage) y nunca se envían a servidores externos, excepto a
-                        tu propia instancia local de Ollama o LM Studio.</p>
-                </div>
-                <div class="setting-group">
-                    <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--accent-secondary);">Ubicación</h3>
-                    <p>Tligent, S.L. - Barcelona</p>
-                </div>
+            <div class="modal-body legal-body" id="legalBody">
+                <!-- Disclaimer: lo primero que se ve. El texto en español va fijo aquí para que
+                     salga aunque el paquete de idioma no llegue a cargarse. -->
+                <section class="legal-disclaimer" id="legalDisclaimer" role="note" aria-labelledby="legalDisclaimerTitle">
+                    <h3 id="legalDisclaimerTitle">Aviso importante: léelo antes de usar wIA</h3>
+                    <div id="legalDisclaimerBody">
+                        <p><strong>wIA es un proyecto educativo y experimental, sin finalidad comercial.</strong> No es un producto ni un servicio profesional: se ofrece «tal cual», sin garantías de ningún tipo y sin contraprestación.</p>
+                        <p><strong>El uso que se haga de wIA es totalmente responsabilidad del usuario</strong>: lo que escribe, los datos y documentos que carga, los motores y proveedores que conecta, las claves que introduce y lo que hace con las respuestas. Los modelos de IA pueden equivocarse o inventar contenido y <strong>no sustituyen el criterio ni el asesoramiento de un profesional</strong> (jurídico, médico, financiero u otro).</p>
+                    </div>
+                </section>
+                <nav class="legal-tabs" id="legalTabs" role="tablist" aria-label="Secciones legales"></nav>
+                <div class="legal-content" id="legalContent" tabindex="-1"></div>
+                <p class="legal-updated" id="legalUpdated"></p>
             </div>
             <div class="modal-footer">
-                <button class="btn-primary" id="closePrivacyBtn">Entendido</button>
+                <button class="btn-primary" id="closePrivacyBtn" data-i18n="legal.ack">Entendido</button>
             </div>
         </div>
     </div>
@@ -1377,7 +1374,7 @@
                     </div>
                     <div class="anon-tool-pane">
                         <label class="setting-label" for="anonToolOutput" id="anonToolOutputLabel" data-i18n="anon.tool.output">Texto anonimizado</label>
-                        <textarea class="setting-input anon-tool-text" id="anonToolOutput" readonly spellcheck="false"></textarea>
+                        <textarea class="setting-input anon-tool-text" id="anonToolOutput" spellcheck="false"></textarea>
                     </div>
                 </div>
                 <div class="anon-tool-summary" id="anonToolSummary" role="status"></div>
@@ -1401,7 +1398,7 @@
                 <button type="button" class="btn-secondary btn-sm" id="anonToolTypes" data-i18n="anon.tool.types">Tipos de datos…</button>
                 <button type="button" class="btn-secondary btn-sm" id="anonToolReset" data-i18n="anon.tool.reset" data-i18n-title="anon.tool.reset.title" title="Olvida los marcadores de esta sesión y vacía los campos">Nueva sesión</button>
                 <span class="anon-tool-spacer"></span>
-                <button type="button" class="btn-secondary btn-sm" id="anonToolToChat" data-i18n="anon.tool.toChat" data-i18n-title="anon.tool.toChat.title" title="Lleva el texto original a la caja de mensaje con la anonimización 🕶️ activada">Llevar al chat</button>
+                <button type="button" class="btn-secondary btn-sm" id="anonToolToChat" data-i18n="anon.tool.toChat" data-i18n-title="anon.tool.toChat.title" title="Lleva el texto anonimizado a la caja de mensaje (con la anonimización 🕶️ activada)">Llevar al chat</button>
                 <button type="button" class="btn-secondary btn-sm" id="anonToolDownload" data-i18n="anon.tool.download" data-i18n-title="anon.tool.download.title" title="Descarga el resultado como fichero Markdown (.md)">⬇️ Descargar .md</button>
                 <button type="button" class="btn-primary btn-sm" id="anonToolCopy" data-i18n="anon.tool.copy">Copiar resultado</button>
             </div>
@@ -1470,7 +1467,7 @@
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AH"></script>
+    <script type="module" src="js/main.js?v=2610.AI"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>
