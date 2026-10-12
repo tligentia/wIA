@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && node scripts/auto-bump.mjs 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Avanzando la versión…"
+          }
+        ]
+      }
+    ]
+  }
+}

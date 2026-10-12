@@ -88,4 +88,12 @@ if (gen.status !== 0) {
   process.exitCode = 1;
 }
 
+// Anota la huella del trabajo actual: así el avance automático de fin de turno
+// (scripts/auto-bump.mjs) no vuelve a subir la versión por lo que ya cubre este.
+// Best-effort: fuera de un repositorio git simplemente no se hace.
+try {
+  const { storeFingerprint } = await import('./lib/bump-fingerprint.mjs');
+  storeFingerprint(resolve('.'));
+} catch { /* sin git o sin lib: no es necesario */ }
+
 console.log(`Version actualizada a ${version}`);
