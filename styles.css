@@ -2065,22 +2065,8 @@ select.setting-input {
     opacity: 0.8;
 }
 
-/* Marca y versión como en SiMuDeFi: nombre grande en negro y la versión pequeña,
-   fina y en gris, alineada en la línea base (text-[10px] font-light gray-400). */
-.brand-text {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-}
-.brand-name {
-    font-size: 1.25rem;
-    font-weight: 900;
-    letter-spacing: -0.05em;
-    line-height: 1.2;
-    color: var(--text-primary);
-    white-space: nowrap;
-}
+/* Versión junto al logo con el estilo de SiMuDeFi (text-[10px] font-light
+   gray-400): texto fino y discreto, sin chapa. */
 .app-version {
     font-size: 10px;
     font-weight: 300;
