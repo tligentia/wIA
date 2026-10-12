@@ -63,26 +63,34 @@ if (dryRun) {
     process.exit(0);
 }
 
-// 2) Promover ese despliegue: la URL fija pasa a servirlo.
-const res = spawnSync('vercel', ['promote', url, '--yes', '--non-interactive', '--scope', SCOPE], { encoding: 'utf8' });
-process.stdout.write(res.stdout || '');
-if (res.status !== 0) {
-    process.stderr.write(res.stderr || '');
-    fail('`vercel promote` no ha terminado bien.');
-}
+// 2) Promover ese despliegue: la URL fija pasa a servirlo. Con `builds` en vercel.json,
+//    «promote» crea un despliegue de producción nuevo: tarda unos segundos y, a veces,
+//    el primer intento falla de forma transitoria, así que se reintenta una vez.
+const promote = () => {
+    const res = spawnSync('vercel', ['promote', url, '--yes', '--non-interactive', '--scope', SCOPE], { encoding: 'utf8' });
+    process.stdout.write(res.stdout || '');
+    if (res.status !== 0) process.stderr.write(res.stderr || '');
+    return res.status === 0;
+};
 
-// 3) Comprobar que la URL fija sirve ya esta versión.
-let served = '';
-for (let i = 0; i < 12; i++) {
+const servedVersion = async () => {
     try {
         const body = await (await fetch(`${STABLE_URL}/Plantilla/Version.js?_=${Date.now()}`, { cache: 'no-store' })).text();
         const q = /VERSION_SEQUENCE = '([A-Z]{2})'/.exec(body)?.[1];
         const m = /VERSION_MONTH = (\d+)/.exec(body)?.[1];
         const y = /VERSION_YEAR = (\d+)/.exec(body)?.[1];
-        served = `${y}${String(m).padStart(2, '0')}.${q}`;
-        if (served === version) break;
-    } catch { /* reintento */ }
-    await sleep(3000);
+        return `${y}${String(m).padStart(2, '0')}.${q}`;
+    } catch { return ''; }
+};
+
+// 3) Esperar a que la URL fija sirva esta versión (hasta ~2 min; un reintento a la mitad).
+let served = '';
+let ok = promote();
+for (let i = 0; i < 24; i++) {
+    served = await servedVersion();
+    if (served === version) break;
+    if (i === 11) { console.log('La URL fija aún no sirve la versión nueva: reintento la promoción…'); ok = promote() || ok; }
+    await sleep(5000);
 }
-if (served !== version) fail(`${STABLE_URL} sirve v${served || '?'} y se esperaba v${version}.`);
+if (served !== version) fail(`${STABLE_URL} sirve v${served || '?'} y se esperaba v${version}${ok ? '' : ' (la promoción falló)'}.`);
 console.log(`✔ ${STABLE_URL} sirve v${version}`);

@@ -6,34 +6,34 @@ import {
     getProviderAccess, getProviderBaseId, getProviderOAuth, isCloneableProvider,
     isCustomProvider, isHeavyForMobile, isMobileDevice, loadWebGPUCatalogFile,
     registerCustomProviders, tr,
-} from './01-core.js?v=2610.AP';
+} from './01-core.js?v=2610.AQ';
 import {
     getCachedWebGPUModels, scheduleWebGPUPriming, startWebGPUMonitor, stopWebGPUMonitor,
     warmUpActiveWebGPUModel, webgpuState,
-} from './03-webgpu.js?v=2610.AP';
+} from './03-webgpu.js?v=2610.AQ';
 import {
     checkProviderStatus, detectLocalProviderAvailability, finishProviderOAuth,
-} from './04-providers.js?v=2610.AP';
+} from './04-providers.js?v=2610.AQ';
 import {
     renderAttachmentPreview, renderChatList, renderOrderQueue, renderProjectSelect,
     renderWelcomeStarters, showWelcome,
-} from './05-workspace.js?v=2610.AP';
+} from './05-workspace.js?v=2610.AQ';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AP';
+} from './06-chat.js?v=2610.AQ';
 import {
     autoResizeTextarea, bindEvents, bindSlashCommandEvents, loadPromptLibrary,
     showConnectionValidationResult, updateSendButton,
-} from './07-ui.js?v=2610.AP';
+} from './07-ui.js?v=2610.AQ';
 import {
     renderAnonModeUI, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AP';
+} from './08-anon.js?v=2610.AQ';
 import {
     bindLangSwitch, loadTranslations, refreshLocalizedUI, t,
-} from './09-i18n.js?v=2610.AP';
+} from './09-i18n.js?v=2610.AQ';
 import {
     renderRagIndexStatus,
-} from './11-rag.js?v=2610.AP';
+} from './11-rag.js?v=2610.AQ';
 /* <<< imports <<< */
 
 /* ============================================
