@@ -3,19 +3,19 @@
 import {
     createChat, generateTitle, getActiveChat, getActiveProject, renderAttachmentPreview,
     renderChatList, showChat,
-} from './05-workspace.js?v=2610.AC';
+} from './05-workspace.js?v=2610.AD';
 import {
     CHARS_PER_TOKEN, CONTEXT_SAFETY_MARGIN_TOKENS, MOBILE_SAFE_WEBGPU_MODEL, WEBGPU_MODELS,
     WEBGPU_PROGRESS_UI_MIN_DELTA_PCT, WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS,
     WEBGPU_TEXT_FALLBACK_MODEL, announce, escapeHtml, estimateTokenCount, getProviderBaseId,
     getVisionAssistDef, importTransformers, isHeavyForMobile, isMobileDevice, notify,
     sanitizeRenderedHtml, tr, trf,
-} from './01-core.js?v=2610.AC';
+} from './01-core.js?v=2610.AD';
 import {
     applySettingsToUI, dom, formatTokens, getActiveProviderConfig, getAuthHeaders,
     getCompactModelLabel, getCompactProviderLabel, getProviderDef, saveCurrentProviderConfig,
     saveState, state, syncProviderToState, updateInputDisclaimer,
-} from './02-state.js?v=2610.AC';
+} from './02-state.js?v=2610.AD';
 import {
     WEBGPU_LOOP_STOP_NOTE, analyzeImagesForWebGPU, applyWebGPUStreamedText, checkWebGPUSupport,
     formatWoundResult, loadDinoMedicalVisionModel, loadFlorence2VisionModel,
@@ -23,26 +23,26 @@ import {
     maybeStopRepetitionLoop, runDinoMedicalEmbedding, runFlorence2Analysis, runVLMAnalysis,
     runWebGPUGeneration, runWoundClassify, splitWebGPUThinking, updateGenerationStatus,
     webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AC';
+} from './03-webgpu.js?v=2610.AD';
 import {
     FAILOVER_MAX_HOPS, checkProviderStatus, classifyEngineFailure, describeChatFailure,
     getEngineCooldown, getFailoverCandidates, getWebGPUCustomModels, markEngineFailure,
     markEngineSuccess, parseRetryAfter, providerHttpError, recordWebGPUModelReport,
     withEngineOverride,
-} from './04-providers.js?v=2610.AC';
+} from './04-providers.js?v=2610.AD';
 import {
     autoResizeTextarea, autoTitleChat, scrollToBottom, updateSendButton,
-} from './07-ui.js?v=2610.AC';
+} from './07-ui.js?v=2610.AD';
 import {
     anonChatState, anonymizeHistoryText, anonymizeOutgoingText, anonymizeTextSync,
     deanonymizeForDisplay, ensureAnonReady, listAnonItems, persistAnonVault, restoreAnonText,
-} from './08-anon.js?v=2610.AC';
+} from './08-anon.js?v=2610.AD';
 import {
     t,
-} from './09-i18n.js?v=2610.AC';
+} from './09-i18n.js?v=2610.AD';
 import {
     formatRagContext, prepareRagContext,
-} from './11-rag.js?v=2610.AC';
+} from './11-rag.js?v=2610.AD';
 /* <<< imports <<< */
 
 /* ============================================
@@ -313,6 +313,10 @@ function renderMessage(msg, idx) {
                             <svg class="anon-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                         </summary>
                         <ul class="anon-list">${rows}</ul>
+                        <div class="anon-text-actions">
+                            <button class="msg-action-btn" data-msg-action="anon-copy" data-idx="${idx}" title="${escapeHtml(tr('anon.text.copy.title', 'Copia el mensaje tal como se envió a la IA, con marcadores en lugar de los datos reales'))}">${escapeHtml(tr('anon.text.copy', '📋 Copiar texto anonimizado'))}</button>
+                            <button class="msg-action-btn" data-msg-action="anon-download" data-idx="${idx}" title="${escapeHtml(tr('anon.text.download.title', 'Descarga el mensaje tal como se envió a la IA (.txt), con marcadores en lugar de los datos reales'))}">${escapeHtml(tr('anon.text.download', '⬇️ Descargar texto anonimizado'))}</button>
+                        </div>
                     </details>`;
             } else {
                 contentHtml += `<div class="anon-badge" title="${escapeHtml(_anonTitle)}">🕶️ ${msg.anonCount} ${escapeHtml(_anonLabel)}</div>`;
@@ -359,6 +363,7 @@ function renderMessage(msg, idx) {
         actionsHtml = `
             <div class="message-actions">
                 <button class="msg-action-btn" data-msg-action="copy" data-idx="${idx}" title="Copiar respuesta">📋 Copiar</button>
+                <button class="msg-action-btn" data-msg-action="download-md" data-idx="${idx}" title="${escapeHtml(tr('msg.downloadMd.title', 'Descargar la respuesta como fichero Markdown (.md)'))}">${escapeHtml(tr('msg.downloadMd', '⬇️ Descargar .md'))}</button>
                 <button class="msg-action-btn" data-msg-action="regenerate" data-idx="${idx}" title="Regenerar">🔄 Regenerar</button>
                 <button class="msg-action-btn ${isBookmarked}" data-msg-action="bookmark" data-idx="${idx}" title="Marcar">⭐</button>
             </div>`;

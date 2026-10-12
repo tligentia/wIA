@@ -5371,6 +5371,12 @@ option {
     gap: 8px;
     padding: 2px 0;
 }
+.anon-text-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
 .anon-ph {
     flex-shrink: 0;
     font-size: 0.72rem;

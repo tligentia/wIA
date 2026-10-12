@@ -2,11 +2,11 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     improvePrompt, renderMessages, sendMessage, showMetricsModal, stopStreaming,
-} from './06-chat.js?v=2610.AC';
+} from './06-chat.js?v=2610.AD';
 import {
     PROVIDERS, WEBGPU_MODELS, applyProviderNames, debounce, escapeHtml, getDefaultProviderName,
     isCloneableProvider, isCustomProvider, notify, tr, trf,
-} from './01-core.js?v=2610.AC';
+} from './01-core.js?v=2610.AD';
 import {
     $, $$, applyImportedSettings, applyPostResetUI, applySettingsToUI, applyTheme,
     backupCrypto, chatStore, cloneProvider, deleteCustomProvider, describeDroppedKeys, dom,
@@ -16,16 +16,16 @@ import {
     saveCurrentProviderConfig, saveState, saveStateNow, secretVault, settingsWithoutSecrets,
     state, syncProviderToState, updateApiKeyFormatHint, updateModelContextIndicator,
     updateProviderUI, updateProviderUrlSuggestion, updateStatusMeta,
-} from './02-state.js?v=2610.AC';
+} from './02-state.js?v=2610.AD';
 import {
     loadWebGPUModel, releaseWebGPUMemory, renderVisionChain, renderWebGPUMonitor,
     scheduleWebGPUPriming, warmUpActiveWebGPUModel, webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AC';
+} from './03-webgpu.js?v=2610.AD';
 import {
     addManualWebGPUModel, checkProviderStatus, discoverWebGPUModels, getEngineCooldown,
     openModelManager, populateModels, prepareModelPanelForProvider, pullModel,
     setConnectionValidationFeedback, startProviderOAuth, updateVisionIndicator,
-} from './04-providers.js?v=2610.AC';
+} from './04-providers.js?v=2610.AD';
 import {
     applyAgentEngine, clearOrderQueue, createChatFromUI, createProject, deleteChat,
     deleteProject, duplicateProject, exportAgentToFile, findInstalledCatalogAgent,
@@ -33,13 +33,13 @@ import {
     openProjectEditor, removeAttachment, removeOrder, renderAgentCatalog, renderAgentsGallery,
     renderChatList, renderOrderQueue, renderProjectSelect, renderWelcomeStarters,
     runOrderQueue, runSingleOrder, switchChat, switchProject, tryQueueOrder,
-} from './05-workspace.js?v=2610.AC';
+} from './05-workspace.js?v=2610.AD';
 import {
-    anonChatState, anonymizeHistoryText, renderAnonTypesPanel,
-} from './08-anon.js?v=2610.AC';
+    anonChatState, anonymizeHistoryText, renderAnonTypesPanel, restoreAnonText,
+} from './08-anon.js?v=2610.AD';
 import {
     setLanguage,
-} from './09-i18n.js?v=2610.AC';
+} from './09-i18n.js?v=2610.AD';
 /* <<< imports <<< */
 
 /* ============================================
@@ -297,6 +297,9 @@ function bindMessageActionDelegation() {
         const idx = Number.parseInt(button.dataset.idx, 10);
         switch (action) {
             case 'copy':           copyFullResponse(idx, button); break;
+            case 'download-md':    downloadResponseMarkdown(idx); break;
+            case 'anon-copy':      copyAnonymizedText(idx, button); break;
+            case 'anon-download':  downloadAnonymizedText(idx); break;
             case 'regenerate':     regenerateResponse(idx); break;
             case 'edit':           editMessage(idx); break;
             case 'bookmark':       toggleBookmark(idx); break;
@@ -1474,14 +1477,79 @@ window.copyText = function(text, btn) {
 window.copyFullResponse = function(idx, btn) {
     const chat = getActiveChat();
     if (!chat || !chat.messages[idx]) return;
-    const msg = chat.messages[idx];
-    const text = msg.content || '';
+    const text = responseTextForExport(chat, chat.messages[idx]);
     navigator.clipboard.writeText(text).then(() => {
         btn.classList.add('copied-feedback');
         const orig = btn.innerHTML;
         btn.innerHTML = '✅ Copiado';
         setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied-feedback'); }, 2000);
     });
+};
+
+/**
+ * responseTextForExport — el texto de una respuesta tal como se ve en pantalla.
+ * Con 🕶️ activo el modelo contesta con marcadores ([Nombre_001]) y solo se
+ * restauran al pintar; copiar o descargar sin restaurarlos entregaría
+ * marcadores en vez de los datos del propio usuario.
+ */
+function responseTextForExport(chat, msg) {
+    const raw = msg.content || '';
+    return typeof restoreAnonText === 'function' ? restoreAnonText(raw, chat) : raw;
+}
+
+/** Nombre de fichero seguro a partir del título del chat. */
+function chatFileStem(chat) {
+    const title = String(chat?.title || 'chat').replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ ]/g, '').trim().replace(/\s+/g, '_');
+    return `wIA_${title.substring(0, 40) || 'chat'}`;
+}
+
+/** Entrega `text` al usuario como descarga de un fichero. */
+function downloadTextFile(text, filename, mime = 'text/plain') {
+    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ============================================
+//  FEATURE: descargar la respuesta como .md
+// ============================================
+window.downloadResponseMarkdown = function(idx) {
+    const chat = getActiveChat();
+    const msg = chat?.messages[idx];
+    if (!msg) return;
+    const text = responseTextForExport(chat, msg);
+    if (!text.trim()) return;
+    downloadTextFile(text, `${chatFileStem(chat)}_respuesta_${Date.now()}.md`, 'text/markdown');
+};
+
+// ============================================
+//  FEATURE: texto anonimizado (copiar / descargar)
+//  El contenido guardado del mensaje del usuario ES el texto anonimizado:
+//  lo que se envió a la IA, con marcadores en lugar de los datos reales.
+// ============================================
+window.copyAnonymizedText = function(idx, btn) {
+    const chat = getActiveChat();
+    const text = chat?.messages[idx]?.content || '';
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.innerHTML;
+        btn.classList.add('copied-feedback');
+        btn.textContent = tr('anon.text.copied', '✅ Copiado');
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied-feedback'); }, 2000);
+    });
+};
+
+window.downloadAnonymizedText = function(idx) {
+    const chat = getActiveChat();
+    const text = chat?.messages[idx]?.content || '';
+    if (!text) return;
+    downloadTextFile(text, `${chatFileStem(chat)}_anonimizado_${Date.now()}.txt`, 'text/plain');
 };
 
 // ============================================
