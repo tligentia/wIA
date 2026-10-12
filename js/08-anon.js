@@ -2,19 +2,19 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AN';
+} from './07-ui.js?v=2610.AO';
 import {
-    debounce, escapeHtml, loadLocalJson, tr,
-} from './01-core.js?v=2610.AN';
+    debounce, escapeHtml, loadLocalJson, notify, tr,
+} from './01-core.js?v=2610.AO';
 import {
-    dom, saveState, secretVault, state,
-} from './02-state.js?v=2610.AN';
+    dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
+} from './02-state.js?v=2610.AO';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AN';
+} from './05-workspace.js?v=2610.AO';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AN';
+} from './06-chat.js?v=2610.AO';
 /* <<< imports <<< */
 
 /* ============================================
@@ -50,7 +50,7 @@ const _anonHydrating = new Set();
 async function ensureAnonState(chat) {
     if (!chat) return null;
     if (anonChatState[chat.id]) return anonChatState[chat.id];
-    const st = { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} };
+    const st = { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {}, aiTerms: [] };
     if (chat.anonVault && typeof secretVault !== 'undefined') {
         try {
             const dec = await secretVault.decrypt(chat.anonVault);
@@ -58,6 +58,7 @@ async function ensureAnonState(chat) {
                 const d = JSON.parse(dec);
                 st.counters = d.counters || {};
                 st.placeholderToValue = d.map || {};
+                st.aiTerms = Array.isArray(d.aiTerms) ? d.aiTerms : [];
                 for (const [ph, val] of Object.entries(st.placeholderToValue)) {
                     st.valueToPlaceholder.set(LocalPlaceholderEngine.keyFor(LocalPlaceholderEngine.categoryOf(ph), val), ph);
                 }
@@ -71,7 +72,7 @@ async function ensureAnonState(chat) {
 // Guarda cifrado en el chat el mapa de marcadores acumulado.
 async function persistAnonVault(chat, st) {
     try {
-        chat.anonVault = await secretVault.encrypt(JSON.stringify({ counters: st.counters, map: st.placeholderToValue }));
+        chat.anonVault = await secretVault.encrypt(JSON.stringify({ counters: st.counters, map: st.placeholderToValue, aiTerms: st.aiTerms || [] }));
     } catch (e) { console.warn('[Anon] No se pudo cifrar el mapa:', e); }
 }
 
@@ -111,10 +112,37 @@ async function ensureAnonReady(chat) {
 let _anonEngine = null;
 let _anonEngineKey = '';
 let _anonEngineRules = null;
-function getAnonEngine() {
-    const key = (state.settings.anonDisabledTypes || []).slice().sort().join('|');
+
+// ─── Términos propios del usuario ───
+// Se anonimizan siempre (sin distinguir mayúsculas ni tildes) y viajan con los ajustes.
+const ANON_TERM_TYPES = [
+    { id: 'nombre', icon: '🧑', label: 'Persona' },
+    { id: 'empresa', icon: '🏢', label: 'Organización' },
+    { id: 'direccion', icon: '📍', label: 'Dirección o lugar' },
+    { id: 'dato', icon: '🔒', label: 'Otro dato' },
+];
+
+function getCustomTerms() {
+    const list = Array.isArray(state.settings.customTerms) ? state.settings.customTerms : [];
+    const known = ANON_TERM_TYPES.map(t => t.id);
+    return list
+        .filter(t => t && typeof t.text === 'string' && t.text.trim().length >= 2)
+        .map(t => ({ id: t.id, text: t.text.trim(), type: known.includes(t.type) ? t.type : 'dato' }));
+}
+
+function termsSignature(terms) {
+    return (terms || []).map(t => `${t.type}:${String(t.text).toLowerCase()}`).sort().join('|');
+}
+
+// Reglas efectivas: tipos activos + términos propios + los que la IA local ha hallado.
+function effectiveRules(extraTerms = []) {
+    return { ...filterRulesByEnabledTypes(_anonRules), customTerms: getCustomTerms().concat(extraTerms || []) };
+}
+
+function getAnonEngine(extraTerms = []) {
+    const key = `${(state.settings.anonDisabledTypes || []).slice().sort().join('|')}#${termsSignature(getCustomTerms().concat(extraTerms || []))}`;
     if (!_anonEngine || _anonEngineKey !== key || _anonEngineRules !== _anonRules) {
-        _anonEngine = new LocalDetectionEngine(filterRulesByEnabledTypes(_anonRules));
+        _anonEngine = new LocalDetectionEngine(effectiveRules(extraTerms));
         _anonEngineRules = _anonRules;
         _anonEngineKey = key;
     }
@@ -127,7 +155,7 @@ function anonymizeTextSync(text, chat) {
     if (!_anonRules || !st || typeof LocalDetectionEngine === 'undefined') {
         throw new Error('anonimizador no preparado');
     }
-    const engine = getAnonEngine();
+    const engine = getAnonEngine(st.aiTerms);
     const entities = engine.detect(text);
     if (!entities.length) return { text, count: 0 };
     const res = LocalPlaceholderEngine.process(text, entities, st);
@@ -147,7 +175,7 @@ function anonymizeHistoryText(text, chat) {
     if (!state.settings.anonymizeOutgoing || !text || typeof text !== 'string') return text;
     const st = chat ? anonChatState[chat.id] : null;
     if (!st) throw new Error('anonimizador no preparado');
-    const sig = (state.settings.anonDisabledTypes || []).slice().sort().join('|');
+    const sig = (state.settings.anonDisabledTypes || []).slice().sort().join('|') + '#' + termsSignature(getCustomTerms().concat(st.aiTerms || []));
     if (!st._histMemo || st._histSig !== sig) { st._histMemo = new Map(); st._histSig = sig; }
     if (st._histMemo.has(text)) return st._histMemo.get(text);
     const before = Object.keys(st.placeholderToValue).length;
@@ -166,9 +194,25 @@ function anonymizeHistoryText(text, chat) {
 async function anonymizeOutgoingText(content, chat) {
     try {
         if (!(await ensureAnonReady(chat))) return { text: content, count: 0, ok: false };
+        // Modo IA: el modelo local suma los términos que el sistema interno no reconoce.
+        // Si falla o deja de ser local, se sigue SOLO con el interno (nunca bloquea el envío).
+        let ai = { used: false, added: 0, note: '' };
+        if (state.settings.anonMode === 'ai') {
+            try {
+                const v = await verifyLocalAI();
+                if (v.ok) {
+                    const st = anonChatState[chat.id];
+                    ai.added = mergeAITerms(st.aiTerms, await aiDetectTerms(content));
+                    ai.used = true;
+                } else ai.note = v.reason;
+            } catch (e) {
+                ai.note = e?.message || String(e);
+                console.warn('[Anon] La IA local no ha podido revisar el mensaje; se usa el sistema interno:', e);
+            }
+        }
         const res = anonymizeTextSync(content, chat);
-        if (res.count) await persistAnonVault(chat, anonChatState[chat.id]);
-        return { ...res, ok: true };
+        if (res.count || ai.added) await persistAnonVault(chat, anonChatState[chat.id]);
+        return { ...res, ok: true, ai };
     } catch (e) {
         console.warn('[Anon] Error anonimizando:', e);
         return { text: content, count: 0, ok: false };
@@ -229,6 +273,161 @@ function deanonymizeForDisplay(text) {
     return LocalPlaceholderEngine.restore(text, st.placeholderToValue);
 }
 
+
+// ─── Modo IA: detección con el modelo local ──────────────────────────────
+// Dos sistemas: «interno» (algorítmico: reglas + diccionarios + términos propios,
+// por defecto) e «IA», que además pide al modelo local que señale los nombres y
+// datos que el sistema interno no reconoce. El interno SIEMPRE se aplica (la IA
+// solo suma), y la IA solo se usa si el motor activo es IA Local VERIFICADO: el
+// texto sin anonimizar jamás se envía a un motor que no sea de tu equipo o red.
+const ANON_AI_ENGINES = ['ollama', 'openai'];     // HTTP; WebGPU corre en un worker sin API de una sola respuesta
+const ANON_AI_CHUNK = 2600;                        // caracteres por consulta
+const ANON_AI_MAX_CHUNKS = 10;                     // tope por texto (~26 000 caracteres)
+const _aiVerify = { key: '', at: 0, ok: false, reason: '' };
+
+function _aiEngineKey() {
+    return `${state.settings.provider}|${state.settings.ollamaUrl}|${state.settings.model}`;
+}
+
+/** ¿El motor activo es IA Local utilizable para anonimizar? (comprobación síncrona) */
+function localAIStatus() {
+    const prov = getProviderDef(state.settings.provider);
+    if (prov.type === 'webgpu') {
+        return { ok: false, reason: tr('anon.ai.reason.webgpu', 'El modelo del navegador (WebGPU) todavía no admite anonimizar con IA: usa un motor local como Ollama, LM Studio o LocalAI.') };
+    }
+    if (!ANON_AI_ENGINES.includes(prov.type)) {
+        return { ok: false, reason: tr('anon.ai.reason.engine', 'El motor «{name}» no admite anonimizar con IA; hace falta un motor local (Ollama, LM Studio o LocalAI).').replace('{name}', prov.name) };
+    }
+    const loc = getAILocality();
+    if (loc.mode !== 'local') {
+        return { ok: false, reason: tr('anon.ai.reason.notLocal', 'El motor activo («{name}») no es IA Local: el texto sin anonimizar saldría de tu equipo. Selecciona un motor local.').replace('{name}', prov.name) };
+    }
+    if (!String(state.settings.model || '').trim()) {
+        return { ok: false, reason: tr('anon.ai.reason.model', 'Selecciona un modelo en el motor local.') };
+    }
+    return { ok: true, reason: '' };
+}
+
+/**
+ * verifyLocalAI — comprueba de verdad que el motor local responde (consulta su
+ * lista de modelos). El resultado se recuerda un minuto por motor+URL+modelo.
+ */
+async function verifyLocalAI({ force = false } = {}) {
+    const st = localAIStatus();
+    if (!st.ok) return st;
+    const key = _aiEngineKey();
+    if (!force && _aiVerify.key === key && Date.now() - _aiVerify.at < 60000) return { ok: _aiVerify.ok, reason: _aiVerify.reason };
+    const prov = getProviderDef(state.settings.provider);
+    const base = String(state.settings.ollamaUrl || '').trim().replace(/\/+$/, '');
+    let result;
+    try {
+        const url = prov.type === 'ollama' ? `${base}/api/tags` : `${base}/models`;
+        const res = await fetch(url, { headers: getAuthHeaders(), signal: AbortSignal.timeout(5000) });
+        result = res.ok ? { ok: true, reason: '' }
+            : { ok: false, reason: tr('anon.ai.reason.unreachable', 'El motor local no responde ({detail}).').replace('{detail}', `HTTP ${res.status}`) };
+    } catch (e) {
+        result = { ok: false, reason: tr('anon.ai.reason.unreachable', 'El motor local no responde ({detail}).').replace('{detail}', e?.name === 'TimeoutError' ? 'timeout' : (e?.message || 'error')) };
+    }
+    Object.assign(_aiVerify, { key, at: Date.now(), ok: result.ok, reason: result.reason });
+    return result;
+}
+
+/** ¿Está el modo IA activo AHORA (elegido, motor local y ya verificado)? */
+function anonAIActive() {
+    return state.settings.anonMode === 'ai' && localAIStatus().ok
+        && _aiVerify.ok && _aiVerify.key === _aiEngineKey();
+}
+
+// Una consulta no-streaming al motor local; devuelve el texto de la respuesta.
+async function _localAIComplete(system, user) {
+    const st = localAIStatus();          // última barrera: nada sale si ya no es local
+    if (!st.ok) throw new Error(st.reason);
+    const prov = getProviderDef(state.settings.provider);
+    const base = String(state.settings.ollamaUrl || '').trim().replace(/\/+$/, '');
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    const signal = AbortSignal.timeout(90000);
+    if (prov.type === 'ollama') {
+        const res = await fetch(`${base}/api/chat`, {
+            method: 'POST', headers, signal,
+            body: JSON.stringify({
+                model: state.settings.model, stream: false, format: 'json',
+                messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+                options: { temperature: 0, num_predict: 900 },
+            }),
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        return (await res.json()).message?.content || '';
+    }
+    const res = await fetch(`${base}/chat/completions`, {
+        method: 'POST', headers, signal,
+        body: JSON.stringify({
+            model: state.settings.model, stream: false, temperature: 0, max_tokens: 900,
+            messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return (await res.json()).choices?.[0]?.message?.content || '';
+}
+
+const ANON_AI_SYSTEM = 'Eres un detector de datos personales para anonimizar textos. Recibes un texto y devuelves ÚNICAMENTE un objeto JSON '
+    + 'con la forma {"items":[{"text":"…","type":"nombre|empresa|direccion|dato"}]}. En "items" van los fragmentos EXACTOS, copiados literalmente '
+    + 'del texto, que identifican a personas (nombre y apellidos), organizaciones, direcciones o lugares concretos, o cualquier otro dato '
+    + 'personal. No incluyas marcadores como [Nombre_001], ni palabras comunes, ni explicaciones. Si no hay ninguno, {"items":[]}.';
+
+function _parseAIItems(raw) {
+    let data = null;
+    const txt = String(raw || '');
+    try { data = JSON.parse(txt); } catch (_) {
+        const m = txt.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        if (m) { try { data = JSON.parse(m[0]); } catch (_) { /* respuesta no JSON */ } }
+    }
+    const list = Array.isArray(data) ? data : (data?.items || data?.terms || data?.entities || []);
+    return Array.isArray(list) ? list : [];
+}
+
+/**
+ * aiDetectTerms — pide al modelo local los fragmentos sensibles de `text` y
+ * devuelve [{text, type}] ya validados: copiados literalmente del texto, de
+ * tamaño razonable y que no son un marcador. Divide los textos largos.
+ */
+async function aiDetectTerms(text) {
+    const paragraphs = String(text || '').split(/\n{2,}/);
+    const chunks = [];
+    let cur = '';
+    for (const p of paragraphs) {
+        if (cur && cur.length + p.length + 2 > ANON_AI_CHUNK) { chunks.push(cur); cur = ''; }
+        cur = cur ? `${cur}\n\n${p}` : p;
+        while (cur.length > ANON_AI_CHUNK * 1.5) { chunks.push(cur.slice(0, ANON_AI_CHUNK)); cur = cur.slice(ANON_AI_CHUNK); }
+    }
+    if (cur.trim()) chunks.push(cur);
+    const found = new Map();
+    const types = ANON_TERM_TYPES.map(t => t.id);
+    for (const chunk of chunks.slice(0, ANON_AI_MAX_CHUNKS)) {
+        const items = _parseAIItems(await _localAIComplete(ANON_AI_SYSTEM, chunk));
+        const flat = chunk.toLowerCase();
+        for (const it of items) {
+            const t = String(it?.text || '').trim();
+            if (t.length < 2 || t.length > 120 || /^\[[^\]]+_\d+\]$/.test(t)) continue;
+            if (!flat.includes(t.toLowerCase())) continue;           // debe estar en el texto
+            if (!found.has(t.toLowerCase())) found.set(t.toLowerCase(), { text: t, type: types.includes(it?.type) ? it.type : 'dato' });
+        }
+    }
+    return [...found.values()];
+}
+
+/** Suma términos de la IA a una lista sin repetir; devuelve cuántos son nuevos. */
+function mergeAITerms(list, found) {
+    const have = new Set(list.map(t => t.text.toLowerCase()));
+    let added = 0;
+    for (const t of found) {
+        if (have.has(t.text.toLowerCase())) continue;
+        have.add(t.text.toLowerCase());
+        list.push({ text: t.text, type: t.type });
+        added++;
+    }
+    return added;
+}
+
 // ─── UI: botón 🕶️ en la caja de prompt ──────
 function updateAnonButtonUI() {
     const btn = document.getElementById('anonToggleBtn');
@@ -252,6 +451,7 @@ function toggleAnonMode(forceValue) {
 // ─── Tipos de datos: activar/desactivar por tipo ─────────────
 // Iconos por tipo (para la lista del panel de Anonimización).
 const ANON_TYPE_ICONS = {
+    termino_propio: '📌',
     email: '📧', telefono: '📞', dni: '🪪', iban: '🏦', tarjeta: '💳',
     juridico: '⚖️', codigo_postal: '📮', pasaporte: '🛂', direccion: '📍',
     organizacion: '🏢', fax: '📠', diligencias: '📋', cif: '🏭', nss: '🩺',
@@ -335,6 +535,8 @@ function renderAnonTypesPanel() {
         });
     });
     updateAnonSelectAllState();
+    renderCustomTermsPanel();
+    renderAnonModeUI();
 }
 
 // Actualiza el estado del interruptor "Activar todos" (marcado si todos activos).
@@ -356,6 +558,169 @@ function bindAnonTypeControls() {
     }
 }
 
+// ─── UI: sistema de anonimización (interno / IA) ─────────────────────────
+function renderAnonModeUI() {
+    const wanted = state.settings.anonMode === 'ai' ? 'ai' : 'internal';
+    let st;
+    try { st = localAIStatus(); } catch (_) { st = { ok: false, reason: '' }; }
+    document.querySelectorAll('[data-anon-mode]').forEach((btn) => {
+        const mode = btn.dataset.anonMode;
+        btn.classList.toggle('active', mode === wanted);
+        btn.setAttribute('aria-pressed', String(mode === wanted));
+        if (mode === 'ai') {
+            btn.disabled = !st.ok;
+            btn.title = st.ok
+                ? tr('anon.mode.ai.title', 'Refuerza la detección con tu modelo local. Solo disponible con IA Local verificado.')
+                : st.reason;
+        }
+    });
+    let help;
+    if (wanted === 'ai') {
+        if (anonAIActive()) help = tr('anon.mode.help.ai', 'IA local activa: el modelo revisa el texto además del sistema interno. El texto no sale de tu equipo.');
+        else if (!st.ok) help = tr('anon.mode.help.unavailable', 'IA no disponible ahora: {reason} Se usa el sistema interno.').replace('{reason}', st.reason);
+        else help = tr('anon.mode.verifying', 'Verificando el motor local…');
+    } else {
+        help = st.ok
+            ? tr('anon.mode.help.internal.canAI', 'Sistema interno (reglas y diccionarios). Puedes reforzarlo con tu modelo local.')
+            : tr('anon.mode.help.internal', 'Sistema interno (reglas y diccionarios). La IA se activa solo con un motor IA Local verificado.');
+    }
+    document.querySelectorAll('.anon-mode-help').forEach((el) => { el.textContent = help; });
+}
+
+async function setAnonMode(mode) {
+    if (mode === 'ai') {
+        const help = document.querySelectorAll('.anon-mode-help');
+        help.forEach((el) => { el.textContent = tr('anon.mode.verifying', 'Verificando el motor local…'); });
+        const v = await verifyLocalAI({ force: true });
+        if (!v.ok) {
+            state.settings.anonMode = 'internal';
+            saveState();
+            renderAnonModeUI();
+            if (typeof notify === 'function') notify(v.reason, 'info');
+            return;
+        }
+    }
+    state.settings.anonMode = mode === 'ai' ? 'ai' : 'internal';
+    saveState();
+    renderAnonModeUI();
+    if (state.settings.anonMode === 'ai') reviewAnonToolWithAI();
+}
+
+// ─── UI: términos propios ────────────────────────────────────────────────
+function renderCustomTermsPanel() {
+    const list = document.getElementById('anonTermsList');
+    if (!list) return;
+    const terms = getCustomTerms();
+    list.innerHTML = '';
+    const clear = document.getElementById('anonTermsClear');
+    if (clear) clear.hidden = terms.length === 0;
+    if (!terms.length) {
+        const li = document.createElement('li');
+        li.className = 'anon-terms-empty';
+        li.textContent = tr('anon.terms.empty', 'Aún no has añadido ninguno.');
+        list.append(li);
+        return;
+    }
+    for (const t of terms) {
+        const meta = ANON_TERM_TYPES.find(x => x.id === t.type) || ANON_TERM_TYPES[3];
+        const li = document.createElement('li');
+        li.className = 'anon-terms-item';
+        const icon = document.createElement('span');
+        icon.textContent = meta.icon;
+        icon.setAttribute('aria-hidden', 'true');
+        const text = document.createElement('span');
+        text.className = 'anon-terms-text';
+        text.textContent = t.text;
+        const kind = document.createElement('span');
+        kind.className = 'anon-terms-kind';
+        kind.textContent = tr(`anon.terms.type.${meta.id}`, meta.label);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-icon anon-terms-del';
+        del.dataset.termId = t.id;
+        del.title = tr('anon.terms.remove', 'Quitar');
+        del.setAttribute('aria-label', `${tr('anon.terms.remove', 'Quitar')}: ${t.text}`);
+        del.textContent = '🗑';
+        li.append(icon, text, kind, del);
+        list.append(li);
+    }
+}
+
+/** Añade términos (varios separados por salto de línea o «;»). Devuelve cuántos son nuevos. */
+function addCustomTerms(raw, type = 'dato') {
+    const known = ANON_TERM_TYPES.map(t => t.id);
+    const kind = known.includes(type) ? type : 'dato';
+    const current = Array.isArray(state.settings.customTerms) ? [...state.settings.customTerms] : [];
+    const have = new Set(current.map(t => String(t.text || '').toLowerCase()));
+    let added = 0;
+    for (const piece of String(raw || '').split(/[\n;]+/)) {
+        const text = piece.trim().replace(/\s+/g, ' ');
+        if (text.length < 2 || text.length > 120 || have.has(text.toLowerCase())) continue;
+        have.add(text.toLowerCase());
+        current.push({ id: `t${Date.now().toString(36)}${added}`, text, type: kind });
+        added++;
+    }
+    if (added) {
+        state.settings.customTerms = current;
+        saveState();
+        renderCustomTermsPanel();
+    }
+    return added;
+}
+
+function removeCustomTerm(id) {
+    state.settings.customTerms = (state.settings.customTerms || []).filter(t => t.id !== id);
+    saveState();
+    renderCustomTermsPanel();
+}
+
+function bindAnonModeAndTerms() {
+    // Conmutador interno / IA (settings y ventana del anonimizador)
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-anon-mode]');
+        if (!btn || btn.disabled) return;
+        setAnonMode(btn.dataset.anonMode);
+    });
+    // Panel de términos propios
+    document.getElementById('anonTermsAdd')?.addEventListener('click', () => {
+        const input = document.getElementById('anonTermsInput');
+        const type = document.getElementById('anonTermsType')?.value || 'dato';
+        if (addCustomTerms(input.value, type)) input.value = '';
+        input.focus();
+    });
+    document.getElementById('anonTermsList')?.addEventListener('click', (e) => {
+        const del = e.target.closest('[data-term-id]');
+        if (del) removeCustomTerm(del.dataset.termId);
+    });
+    document.getElementById('anonTermsClear')?.addEventListener('click', () => {
+        if (!getCustomTerms().length) return;
+        if (!confirm(tr('anon.terms.clearConfirm', '¿Quitar todos los términos propios?'))) return;
+        state.settings.customTerms = [];
+        saveState();
+        renderCustomTermsPanel();
+    });
+    // Alta rápida desde la ventana: el texto seleccionado en cualquiera de las dos casillas
+    document.getElementById('anonToolAddTerm')?.addEventListener('click', () => {
+        const pick = (el) => (el && el.selectionEnd > el.selectionStart) ? el.value.slice(el.selectionStart, el.selectionEnd) : '';
+        const selected = pick(document.getElementById('anonToolInput')) || pick(document.getElementById('anonToolOutput'));
+        const summary = document.getElementById('anonToolSummary');
+        if (!selected.trim()) {
+            if (summary) summary.textContent = tr('anon.tool.addTerm.none', 'Selecciona primero el texto en alguna de las dos casillas.');
+            return;
+        }
+        const type = document.getElementById('anonToolTermType')?.value || 'dato';
+        const n = addCustomTerms(selected, type);
+        anonTool.outputDirty = false;
+        anonTool.extraEntities = [];
+        anonTool.lastReview = 0;
+        renderAnonTool();
+        if (!n && summary) summary.textContent = tr('anon.tool.addTerm.exists', 'Ese término ya estaba en tu lista.');
+    });
+    try { renderCustomTermsPanel(); renderAnonModeUI(); } catch (e) { console.warn('[Anon] No se pudo pintar el panel:', e); }
+}
+
+
+
 // ─── Anonimizador como herramienta (/anon) ──
 // Mismo motor y mismos tipos activos que el chat, pero sin chat: se pega un
 // texto y se obtiene la versión con marcadores, o al revés. El mapa de la
@@ -366,6 +731,9 @@ const anonTool = {
     openedByLink: false,
     fileName: '',      // archivo cargado en la ventana (para nombrar la descarga)
     outputDirty: false, // el usuario ha editado a mano el resultado: no se pisa al repintar
+    aiTerms: [],        // términos hallados por la IA local en la sesión de la ventana
+    aiCache: new Map(), // texto → términos, para no repetir la consulta al modelo
+    aiNote: '',         // último aviso de la revisión con IA local
     extraEntities: [],  // datos nuevos hallados al revisar lo escrito a mano en el resultado
     lastReview: 0,      // nº de datos anonimizados en la última revisión del resultado editado
     session: { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} },
@@ -398,6 +766,7 @@ function resetAnonToolSession() {
     anonTool.outputDirty = false;
     anonTool.extraEntities = [];
     anonTool.lastReview = 0;
+    anonTool.aiTerms = [];
 }
 
 // Tope de lo que se procesa de una vez: el motor analiza ~100 KB por segundo y
@@ -480,6 +849,8 @@ async function loadAnonToolFile(file) {
         anonTool.outputDirty = false;
         anonTool.extraEntities = [];
         anonTool.lastReview = 0;
+        anonTool.aiTerms = [];
+        anonTool.aiNote = '';
         return '';
     } catch (e) {
         return tr('anon.tool.file.error', 'No se pudo leer el archivo: {error}').replace('{error}', e?.message || String(e));
@@ -496,7 +867,7 @@ function runAnonTool(input, mode = anonTool.mode) {
         return { text: LocalPlaceholderEngine.restore(input, anonTool.session.placeholderToValue), entities: [] };
     }
     if (!_anonRules) return { text: '', entities: [], notReady: true };
-    const engine = new LocalDetectionEngine(filterRulesByEnabledTypes(_anonRules));
+    const engine = new LocalDetectionEngine(effectiveRules(anonTool.aiTerms));
     const entities = engine.detect(input);
     const res = LocalPlaceholderEngine.process(input, entities, anonTool.session);
     return { text: res.anonymizedText, entities };
@@ -566,6 +937,7 @@ function renderAnonTool() {
         summary.append(note);
     }
     if (anonTool.lastReview > 0) appendReviewNote(summary);
+    if (anonTool.aiNote && state.settings.anonMode === 'ai') setAnonAINote();
 }
 
 /** Aviso de que al revisar lo escrito en el resultado se han anonimizado datos nuevos. */
@@ -608,11 +980,61 @@ function reviewAnonOutput() {
     return res.entities.length;
 }
 
+
+/**
+ * reviewAnonToolWithAI — con el modo IA activo, el modelo local revisa el texto
+ * original de la ventana y suma los términos que el sistema interno no conoce.
+ * Reutiliza lo ya consultado para el mismo texto (caché) y no pisa lo editado a mano.
+ */
+async function reviewAnonToolWithAI() {
+    if (anonTool.mode !== 'anon' || state.settings.anonMode !== 'ai') return;
+    const input = document.getElementById('anonToolInput');
+    const text = input?.value || '';
+    if (!text.trim()) return;
+    const v = await verifyLocalAI();
+    renderAnonModeUI();
+    if (!v.ok) return;
+    let found = anonTool.aiCache.get(text);
+    if (!found) {
+        anonTool.aiNote = tr('anon.ai.reviewing', '🤖 La IA local está revisando el texto…');
+        setAnonAINote();
+        try {
+            found = await aiDetectTerms(text);
+            anonTool.aiCache.set(text, found);
+        } catch (e) {
+            anonTool.aiNote = tr('anon.ai.failed', '⚠️ La IA local no ha podido revisar el texto; se usa el sistema interno.');
+            setAnonAINote();
+            console.warn('[Anon] Revisión con IA local fallida:', e);
+            return;
+        }
+    }
+    if (input.value !== text) return;                 // el texto cambió mientras tanto
+    const added = mergeAITerms(anonTool.aiTerms, found);
+    anonTool.aiNote = tr('anon.ai.done', '🤖 IA local: {n} término(s) nuevo(s) añadidos.').replace('{n}', added);
+    if (added) {
+        if (!anonTool.outputDirty) renderAnonTool();
+        else reviewAnonOutput();
+    }
+    setAnonAINote();
+}
+
+function setAnonAINote() {
+    const summary = document.getElementById('anonToolSummary');
+    if (!summary) return;
+    summary.querySelector('.anon-tool-ai')?.remove();
+    if (!anonTool.aiNote) return;
+    const note = document.createElement('span');
+    note.className = 'anon-tool-chip anon-tool-ai';
+    note.textContent = anonTool.aiNote;
+    summary.append(note);
+}
+
 function openAnonTool({ fromLink = false } = {}) {
     const modal = document.getElementById('anonToolModal');
     if (!modal) return false;
     anonTool.openedByLink = anonTool.openedByLink || fromLink;
     modal.classList.remove('hidden');
+    renderAnonModeUI();
     renderAnonTool();
     loadAnonRules().then(renderAnonTool);
     document.getElementById('anonToolInput')?.focus();
@@ -635,7 +1057,8 @@ function bindAnonTool() {
     // Tras una pausa al escribir en el resultado, se revisa si se coló algo sensible.
     const reviewOutputSoon = debounce(reviewAnonOutput, 600);
     // Cambiar el original recalcula el resultado (y descarta lo editado a mano).
-    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; anonTool.extraEntities = []; anonTool.lastReview = 0; rerender(); });
+    const aiReviewSoon = debounce(reviewAnonToolWithAI, 1200);
+    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; anonTool.extraEntities = []; anonTool.lastReview = 0; anonTool.aiTerms = []; anonTool.aiNote = ''; rerender(); aiReviewSoon(); });
     // El resultado también se puede editar: se conserva hasta que cambie el original.
     $id('anonToolOutput')?.addEventListener('input', () => {
         anonTool.outputDirty = true;
@@ -667,9 +1090,11 @@ function bindAnonTool() {
         await loadAnonRules();
         const error = await loadAnonToolFile(file);
         renderAnonTool();
+        if (!error) reviewAnonToolWithAI();
         if (error && summary) summary.textContent = error;
     });
-    $id('anonToolDownload')?.addEventListener('click', () => {
+    $id('anonToolDownload')?.addEventListener('click', async () => {
+        await reviewAnonToolWithAI();
         reviewAnonOutput();
         const text = $id('anonToolOutput').value;
         if (!text) return;
@@ -701,6 +1126,7 @@ function bindAnonTool() {
         renderAnonTool();
     });
     $id('anonToolCopy')?.addEventListener('click', async (e) => {
+        await reviewAnonToolWithAI();
         reviewAnonOutput();
         const text = $id('anonToolOutput').value;
         if (!text) return;
@@ -719,11 +1145,12 @@ function bindAnonTool() {
         closeAnonTool();
         if (typeof openSettings === 'function') openSettings('anon');
     });
-    $id('anonToolToChat')?.addEventListener('click', () => {
+    $id('anonToolToChat')?.addEventListener('click', async () => {
         // Al chat va la versión ANONIMIZADA (la del panel derecho), nunca el
         // original: los datos reales no llegan ni a la caja de mensaje. Se deja
         // 🕶️ activado por si se escribe algo más antes de enviar; los marcadores
         // ya puestos no se vuelven a detectar.
+        await reviewAnonToolWithAI();
         reviewAnonOutput();
         const text = $id('anonToolOutput').value.trim();
         if (!text) return;
@@ -753,6 +1180,11 @@ function bindAnonTool() {
     }
     bindAnonTypeControls();
     bindAnonTool();
+    bindAnonModeAndTerms();
+    if (state.settings.anonMode === 'ai') {
+        // Guardado en modo IA: se verifica el motor en cuanto arranca.
+        setTimeout(() => verifyLocalAI().then(renderAnonModeUI).catch(() => {}), 1500);
+    }
     // Precarga las reglas para poder pintar los tipos, y pinta el panel.
     loadAnonRules().then(() => renderAnonTypesPanel());
     // Estado inicial (tras loadState, que corre en init() async; este script se
@@ -765,6 +1197,6 @@ function bindAnonTool() {
 export {
     loadAnonRules, anonChatState, persistAnonVault, ensureAnonReady, anonymizeTextSync,
     anonymizeHistoryText, anonymizeOutgoingText, restoreAnonText, listAnonItems,
-    deanonymizeForDisplay, updateAnonButtonUI, renderAnonTypesPanel,
+    deanonymizeForDisplay, updateAnonButtonUI, renderAnonTypesPanel, renderAnonModeUI,
 };
 /* <<< exports <<< */

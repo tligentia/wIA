@@ -6,34 +6,34 @@ import {
     getProviderAccess, getProviderBaseId, getProviderOAuth, isCloneableProvider,
     isCustomProvider, isHeavyForMobile, isMobileDevice, loadWebGPUCatalogFile,
     registerCustomProviders, tr,
-} from './01-core.js?v=2610.AN';
+} from './01-core.js?v=2610.AO';
 import {
     getCachedWebGPUModels, scheduleWebGPUPriming, startWebGPUMonitor, stopWebGPUMonitor,
     warmUpActiveWebGPUModel, webgpuState,
-} from './03-webgpu.js?v=2610.AN';
+} from './03-webgpu.js?v=2610.AO';
 import {
     checkProviderStatus, detectLocalProviderAvailability, finishProviderOAuth,
-} from './04-providers.js?v=2610.AN';
+} from './04-providers.js?v=2610.AO';
 import {
     renderAttachmentPreview, renderChatList, renderOrderQueue, renderProjectSelect,
     renderWelcomeStarters, showWelcome,
-} from './05-workspace.js?v=2610.AN';
+} from './05-workspace.js?v=2610.AO';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AN';
+} from './06-chat.js?v=2610.AO';
 import {
     autoResizeTextarea, bindEvents, bindSlashCommandEvents, loadPromptLibrary,
     showConnectionValidationResult, updateSendButton,
-} from './07-ui.js?v=2610.AN';
+} from './07-ui.js?v=2610.AO';
 import {
-    updateAnonButtonUI,
-} from './08-anon.js?v=2610.AN';
+    renderAnonModeUI, updateAnonButtonUI,
+} from './08-anon.js?v=2610.AO';
 import {
     bindLangSwitch, loadTranslations, refreshLocalizedUI, t,
-} from './09-i18n.js?v=2610.AN';
+} from './09-i18n.js?v=2610.AO';
 import {
     renderRagIndexStatus,
-} from './11-rag.js?v=2610.AN';
+} from './11-rag.js?v=2610.AO';
 /* <<< imports <<< */
 
 /* ============================================
@@ -118,6 +118,12 @@ Cuando generes código:
         anonymizeOutgoing: false, // 🕶️ DLP local: anonimizar antes de enviar a la IA
         autoFailover: false,      // 🔁 Si el motor falla o agota su cupo antes de contestar, prueba otro de su mismo tipo (local/cloud)
         anonDisabledTypes: [],    // IDs de tipos de datos que NO se anonimizan (resto: activos)
+        // Términos propios que se anonimizan siempre: [{ id, text, type }] con
+        // type nombre | empresa | direccion | dato. Viajan con los ajustes.
+        customTerms: [],
+        // Sistema de anonimización: 'internal' (algorítmico, por defecto) o 'ai'
+        // (refuerzo con el modelo, solo si el motor activo es IA Local verificado).
+        anonMode: 'internal',
         // Motores clonados por el usuario: [{ id, name, icon, baseProvider }].
         // Su URL, credencial y modelo viven en providerConfigs como los de serie.
         customProviders: [],
@@ -1972,6 +1978,7 @@ function getProviderLocality(providerId, configuredUrl) {
 }
 
 function updateAILocalityBadge() {
+    try { if (typeof renderAnonModeUI === 'function') renderAnonModeUI(); } catch (_) {}
     const locality = getAILocality();
     document.querySelectorAll('.ai-locality-badge').forEach(badge => {
         badge.textContent = `${locality.mode === 'local' ? '🖥️' : '☁️'} ${locality.label}`;
@@ -2104,7 +2111,7 @@ export {
     settingsWithoutSecrets, applyImportedSettings, describeDroppedKeys, saveState,
     persistOrderQueue, chatStore, purgeConversationStore, saveStateNow,
     resetProjectsAndChatsState, applyPostResetUI, formatTokens, getCompactProviderLabel,
-    getCompactModelLabel, updateSettingsActiveContext, getProviderLocality, updateStatusMeta,
-    updateModelContextIndicator, applyTheme, applySettingsToUI,
+    getCompactModelLabel, updateSettingsActiveContext, getAILocality, getProviderLocality,
+    updateStatusMeta, updateModelContextIndicator, applyTheme, applySettingsToUI,
 };
 /* <<< exports <<< */

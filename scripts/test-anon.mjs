@@ -63,6 +63,9 @@ check('un nombre no se extiende por un salto de línea',
 check('ni arrastra la línea siguiente',
     anon('Juan Pérez\nContrato indefinido').anonymizedText === '[Nombre_001]\nContrato indefinido',
     anon('Juan Pérez\nContrato indefinido').anonymizedText);
+hides('nombres del diccionario ampliado', 'Hablé con Wenceslao y con Aitor Etxeberria ayer.', ['Wenceslao', 'Aitor', 'Etxeberria']);
+hides('nombres extranjeros', 'Escribió Michael Smith y también Giuseppe Rossi.', ['Michael', 'Smith', 'Giuseppe', 'Rossi']);
+keeps('palabras comunes que también son apellidos no se tocan', 'Casado con una vecina de Valencia, vive en el Sur.');
 hides('nombre en mayúsculas', 'DON ANTONIO LÓPEZ MARTÍNEZ CON DNI 87654321X.', ['ANTONIO', 'LÓPEZ', 'MARTÍNEZ', '87654321X']);
 hides('dirección con piso y código postal', 'Vivo en Calle Mayor 12, 3º B, 28013 Madrid.', ['Mayor 12', '3º', '28013']);
 hides('expedientes y diligencias', 'Procedimiento Ordinario 123/2024 y Diligencias Previas nº 987/2022.', ['123/2024', '987/2022']);

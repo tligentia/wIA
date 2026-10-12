@@ -2102,6 +2102,12 @@ select.setting-input {
     color: #9ca3af;
     white-space: nowrap;
     user-select: text;
+    /* Anclada abajo con el icono de wIA, igual que en SiMuDeFi: allí la versión comparte la
+       línea base del nombre, que cae ~5-6 px por encima del borde inferior del icono (no a
+       ras). Sin el nombre al lado, se reproduce esa misma altura: la línea base del texto
+       queda ~6 px sobre la base del icono (4.5 px de margen + el hueco bajo la línea base). */
+    align-self: flex-end;
+    margin-bottom: 4.5px;
 }
 /* En la cabecera móvil no cabe por debajo de 430 px (empujaría los ajustes fuera
    de la pantalla): ahí se ve en el menú lateral, que lleva el mismo logo. */
@@ -6027,3 +6033,24 @@ body.mobile-device .webgpu-mobile-note {
     .cookie-notice .btn-primary { width: 100%; }
 }
 @media print { .cookie-notice { display: none; } }
+
+/* ── Sistema de anonimización (interno / IA) y términos propios ── */
+.anon-mode-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.anon-mode-switch .filter-pill[disabled] { opacity: 0.55; cursor: not-allowed; }
+.anon-mode-compact { margin: 0; }
+.anon-mode-help { margin: 4px 0 0; }
+.anon-tool-mode-help { margin: -4px 0 0; }
+.anon-tool-ai { color: var(--accent-primary); }
+.anon-terms-add { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: start; }
+.anon-terms-add textarea { resize: vertical; min-height: 54px; }
+.anon-terms-list { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.anon-terms-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-tertiary);
+}
+.anon-terms-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: 0.82rem; }
+.anon-terms-kind { flex: 0 0 auto; font-size: 0.68rem; color: var(--text-tertiary); }
+.anon-terms-empty { font-size: 0.78rem; color: var(--text-tertiary); }
+.anon-tool-addterm { display: inline-flex; gap: 6px; align-items: center; }
+.anon-tool-addterm select { width: auto; padding: 5px 8px; font-size: 0.78rem; }
+@media (max-width: 560px) { .anon-terms-add { grid-template-columns: 1fr; } }

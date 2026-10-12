@@ -826,6 +826,14 @@
                                 </p>
                                 <button type="button" class="btn-secondary btn-sm anon-tool-open" id="anonToolOpenBtn" data-i18n="anon.tool.open">🕶️ Abrir el anonimizador</button>
                             </div>
+                            <div class="setting-group" id="anonModeGroup">
+                                <label class="setting-label" data-i18n="anon.mode.title">Sistema de anonimización</label>
+                                <div class="anon-mode-switch" role="group" aria-label="Sistema de anonimización">
+                                    <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal">⚙️ Interno (algorítmico)</button>
+                                    <button type="button" class="filter-pill" data-anon-mode="ai" aria-pressed="false" data-i18n="anon.mode.ai">🤖 IA local</button>
+                                </div>
+                                <p class="setting-help-text anon-mode-help" role="status"></p>
+                            </div>
                             <div class="setting-group">
                                 <div class="anon-types-head">
                                     <label class="setting-label" style="margin:0;" data-i18n="anon.types">Tipos de datos que se filtran</label>
@@ -837,6 +845,22 @@
                                 </div>
                                 <p class="setting-help-text" style="margin-bottom:10px;" data-i18n="anon.types.help">Desactiva los tipos que no quieras anonimizar (p. ej. fechas o IPs si generan falsos positivos).</p>
                                 <div class="anon-types-list" id="anonTypesList"></div>
+                            </div>
+                            <div class="setting-group" id="anonTermsGroup">
+                                <label class="setting-label" data-i18n="anon.terms.title">Términos propios</label>
+                                <p class="setting-help-text" style="margin-bottom:10px;" data-i18n="anon.terms.help">Nombres, organizaciones, direcciones u otros datos que quieres que se anonimicen SIEMPRE, aunque el sistema no los reconozca. No distingue mayúsculas ni tildes. Puedes añadir varios separados por «;» o por línea.</p>
+                                <div class="anon-terms-add">
+                                    <textarea id="anonTermsInput" class="setting-input" rows="2" spellcheck="false" data-i18n-ph="anon.terms.placeholder" placeholder="Ej.: Jesús de Pablos; Proyecto Quimera"></textarea>
+                                    <select id="anonTermsType" class="setting-input" aria-label="Tipo de término">
+                                        <option value="nombre" data-i18n="anon.terms.type.nombre">Persona</option>
+                                        <option value="empresa" data-i18n="anon.terms.type.empresa">Organización</option>
+                                        <option value="direccion" data-i18n="anon.terms.type.direccion">Dirección o lugar</option>
+                                        <option value="dato" data-i18n="anon.terms.type.dato" selected>Otro dato</option>
+                                    </select>
+                                    <button type="button" class="btn-secondary btn-sm" id="anonTermsAdd" data-i18n="anon.terms.add">Añadir</button>
+                                </div>
+                                <ul class="anon-terms-list" id="anonTermsList"></ul>
+                                <button type="button" class="btn-secondary btn-sm" id="anonTermsClear" hidden data-i18n="anon.terms.clear">Quitar todos</button>
                             </div>
                         </div>
                     </section>
@@ -1378,9 +1402,14 @@
                     <button type="button" class="filter-pill active" id="anonToolModeAnon" role="tab" aria-selected="true" data-i18n="anon.tool.mode.anon">Anonimizar</button>
                     <button type="button" class="filter-pill" id="anonToolModeRestore" role="tab" aria-selected="false" data-i18n="anon.tool.mode.restore">Restaurar</button>
                     <span class="anon-tool-spacer"></span>
+                    <div class="anon-mode-switch anon-mode-compact" role="group" aria-label="Sistema de anonimización">
+                        <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal.short">⚙️ Interno</button>
+                        <button type="button" class="filter-pill" data-anon-mode="ai" aria-pressed="false" data-i18n="anon.mode.ai">🤖 IA local</button>
+                    </div>
                     <button type="button" class="btn-secondary btn-sm" id="anonToolLoadFile" data-i18n="anon.tool.file" data-i18n-title="anon.tool.file.title" title="Carga un archivo de texto (.md, .txt, .csv, .json, .html, .pdf…) para anonimizarlo; se procesa en este navegador">📂 Cargar archivo…</button>
                     <input type="file" id="anonToolFile" class="hidden" accept=".md,.markdown,.txt,.csv,.tsv,.json,.html,.htm,.xml,.log,.rtf,.pdf,application/pdf,text/*">
                 </div>
+                <p class="setting-help-text anon-mode-help anon-tool-mode-help" role="status"></p>
                 <div class="anon-tool-grid">
                     <div class="anon-tool-pane">
                         <label class="setting-label" for="anonToolInput" id="anonToolInputLabel" data-i18n="anon.tool.input">Texto original</label>
@@ -1409,7 +1438,16 @@
                 </section>
             </div>
             <div class="modal-footer anon-tool-footer">
-                <button type="button" class="btn-secondary btn-sm" id="anonToolTypes" data-i18n="anon.tool.types">Tipos de datos…</button>
+                <button type="button" class="btn-secondary btn-sm" id="anonToolTypes" data-i18n="anon.tool.types">Tipos y términos…</button>
+                <span class="anon-tool-addterm">
+                    <select id="anonToolTermType" class="setting-input" aria-label="Tipo de término">
+                        <option value="nombre" data-i18n="anon.terms.type.nombre">Persona</option>
+                        <option value="empresa" data-i18n="anon.terms.type.empresa">Organización</option>
+                        <option value="direccion" data-i18n="anon.terms.type.direccion">Dirección o lugar</option>
+                        <option value="dato" data-i18n="anon.terms.type.dato" selected>Otro dato</option>
+                    </select>
+                    <button type="button" class="btn-secondary btn-sm" id="anonToolAddTerm" data-i18n="anon.tool.addTerm" data-i18n-title="anon.tool.addTerm.title" title="Añade el texto seleccionado a tus términos propios: se anonimizará siempre">📌 Añadir selección</button>
+                </span>
                 <button type="button" class="btn-secondary btn-sm" id="anonToolReset" data-i18n="anon.tool.reset" data-i18n-title="anon.tool.reset.title" title="Olvida los marcadores de esta sesión y vacía los campos">Nueva sesión</button>
                 <span class="anon-tool-spacer"></span>
                 <button type="button" class="btn-secondary btn-sm" id="anonToolToChat" data-i18n="anon.tool.toChat" data-i18n-title="anon.tool.toChat.title" title="Lleva el texto anonimizado a la caja de mensaje (con la anonimización 🕶️ activada)">Llevar al chat</button>
@@ -1481,7 +1519,7 @@
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AN"></script>
+    <script type="module" src="js/main.js?v=2610.AO"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>
