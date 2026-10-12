@@ -7,6 +7,7 @@
     "start": "node server.js",
     "version:bump": "node scripts/bump-version.js",
     "hooks:install": "git config core.hooksPath .githooks",
+    "publish:vercel": "node scripts/publish-vercel.mjs",
     "pretest": "node scripts/ensure-hooks.mjs",
     "prestart": "node scripts/ensure-hooks.mjs",
     "test:auto-bump": "node scripts/test-auto-bump.mjs",
