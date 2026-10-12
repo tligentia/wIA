@@ -4,25 +4,25 @@ import {
     checkWebGPUSupport, deleteWebGPUModelCache, getCachedWebGPUModels,
     invalidateWebGPUCacheScan, releaseWebGPUMemory, warmUpActiveWebGPUModel, webgpuState,
     webgpuWorker,
-} from './03-webgpu.js?v=2610.AR';
+} from './03-webgpu.js?v=2610.AS';
 import {
     MODEL_FILTER_ORDER, MODEL_FUNCTION_DEFS, PROVIDERS, TRANSFORMERS_VERSION,
     UNCENSORED_NAME_HINTS, WEBGPU_BROKEN_MODELS, WEBGPU_MODELS, createPkceChallenge,
     createPkceVerifier, describeWebGPULoadFailure, escapeHtml, getProviderBaseId,
     getProviderOAuth, getVisionAssistDef, getWebGPUBrokenInfo, notify, tr, trf,
-} from './01-core.js?v=2610.AR';
+} from './01-core.js?v=2610.AS';
 import {
     applySettingsToUI, dom, getActiveProviderConfig, getAuthHeaders, getProviderDef,
     getProviderLocality, isIncognitoMode, renderProviderOptions, saveState, state,
     syncProviderToState, updateInputDisclaimer, updateModelContextIndicator,
     updateSettingsActiveContext, updateStatusMeta,
-} from './02-state.js?v=2610.AR';
+} from './02-state.js?v=2610.AS';
 import {
     renderAttachmentPreview,
-} from './05-workspace.js?v=2610.AR';
+} from './05-workspace.js?v=2610.AS';
 import {
     supportsWebGPUImageAssist,
-} from './06-chat.js?v=2610.AR';
+} from './06-chat.js?v=2610.AS';
 /* <<< imports <<< */
 
 /* ============================================
@@ -642,11 +642,17 @@ async function detectLocalProviderAvailability({ selectDefault = false } = {}) {
     const httpsPage = window.location.protocol === 'https:';
     const blockedByMixedContent = (url) => httpsPage && /^http:\/\//i.test(url);
 
+    // «Disponible» = responde Y tiene al menos un modelo instalado: un Ollama o un
+    // LM Studio recién instalados, vacíos, no sirven para chatear y no deben
+    // quitar el sitio al modelo del navegador.
     const probeJsonEndpoint = async (url) => {
         if (blockedByMixedContent(url)) return false;
         try {
             const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
-            return response.ok;
+            if (!response.ok) return false;
+            const data = await response.json().catch(() => null);
+            const list = Array.isArray(data?.models) ? data.models : Array.isArray(data?.data) ? data.data : null;
+            return list ? list.length > 0 : true;   // forma desconocida: se da por buena
         } catch (_) {
             return false;
         }
@@ -674,6 +680,7 @@ async function detectLocalProviderAvailability({ selectDefault = false } = {}) {
         if (results[id]) detail = 'Disponible';
         else if (mixedContentBlocked[id]) detail = 'Bloqueado (HTTPS→HTTP)';
         else if (id === 'webgpu' && webgpuMode === 'wasm') detail = 'Solo WASM';
+        else if (id !== 'webgpu') detail = 'No detectado o sin modelos';
         else detail = 'No detectado';
         state.providerAvailability[id] = {
             status: results[id] ? 'available' : 'unavailable',
@@ -688,6 +695,12 @@ async function detectLocalProviderAvailability({ selectDefault = false } = {}) {
         // puede degradar a WASM y no requiere un servicio externo.
         const selectedProvider = priority.find(id => results[id]) || 'webgpu';
         state.settings.provider = selectedProvider;
+        if (selectedProvider === 'webgpu') {
+            // Sin modelos preconfigurados: Llama 3.2 1B (o el ligero de móvil si
+            // el dispositivo no aguanta ese).
+            const cfg = state.settings.providerConfigs.webgpu || (state.settings.providerConfigs.webgpu = {});
+            if (!cfg.model) cfg.model = PROVIDERS.webgpu.defaultModel;
+        }
         syncProviderToState();
     }
 

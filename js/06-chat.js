@@ -3,19 +3,19 @@
 import {
     createChat, generateTitle, getActiveChat, getActiveProject, renderAttachmentPreview,
     renderChatList, showChat,
-} from './05-workspace.js?v=2610.AR';
+} from './05-workspace.js?v=2610.AS';
 import {
     CHARS_PER_TOKEN, CONTEXT_SAFETY_MARGIN_TOKENS, MOBILE_SAFE_WEBGPU_MODEL, WEBGPU_MODELS,
     WEBGPU_PROGRESS_UI_MIN_DELTA_PCT, WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS,
     WEBGPU_TEXT_FALLBACK_MODEL, announce, escapeHtml, estimateTokenCount, getProviderBaseId,
     getVisionAssistDef, importTransformers, isHeavyForMobile, isMobileDevice, notify,
     sanitizeRenderedHtml, tr, trf,
-} from './01-core.js?v=2610.AR';
+} from './01-core.js?v=2610.AS';
 import {
     applySettingsToUI, dom, formatTokens, getActiveProviderConfig, getAuthHeaders,
     getCompactModelLabel, getCompactProviderLabel, getProviderDef, saveCurrentProviderConfig,
     saveState, state, syncProviderToState, updateInputDisclaimer,
-} from './02-state.js?v=2610.AR';
+} from './02-state.js?v=2610.AS';
 import {
     WEBGPU_LOOP_STOP_NOTE, analyzeImagesForWebGPU, applyWebGPUStreamedText, checkWebGPUSupport,
     formatWoundResult, loadDinoMedicalVisionModel, loadFlorence2VisionModel,
@@ -23,26 +23,26 @@ import {
     maybeStopRepetitionLoop, runDinoMedicalEmbedding, runFlorence2Analysis, runVLMAnalysis,
     runWebGPUGeneration, runWoundClassify, splitWebGPUThinking, updateGenerationStatus,
     webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AR';
+} from './03-webgpu.js?v=2610.AS';
 import {
     FAILOVER_MAX_HOPS, checkProviderStatus, classifyEngineFailure, describeChatFailure,
     getEngineCooldown, getFailoverCandidates, getWebGPUCustomModels, markEngineFailure,
     markEngineSuccess, parseRetryAfter, providerHttpError, recordWebGPUModelReport,
     withEngineOverride,
-} from './04-providers.js?v=2610.AR';
+} from './04-providers.js?v=2610.AS';
 import {
     autoResizeTextarea, autoTitleChat, scrollToBottom, updateSendButton,
-} from './07-ui.js?v=2610.AR';
+} from './07-ui.js?v=2610.AS';
 import {
     anonChatState, anonymizeHistoryText, anonymizeOutgoingText, anonymizeTextSync,
     deanonymizeForDisplay, ensureAnonReady, listAnonItems, persistAnonVault, restoreAnonText,
-} from './08-anon.js?v=2610.AR';
+} from './08-anon.js?v=2610.AS';
 import {
     t,
-} from './09-i18n.js?v=2610.AR';
+} from './09-i18n.js?v=2610.AS';
 import {
     formatRagContext, prepareRagContext,
-} from './11-rag.js?v=2610.AR';
+} from './11-rag.js?v=2610.AS';
 /* <<< imports <<< */
 
 /* ============================================
@@ -1656,7 +1656,7 @@ async function runWebGPUTurn(chat, assistantMsg, msgIdx) {
                         ? 'Este proceso es intensivo y puede tardar entre 30s y 2 min en modelos grandes. La app no está colgada.'
                     : useVisionTask
                         ? 'Los modelos multimodales suelen descargar más componentes que uno solo de texto. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
-                        : 'Este paso solo suele ocurrir la primera vez o tras limpiar la caché. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
+                        : '¿Qué está pasando? Como el modelo no está descargado en la memoria de tu navegador, vamos a tardar unos momentos en hacerlo y así todo funcionará en local en tu máquina. ⚠️ El modelo en memoria se descartará al salir o recargar la página.'
             });
             updateStreamingMessage(msgIdx, assistantMsg);
         }, pipelineTask);

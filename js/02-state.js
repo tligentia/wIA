@@ -6,34 +6,34 @@ import {
     getProviderAccess, getProviderBaseId, getProviderOAuth, isCloneableProvider,
     isCustomProvider, isHeavyForMobile, isMobileDevice, loadWebGPUCatalogFile,
     registerCustomProviders, tr,
-} from './01-core.js?v=2610.AR';
+} from './01-core.js?v=2610.AS';
 import {
     getCachedWebGPUModels, scheduleWebGPUPriming, startWebGPUMonitor, stopWebGPUMonitor,
     warmUpActiveWebGPUModel, webgpuState,
-} from './03-webgpu.js?v=2610.AR';
+} from './03-webgpu.js?v=2610.AS';
 import {
     checkProviderStatus, detectLocalProviderAvailability, finishProviderOAuth,
-} from './04-providers.js?v=2610.AR';
+} from './04-providers.js?v=2610.AS';
 import {
     renderAttachmentPreview, renderChatList, renderOrderQueue, renderProjectSelect,
     renderWelcomeStarters, showWelcome,
-} from './05-workspace.js?v=2610.AR';
+} from './05-workspace.js?v=2610.AS';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AR';
+} from './06-chat.js?v=2610.AS';
 import {
     autoResizeTextarea, bindEvents, bindSlashCommandEvents, loadPromptLibrary,
     showConnectionValidationResult, updateSendButton,
-} from './07-ui.js?v=2610.AR';
+} from './07-ui.js?v=2610.AS';
 import {
     renderAnonModeUI, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AR';
+} from './08-anon.js?v=2610.AS';
 import {
     bindLangSwitch, loadTranslations, refreshLocalizedUI, t,
-} from './09-i18n.js?v=2610.AR';
+} from './09-i18n.js?v=2610.AS';
 import {
     renderRagIndexStatus,
-} from './11-rag.js?v=2610.AR';
+} from './11-rag.js?v=2610.AS';
 /* <<< imports <<< */
 
 /* ============================================
@@ -64,16 +64,19 @@ const state = {
     incognitoSessionActive: false,
     activeProjectId: 'general',
     settings: {
-        provider: 'ollama',
-        ollamaUrl: 'http://localhost:11434',
-        model: 'gemma4:e4b',
+        // Sin nada configurado (primer arranque), wIA funciona ya en el propio
+        // navegador: motor WebGPU y Llama 3.2 1B. Si hay un motor local con
+        // modelos o ajustes guardados, esos mandan (ver detectLocalProviderAvailability).
+        provider: 'webgpu',
+        ollamaUrl: '',
+        model: 'onnx-community/Llama-3.2-1B-Instruct-ONNX',
         apiKey: '',
         theme: 'system',
         language: 'auto',   // 'auto' (detecta navegador) | 'es' | 'en'
         temperature: 0.8,
         topP: 0.9,
         topK: 40,
-        maxTokens: 8192,
+        maxTokens: 1024,
         favoriteModels: [],   // IDs de modelos marcados como favoritos por el usuario
         favoriteProviders: [],// Motores fijados al principio de sus listas
         providerUsageHistory: [], // IDs de motores, del uso más reciente al más antiguo
@@ -1541,6 +1544,12 @@ async function loadState() {
 
         // Sync active provider config to top-level state
         syncProviderToState();
+        // Sin modelo elegido en el motor activo no hay con qué chatear: se cae al
+        // modelo del navegador por defecto (Llama 3.2 1B) en vez de quedarse vacío.
+        if (!String(state.settings.model || '').trim() && state.settings.provider !== 'webgpu') {
+            state.settings.provider = 'webgpu';
+            syncProviderToState();
+        }
         
         // Ensure activeProjectId is valid
         if (!state.projects.find(p => p.id === state.activeProjectId)) {

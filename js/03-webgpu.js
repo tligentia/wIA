@@ -2,23 +2,23 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     dom, state, updateStatusMeta,
-} from './02-state.js?v=2610.AR';
+} from './02-state.js?v=2610.AS';
 import {
     WEBGPU_MODELS, _transformersSources, escapeHtml, getVisionAssistDef, importTransformers,
     isRetryableWebGPULoadError, notify, tr, trf, webgpuDtypeCandidates,
-} from './01-core.js?v=2610.AR';
+} from './01-core.js?v=2610.AS';
 import {
     populateModels,
-} from './04-providers.js?v=2610.AR';
+} from './04-providers.js?v=2610.AS';
 import {
     analyzeImagesForWebGPUInline, buildWebGPURepoUrl, clearMessageLoadingState,
     estimateInstallProgress, extractGeneratedText, formatErrorDetail, inferMimeTypeFromBase64,
     normalizeImageMeta, runWebGPUGenerationInline, shouldEmitWebGPUProgress, stopStreaming,
     updateStreamingMessage,
-} from './06-chat.js?v=2610.AR';
+} from './06-chat.js?v=2610.AS';
 import {
     t,
-} from './09-i18n.js?v=2610.AR';
+} from './09-i18n.js?v=2610.AS';
 /* <<< imports <<< */
 
 /* ============================================
