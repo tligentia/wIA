@@ -115,10 +115,24 @@ import '${spec(files[files.length - 1])}';
 
 // ── Versión en index.html y en el precache del SW ──────────────────────────
 const html = readFileSync('index.html', 'utf8');
-const htmlNext = html.replace(/(<script type="module" src="js\/main\.js)\?v=[^"]*"/, `$1?v=${TOKEN}"`);
+let htmlNext = html.replace(/(<script type="module" src="js\/main\.js)\?v=[^"]*"/, `$1?v=${TOKEN}"`);
+// Los recursos propios que cargan los <script>/<link> clásicos también llevan la
+// versión: un host sin Cache-Control (nginx de Plesk) los deja a la caché
+// heurística del navegador, y se mezclaba un JS nuevo con un motor o CSS viejos.
+const VERSIONED_ASSETS = ['lib/anonimae-engine.js', 'styles.css', 'Plantilla/Version.js', 'secure-gate.js', 'portal-loader.js'];
+for (const a of VERSIONED_ASSETS) {
+    const re = new RegExp(`((?:src|href)="${a.replace(/[.\/]/g, '\\$&')})(?:\\?v=[^"]*)?"`);
+    if (!re.test(htmlNext)) problems.push(`index.html no referencia ${a}`);
+    htmlNext = htmlNext.replace(re, `$1?v=${TOKEN}"`);
+}
 if (!/<script type="module" src="js\/main\.js\?v=/.test(html)) problems.push('index.html no carga js/main.js como módulo');
 emit('index.html', htmlNext);
-const swNext = sw.replace(/'\.\/js\/([\w-]+\.js)\?v=[^']*'/g, `'./js/$1?v=${TOKEN}'`);
+let swNext = sw.replace(/'\.\/js\/([\w-]+\.js)\?v=[^']*'/g, `'./js/$1?v=${TOKEN}'`);
+for (const a of VERSIONED_ASSETS) {
+    const re = new RegExp(`'\\./${a.replace(/[.\/]/g, '\\$&')}(?:\\?v=[^']*)?'`);
+    if (!re.test(swNext)) problems.push(`sw.js no precachea ${a}`);
+    swNext = swNext.replace(re, `'./${a}?v=${TOKEN}'`);
+}
 for (const f of [...files, 'main.js']) if (!sw.includes(`'./js/${f}?v=`)) problems.push(`sw.js no precachea js/${f}`);
 emit('sw.js', swNext);
 

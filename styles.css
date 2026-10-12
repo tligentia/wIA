@@ -6085,6 +6085,19 @@ body.mobile-device .webgpu-mobile-note {
 .anon-mode-switch .filter-pill[disabled] { opacity: 0.55; cursor: not-allowed; }
 .anon-mode-compact { margin: 0; }
 .anon-mode-help { margin: 4px 0 0; }
+/* Anonimizando: el botón del sistema que trabaja parpadea con su progreso. */
+.anon-mode-switch .filter-pill.is-busy {
+    border-color: var(--accent-primary);
+    animation: anon-mode-blink 0.9s ease-in-out infinite;
+}
+.anon-mode-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@keyframes anon-mode-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .anon-mode-switch .filter-pill.is-busy { animation: none; }
+}
 .anon-tool-mode-help { margin: -4px 0 0; }
 .anon-tool-ai { color: var(--accent-primary); }
 /* La casilla ocupa toda la fila; el tipo y «Añadir» van debajo. */

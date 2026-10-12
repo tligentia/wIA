@@ -2,22 +2,22 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AU';
+} from './07-ui.js?v=2610.AW';
 import {
     WEBGPU_MODELS, debounce, escapeHtml, getWebGPUBrokenInfo, loadLocalJson, notify, tr,
-} from './01-core.js?v=2610.AU';
+} from './01-core.js?v=2610.AW';
 import {
     dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
-} from './02-state.js?v=2610.AU';
+} from './02-state.js?v=2610.AW';
 import {
     checkWebGPUSupport, completeWebGPU, webgpuState,
-} from './03-webgpu.js?v=2610.AU';
+} from './03-webgpu.js?v=2610.AW';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AU';
+} from './05-workspace.js?v=2610.AW';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AU';
+} from './06-chat.js?v=2610.AW';
 /* <<< imports <<< */
 
 /* ============================================
@@ -205,7 +205,11 @@ async function anonymizeOutgoingText(content, chat) {
                 const v = await verifyLocalAI();
                 if (v.ok) {
                     const st = anonChatState[chat.id];
-                    ai.added = mergeAITerms(st.aiTerms, await aiDetectTerms(content));
+                    const t0 = Date.now();
+                    setAnonBusy('ai', '…');
+                    try {
+                        ai.added = mergeAITerms(st.aiTerms, await aiDetectTerms(content, (i, n) => setAnonBusy('ai', `${i}/${n}`)));
+                    } finally { clearAnonBusy('ai', t0); }
                     ai.used = true;
                 } else ai.note = v.reason;
             } catch (e) {
@@ -213,7 +217,9 @@ async function anonymizeOutgoingText(content, chat) {
                 console.warn('[Anon] La IA local no ha podido revisar el mensaje; se usa el sistema interno:', e);
             }
         }
+        setAnonBusy('internal', tr('anon.busy.analyzing', 'analizando…'));
         const res = anonymizeTextSync(content, chat);
+        flashAnonBusy('internal', `${res.count} ✓`);
         if (res.count || ai.added) await persistAnonVault(chat, anonChatState[chat.id]);
         return { ...res, ok: true, ai };
     } catch (e) {
@@ -374,6 +380,7 @@ async function _localAIComplete(system, user) {
             shownLoading = true;
             anonTool.aiNote = tr('anon.ai.loadingModel', '⬇ Cargando el modelo del navegador… {pct}%').replace('{pct}', Math.round(pct || 0));
             setAnonAINote();
+            setAnonBusy('ai', `⬇ ${Math.round(pct || 0)}%`);
         };
         try {
             return await completeWebGPU(ANON_AI_SYSTEM_BROWSER, user, { maxTokens: 450, onProgress });
@@ -435,7 +442,7 @@ function _parseAIItems(raw) {
  * devuelve [{text, type}] ya validados: copiados literalmente del texto, de
  * tamaño razonable y que no son un marcador. Divide los textos largos.
  */
-async function aiDetectTerms(text) {
+async function aiDetectTerms(text, onStep = null) {
     const size = getProviderDef(state.settings.provider).type === 'webgpu' ? ANON_AI_CHUNK_BROWSER : ANON_AI_CHUNK;
     const paragraphs = String(text || '').split(/\n{2,}/);
     const chunks = [];
@@ -448,8 +455,12 @@ async function aiDetectTerms(text) {
     if (cur.trim()) chunks.push(cur);
     const found = new Map();
     const types = ANON_TERM_TYPES.map(t => t.id);
-    for (const chunk of chunks.slice(0, ANON_AI_MAX_CHUNKS)) {
+    const todo = chunks.slice(0, ANON_AI_MAX_CHUNKS);
+    let done = 0;
+    if (onStep) onStep(0, todo.length);
+    for (const chunk of todo) {
         const items = _parseAIItems(await _localAIComplete(ANON_AI_SYSTEM, chunk));
+        if (onStep) onStep(++done, todo.length);
         const flat = chunk.toLowerCase();
         for (const it of items) {
             const t = String(it?.text || '').trim();
@@ -604,6 +615,42 @@ function bindAnonTypeControls() {
     }
 }
 
+// ─── Progreso en los botones del conmutador ──────────────────────────────
+// Mientras se anonimiza, el botón del sistema que trabaja parpadea y enseña el
+// avance: «JScript Interno · analizando…/12 datos», «IA local · 2/5» o
+// «IA local · ⬇ 34 %» (descarga del modelo del navegador).
+const _anonBusyTimer = {};
+const ANON_BUSY_MIN_MS = 600;     // lo que dura al menos, para que alcance a verse
+
+function setAnonBusy(mode, progress = '') {
+    clearTimeout(_anonBusyTimer[mode]);
+    document.querySelectorAll(`[data-anon-mode="${mode}"]`).forEach((btn) => {
+        btn.classList.add('is-busy');
+        btn.setAttribute('aria-busy', 'true');
+        let span = btn.querySelector('.anon-mode-progress');
+        if (!span) { span = document.createElement('span'); span.className = 'anon-mode-progress'; btn.append(span); }
+        span.textContent = progress ? ` · ${progress}` : '';
+    });
+}
+
+function clearAnonBusy(mode, sinceMs = 0) {
+    clearTimeout(_anonBusyTimer[mode]);
+    const wait = Math.max(0, ANON_BUSY_MIN_MS - (Date.now() - sinceMs));
+    _anonBusyTimer[mode] = setTimeout(() => {
+        document.querySelectorAll(`[data-anon-mode="${mode}"]`).forEach((btn) => {
+            btn.classList.remove('is-busy');
+            btn.removeAttribute('aria-busy');
+            btn.querySelector('.anon-mode-progress')?.remove();
+        });
+    }, wait);
+}
+
+/** Trabajo síncrono (el sistema interno): el navegador no pinta hasta que acaba, así que se deja el parpadeo un instante. */
+function flashAnonBusy(mode, progress = '') {
+    setAnonBusy(mode, progress);
+    clearAnonBusy(mode, Date.now());
+}
+
 // ─── UI: sistema de anonimización (interno / IA) ─────────────────────────
 function renderAnonModeUI() {
     const wanted = state.settings.anonMode === 'ai' ? 'ai' : 'internal';
@@ -624,8 +671,8 @@ function renderAnonModeUI() {
     if (wanted === 'ai') {
         const key = _aiEngineKey();
         const checked = st.ok && _aiVerify.key === key;
-        if (anonAIActive()) help = tr('anon.mode.help.ai', 'IA local activa: el modelo revisa el texto además del sistema interno. El texto no sale de tu equipo.');
-        else if (!st.ok || (checked && !_aiVerify.ok)) help = tr('anon.mode.help.unavailable', 'IA no disponible ahora: {reason} Se usa el sistema interno.').replace('{reason}', st.ok ? _aiVerify.reason : st.reason);
+        if (anonAIActive()) help = tr('anon.mode.help.ai', 'IA local activa: el modelo revisa el texto además del JScript Interno. El texto no sale de tu equipo.');
+        else if (!st.ok || (checked && !_aiVerify.ok)) help = tr('anon.mode.help.unavailable', 'IA no disponible ahora: {reason} Se usa el JScript Interno.').replace('{reason}', st.ok ? _aiVerify.reason : st.reason);
         else {
             help = tr('anon.mode.verifying', 'Verificando el motor local…');
             // Se cambió de motor o modelo desde la última comprobación: se verifica ahora.
@@ -636,8 +683,8 @@ function renderAnonModeUI() {
         }
     } else {
         help = st.ok
-            ? tr('anon.mode.help.internal.canAI', 'Sistema interno (reglas y diccionarios). Puedes reforzarlo con tu modelo local.')
-            : tr('anon.mode.help.internal', 'Sistema interno (reglas y diccionarios). La IA se activa solo con un motor IA Local verificado.');
+            ? tr('anon.mode.help.internal.canAI', 'JScript Interno (reglas y diccionarios). Puedes reforzarlo con tu modelo local.')
+            : tr('anon.mode.help.internal', 'JScript Interno (reglas y diccionarios). La IA se activa solo con un motor IA Local verificado.');
     }
     document.querySelectorAll('.anon-mode-help').forEach((el) => { el.textContent = help; });
 }
@@ -953,6 +1000,9 @@ function renderAnonTool() {
     if (toChat) toChat.hidden = restoring;
 
     const result = runAnonTool(input.value);
+    if (!restoring && input.value.trim() && !result.notReady) {
+        flashAnonBusy('internal', `${result.entities.length} ✓`);
+    }
     // Si el usuario ha corregido el resultado a mano, un repintado que no viene
     // de cambiar el original (carga de reglas, cambio de idioma…) no lo pisa.
     if (!anonTool.outputDirty) output.value = result.text;
@@ -1053,16 +1103,20 @@ async function reviewAnonToolWithAI() {
     if (!found) {
         anonTool.aiNote = tr('anon.ai.reviewing', '🤖 La IA local está revisando el texto…');
         setAnonAINote();
+        const t0 = Date.now();
+        setAnonBusy('ai', '…');
         try {
-            found = await aiDetectTerms(text);
+            found = await aiDetectTerms(text, (i, n) => setAnonBusy('ai', `${i}/${n}`));
             anonTool.aiCache.set(text, found);
         } catch (e) {
-            anonTool.aiNote = tr('anon.ai.failed', '⚠️ La IA local no ha podido revisar el texto; se usa el sistema interno.');
+            clearAnonBusy('ai', t0);
+            anonTool.aiNote = tr('anon.ai.failed', '⚠️ La IA local no ha podido revisar el texto; se usa el JScript Interno.');
             setAnonAINote();
             console.warn('[Anon] Revisión con IA local fallida:', e);
             return;
         }
     }
+    clearAnonBusy('ai', Date.now() - 200);
     if (input.value !== text) return;                 // el texto cambió mientras tanto
     const added = mergeAITerms(anonTool.aiTerms, found);
     anonTool.aiNote = tr('anon.ai.done', '🤖 IA local: {n} término(s) nuevo(s) añadidos.').replace('{n}', added);

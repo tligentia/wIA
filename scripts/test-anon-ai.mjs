@@ -10,6 +10,7 @@
  *
  * Uso: npm run test:anon-ai
  */
+import { readFileSync } from 'node:fs';
 import { createChatHarness, settle } from './harness-chat.mjs';
 
 const withTimeout = (p, ms = 15000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
@@ -181,6 +182,25 @@ console.log('\n6. Modo IA con WebGPU (modelo del navegador)\n');
            webgpuState.generating = true;`);
     const msg = await withTimeout(h.run(`completeWebGPU('s','u').then(() => 'ok', e => e.message)`));
     check('no lanza una segunda generación sobre el mismo pipeline', msg !== 'ok' && /generando/i.test(msg), msg);
+}
+
+// ── 7. Progreso parpadeando en el botón del sistema que trabaja ─────────────
+console.log('\n7. Progreso en los botones\n');
+{
+    const { h } = harness({ aiItems: [{ text: 'Galáctica Zeta', type: 'empresa' }] });
+    h.run(`state.settings.provider='ollama'; state.settings.model='m'; state.settings.ollamaUrl='http://localhost:11434'; state.settings.anonMode='ai';
+           globalThis.__busy = [];
+           const _set = setAnonBusy; setAnonBusy = (m, p) => { globalThis.__busy.push(m + ':' + p); return _set(m, p); };`);
+    const anonymize = await chatFor(h);
+    await anonymize('Trabajo en Galáctica Zeta con Juan Pérez.');
+    const busy = JSON.parse(h.run('JSON.stringify(globalThis.__busy)'));
+    check('la IA local marca su botón con el avance por trozos', busy.some((b) => b === 'ai:0/1') && busy.some((b) => b === 'ai:1/1'), busy.join(' | '));
+    check('el JScript Interno marca el suyo mientras analiza', busy.some((b) => b.startsWith('internal:')), busy.join(' | '));
+    const es = JSON.parse(readFileSync('lang/es.json', 'utf8'));
+    const html = readFileSync('index.html', 'utf8');
+    check('el sistema interno se llama «JScript Interno» (textos e index.html)',
+        /JScript Interno/.test(es['anon.mode.internal']) && /JScript Interno/.test(es['anon.mode.internal.short'])
+        && (html.match(/data-anon-mode="internal"[^>]*>⚙️ JScript Interno/g) || []).length === 2);
 }
 
 await settle();

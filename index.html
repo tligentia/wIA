@@ -81,9 +81,9 @@
     <script src="lib/highlight.min.js"></script>
     <script src="lib/pdf.min.js"></script>
     <!-- Motor de anonimización DLP local (AnonimAE, autónomo y sin dependencias) -->
-    <script src="lib/anonimae-engine.js"></script>
+    <script src="lib/anonimae-engine.js?v=2610.AW"></script>
 
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2610.AW">
 </head>
 
 <body>
@@ -829,7 +829,7 @@
                             <div class="setting-group" id="anonModeGroup">
                                 <label class="setting-label" data-i18n="anon.mode.title">Sistema de anonimización</label>
                                 <div class="anon-mode-switch" role="group" aria-label="Sistema de anonimización">
-                                    <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal">⚙️ Interno (algorítmico)</button>
+                                    <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal">⚙️ JScript Interno (algorítmico)</button>
                                     <button type="button" class="filter-pill" data-anon-mode="ai" aria-pressed="false" data-i18n="anon.mode.ai">🤖 IA local</button>
                                 </div>
                                 <p class="setting-help-text anon-mode-help" role="status"></p>
@@ -1403,7 +1403,7 @@
                     <button type="button" class="filter-pill" id="anonToolModeRestore" role="tab" aria-selected="false" data-i18n="anon.tool.mode.restore">Restaurar</button>
                     <span class="anon-tool-spacer"></span>
                     <div class="anon-mode-switch anon-mode-compact" role="group" aria-label="Sistema de anonimización">
-                        <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal.short">⚙️ Interno</button>
+                        <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal.short">⚙️ JScript Interno</button>
                         <button type="button" class="filter-pill" data-anon-mode="ai" aria-pressed="false" data-i18n="anon.mode.ai">🤖 IA local</button>
                     </div>
                     <button type="button" class="btn-secondary btn-sm" id="anonToolLoadFile" data-i18n="anon.tool.file" data-i18n-title="anon.tool.file.title" title="Carga un archivo de texto (.md, .txt, .csv, .json, .html, .pdf…) para anonimizarlo; se procesa en este navegador">📂 Cargar archivo…</button>
@@ -1509,17 +1509,17 @@
 
     <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script src="Plantilla/Version.js"></script>
+    <script src="Plantilla/Version.js?v=2610.AW"></script>
     <!-- Barra del portal Tligent: solo existe cuando wIA se despliega dentro del
          portal. portal-loader.js la carga si está; si no, no hay petición fallida. -->
-    <script src="portal-loader.js"></script>
-    <script src="secure-gate.js"></script>
+    <script src="portal-loader.js?v=2610.AW"></script>
+    <script src="secure-gate.js?v=2610.AW"></script>
     <!-- Lógica de la app: módulos ES reales (js/NN-*.js). Un único punto de entrada;
          los import/export de cada módulo los genera scripts/gen-modules.mjs.
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AU"></script>
+    <script type="module" src="js/main.js?v=2610.AW"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>

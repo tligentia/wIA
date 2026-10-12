@@ -57,6 +57,17 @@ hides('nombre que no está en el diccionario, por su apellido', 'La paciente Mar
 hides('nombre introducido por un tratamiento', 'También Dña. Rocío Jurado y el Sr. Bermúdez Ochandiano.', ['Rocío', 'Jurado', 'Bermúdez', 'Ochandiano']);
 hides('nombre escrito sin tildes (Jesús → Jesus)', 'Procurador:\nJesus de Pinares', ['Jesus', 'Pinares']);
 hides('apellidos sin tildes (García → Garcia)', 'Habló con Maria Garcia Lopez.', ['Maria', 'Garcia', 'Lopez']);
+hides('fecha en formato ISO', 'Referencia TS-01 | Fecha 2018-03-15 | Versión 1.0', ['2018-03-15']);
+hides('fecha con el mes en letras', 'Firmado el 15 de marzo de 2018 en Madrid.', ['15 de marzo de 2018']);
+hides('ciudad que cierra una dirección', 'domicilio simulado Calle Luna 23, Madrid. Inicio y firma', ['Luna 23', 'Madrid']);
+hides('ciudad con código postal', 'Avenida del Sol 5, 28001 Madrid', ['Sol 5', '28001', 'Madrid']);
+keeps('una ciudad suelta no es un dato personal', 'Referencia colectiva: Comercio del Metal de Madrid.');
+keeps('«Marco» en un título no es una persona', 'Partes\nMarco y firmas\nReferencia colectiva');
+hides('«Marco» con apellido sí es una persona', 'Firma Marco Antonio Ruiz hoy.', ['Marco', 'Ruiz']);
+check('la misma fecha en otra grafía recibe el mismo marcador', (() => {
+    const out = anon('Inicio 15/03/2018 y copia 2018-03-15, o el 15 de marzo de 2018.').anonymizedText;
+    return (out.match(/\[Fecha_001\]/g) || []).length === 3;
+})());
 hides('nombre completo escrito todo en minúsculas', 'Nombre: marta rodríguez pérez', ['marta', 'rodríguez', 'pérez']);
 hides('minúsculas y sin tildes', 'contacto marta rodriguez perez de la oficina', ['marta', 'rodriguez', 'perez']);
 hides('mayúscula solo en el nombre de pila', 'Habló con Marta rodríguez pérez ayer.', ['Marta', 'rodríguez', 'pérez']);
