@@ -396,5 +396,19 @@
   "anon.tool.addTerm": "📌 Añadir selección",
   "anon.tool.addTerm.title": "Añade el texto seleccionado a tus términos propios: se anonimizará siempre",
   "anon.tool.addTerm.none": "Selecciona primero el texto en alguna de las dos casillas.",
-  "anon.tool.addTerm.exists": "Ese término ya estaba en tu lista."
+  "anon.tool.addTerm.exists": "Ese término ya estaba en tu lista.",
+  "anon.tool.clear": "🧹 Vaciar casillas",
+  "anon.tool.clear.title": "Vacía las dos casillas (el texto original y el anonimizado) para empezar con otro texto. Los marcadores de la sesión se conservan",
+  "anon.tool.cleared": "Casillas vaciadas.",
+  "anon.tool.undo": "↩ Deshacer",
+  "anon.sel.title": "Anonimizar siempre como…",
+  "anon.sel.type.nombre": "🧑 Persona",
+  "anon.sel.type.empresa": "🏢 Organización",
+  "anon.sel.type.direccion": "📍 Dirección o lugar",
+  "anon.sel.type.dato": "🔖 Otro dato",
+  "anon.sel.suggested": "sugerido",
+  "anon.sel.many": "{n} términos (uno por línea)",
+  "anon.sel.added": "📌 «{text}» se anonimizará siempre como {type}. Puedes quitarlo en Ajustes → Términos propios.",
+  "anon.sel.marker": "Eso ya es un marcador: selecciona el dato real, no el marcador.",
+  "anon.sel.tooLong": "La selección es demasiado larga (máximo 120 caracteres por término): marca solo la palabra o frase."
 }

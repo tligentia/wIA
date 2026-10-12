@@ -396,5 +396,19 @@
   "anon.tool.addTerm": "📌 Add selection",
   "anon.tool.addTerm.title": "Adds the selected text to your custom terms: it will always be anonymized",
   "anon.tool.addTerm.none": "Select some text in either box first.",
-  "anon.tool.addTerm.exists": "That term was already in your list."
+  "anon.tool.addTerm.exists": "That term was already in your list.",
+  "anon.tool.clear": "🧹 Clear boxes",
+  "anon.tool.clear.title": "Empties both boxes (original and anonymized text) to start with another text. The session markers are kept",
+  "anon.tool.cleared": "Boxes cleared.",
+  "anon.tool.undo": "↩ Undo",
+  "anon.sel.title": "Always anonymize as…",
+  "anon.sel.type.nombre": "🧑 Person",
+  "anon.sel.type.empresa": "🏢 Organization",
+  "anon.sel.type.direccion": "📍 Address or place",
+  "anon.sel.type.dato": "🔖 Other data",
+  "anon.sel.suggested": "suggested",
+  "anon.sel.many": "{n} terms (one per line)",
+  "anon.sel.added": "📌 “{text}” will always be anonymized as {type}. You can remove it in Settings → Custom terms.",
+  "anon.sel.marker": "That is already a marker: select the real data, not the marker.",
+  "anon.sel.tooLong": "The selection is too long (120 characters per term at most): select just the word or phrase."
 }

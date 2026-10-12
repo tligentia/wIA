@@ -2,22 +2,22 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AX';
+} from './07-ui.js?v=2610.AY';
 import {
     WEBGPU_MODELS, debounce, escapeHtml, getWebGPUBrokenInfo, loadLocalJson, notify, tr,
-} from './01-core.js?v=2610.AX';
+} from './01-core.js?v=2610.AY';
 import {
     dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
-} from './02-state.js?v=2610.AX';
+} from './02-state.js?v=2610.AY';
 import {
     checkWebGPUSupport, completeWebGPU, webgpuState,
-} from './03-webgpu.js?v=2610.AX';
+} from './03-webgpu.js?v=2610.AY';
 import {
     MAX_FILE_BYTES, extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AX';
+} from './05-workspace.js?v=2610.AY';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AX';
+} from './06-chat.js?v=2610.AY';
 /* <<< imports <<< */
 
 /* ============================================
@@ -843,8 +843,133 @@ const anonTool = {
     aiNote: '',         // último aviso de la revisión con IA local
     extraEntities: [],  // datos nuevos hallados al revisar lo escrito a mano en el resultado
     lastReview: 0,      // nº de datos anonimizados en la última revisión del resultado editado
+    flash: '',          // aviso de un alta rápida de término («📌 … se anonimizará siempre»)
+    undo: null,         // textos de las casillas antes de «Vaciar casillas» (para deshacer)
+    sel: '',            // texto marcado ahora en alguna de las casillas
     session: { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} },
 };
+
+// ─── Menú rápido al marcar texto ─────────────────────────────────────────
+// Marcar una o varias palabras en cualquiera de las dos casillas abre un menú
+// junto a la selección que pregunta a qué tipo de dato se asocia; un clic y
+// queda como término propio (se anonimizará siempre, también en el chat).
+const ANON_PLACEHOLDER_RE = /^\[[^\]]+_\d+\]$/;
+const ANON_ORG_HINT = /\b(?:S\.?\s?L\.?(?:\s?U\.?)?|S\.?\s?A\.?|S\.?\s?C\.?|Ltd\.?|Inc\.?|GmbH|LLC|Fundaci[oó]n|Asociaci[oó]n|Cooperativa|Ayuntamiento|Universidad|Banco|Grupo|Consultores|Hermanos|Cl[ií]nica|Hospital|Ministerio)\b/i;
+const ANON_ADDRESS_HINT = /^(?:calle|c\/|avda?\.?|avenida|plaza|paseo|camino|carretera|ronda|traves[ií]a|v[ií]a|urbanizaci[oó]n|barrio)\b/i;
+
+/** Tipo que se sugiere para un texto marcado: nombre / empresa / direccion / dato. */
+function guessAnonTermType(text) {
+    const t = String(text || '').trim();
+    if (!t) return 'dato';
+    if (ANON_ADDRESS_HINT.test(t)) return 'direccion';
+    if (/@|\d/.test(t)) return 'dato';
+    if (ANON_ORG_HINT.test(t)) return 'empresa';
+    const words = t.split(/\s+/).filter(w => !/^(?:de|del|la|las|los|y|e|da|do|dos|van|von)$/i.test(w));
+    const capitalized = words.length > 0 && words.length <= 5 && words.every(w => /^[A-ZÁÉÍÓÚÜÑÀÈÒÇ]/.test(w));
+    if (capitalized && _anonRules?.dictionaries) {
+        const fold = (w) => foldAccents(w).toLowerCase();
+        const nombres = new Set((_anonRules.dictionaries.nombres || []).map(fold));
+        const apellidos = new Set((_anonRules.dictionaries.apellidos || []).map(fold));
+        if (words.some(w => nombres.has(fold(w)) || apellidos.has(fold(w)))) return 'nombre';
+    }
+    return 'dato';
+}
+
+function anonSelectionTerms(raw) {
+    return String(raw || '').split(/[\n;]+/).map(p => p.trim().replace(/\s+/g, ' ')).filter(p => p.length >= 2);
+}
+
+function hideAnonSelMenu() {
+    document.getElementById('anonSelMenu')?.classList.add('hidden');
+}
+
+/** Abre el menú junto a (x, y) si hay una selección válida en la casilla `el`. */
+function showAnonSelMenu(el, x, y) {
+    const menu = document.getElementById('anonSelMenu');
+    if (!menu || !el || anonTool.mode !== 'anon') return;
+    const raw = el.selectionEnd > el.selectionStart ? el.value.slice(el.selectionStart, el.selectionEnd) : '';
+    anonTool.sel = raw;
+    const terms = anonSelectionTerms(raw).filter(t => !ANON_PLACEHOLDER_RE.test(t));
+    if (!terms.length) {
+        hideAnonSelMenu();
+        return;
+    }
+    const tooLong = terms.some(t => t.length > 120);
+    const label = terms.length > 1
+        ? tr('anon.sel.many', '{n} términos (uno por línea)').replace('{n}', terms.length)
+        : `«${terms[0].length > 60 ? terms[0].slice(0, 57) + '…' : terms[0]}»`;
+    const textEl = document.getElementById('anonSelMenuText');
+    if (textEl) textEl.textContent = tooLong ? tr('anon.sel.tooLong', 'La selección es demasiado larga (máximo 120 caracteres por término).') : label;
+    const suggested = guessAnonTermType(terms[0]);
+    menu.querySelectorAll('[data-term-type]').forEach((btn) => {
+        const isSuggested = btn.dataset.termType === suggested;
+        btn.classList.toggle('is-suggested', isSuggested);
+        btn.disabled = tooLong;
+        btn.title = isSuggested ? tr('anon.sel.suggested', 'sugerido') : '';
+    });
+    menu.classList.remove('hidden');
+    // Junto al puntero, sin salirse de la ventana.
+    const w = menu.offsetWidth || 260, h = menu.offsetHeight || 120;
+    const left = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+    const top = Math.max(8, Math.min(y + 16, window.innerHeight - h - 8));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+/** Aplica el tipo elegido a lo marcado: alta del término y repintado. */
+function applyAnonSelectionType(type) {
+    const terms = anonSelectionTerms(anonTool.sel).filter(t => !ANON_PLACEHOLDER_RE.test(t) && t.length <= 120);
+    hideAnonSelMenu();
+    if (!terms.length) return 0;
+    const n = addCustomTerms(terms.join('\n'), type);
+    const meta = ANON_TERM_TYPES.find(x => x.id === type) || ANON_TERM_TYPES[3];
+    anonTool.sel = '';
+    anonTool.outputDirty = false;
+    anonTool.extraEntities = [];
+    anonTool.lastReview = 0;
+    anonTool.flash = n
+        ? tr('anon.sel.added', '📌 «{text}» se anonimizará siempre como {type}.').replace('{text}', terms.join(', ')).replace('{type}', tr(`anon.terms.type.${meta.id}`, meta.label || meta.id))
+        : tr('anon.tool.addTerm.exists', 'Ese término ya estaba en tu lista.');
+    ['anonToolInput', 'anonToolOutput'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) { try { el.setSelectionRange(el.selectionEnd, el.selectionEnd); } catch (_) {} }
+    });
+    renderAnonTool();
+    return n;
+}
+
+/** «Vaciar casillas»: deja las dos casillas en blanco (con deshacer). Conserva la sesión de marcadores. */
+function clearAnonToolBoxes() {
+    const input = document.getElementById('anonToolInput');
+    const output = document.getElementById('anonToolOutput');
+    if (!input || !output) return;
+    if (!input.value && !output.value) return;
+    anonTool.undo = { input: input.value, output: output.value, fileName: anonTool.fileName, outputDirty: anonTool.outputDirty };
+    input.value = '';
+    output.value = '';
+    anonTool.fileName = '';
+    anonTool.outputDirty = false;
+    anonTool.extraEntities = [];
+    anonTool.lastReview = 0;
+    anonTool.aiTerms = [];
+    anonTool.aiNote = '';
+    anonTool.flash = '';
+    anonTool.sel = '';
+    hideAnonSelMenu();
+    renderAnonTool();
+    input.focus();
+}
+
+function undoClearAnonToolBoxes() {
+    const u = anonTool.undo;
+    if (!u) return;
+    anonTool.undo = null;
+    document.getElementById('anonToolInput').value = u.input;
+    anonTool.fileName = u.fileName;
+    anonTool.outputDirty = u.outputDirty;
+    renderAnonTool();
+    if (u.outputDirty) document.getElementById('anonToolOutput').value = u.output;
+}
 
 // ¿La URL pide abrir el anonimizador? Tres formas equivalentes:
 //   …/anon   requiere que el servidor devuelva index.html para esa ruta
@@ -1062,6 +1187,22 @@ function renderAnonTool() {
         summary.append(note);
     }
     if (anonTool.lastReview > 0) appendReviewNote(summary);
+    if (anonTool.flash) {
+        const chip = document.createElement('span');
+        chip.className = 'anon-tool-chip anon-tool-flash';
+        chip.textContent = anonTool.flash;
+        summary.append(chip);
+    }
+    if (anonTool.undo && !input.value && !output.value) {
+        const done = document.createElement('span');
+        done.textContent = tr('anon.tool.cleared', 'Casillas vaciadas.');
+        const undo = document.createElement('button');
+        undo.type = 'button';
+        undo.className = 'btn-secondary btn-sm anon-tool-undo';
+        undo.textContent = tr('anon.tool.undo', '↩ Deshacer');
+        undo.addEventListener('click', undoClearAnonToolBoxes);
+        summary.append(done, undo);
+    }
     if (anonTool.aiNote && state.settings.anonMode === 'ai') setAnonAINote();
 }
 
@@ -1176,6 +1317,7 @@ function openAnonTool({ fromLink = false } = {}) {
 }
 
 function closeAnonTool() {
+    hideAnonSelMenu();
     document.getElementById('anonToolModal')?.classList.add('hidden');
     // Si se llegó por la URL, se limpia para que recargar no lo reabra.
     if (anonTool.openedByLink && isAnonDeepLink()) {
@@ -1192,7 +1334,39 @@ function bindAnonTool() {
     const reviewOutputSoon = debounce(reviewAnonOutput, 600);
     // Cambiar el original recalcula el resultado (y descarta lo editado a mano).
     const aiReviewSoon = debounce(reviewAnonToolWithAI, 1200);
-    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; anonTool.extraEntities = []; anonTool.lastReview = 0; anonTool.aiTerms = []; anonTool.aiNote = ''; rerender(); aiReviewSoon(); });
+    $id('anonToolInput')?.addEventListener('input', () => { anonTool.outputDirty = false; anonTool.extraEntities = []; anonTool.lastReview = 0; anonTool.aiTerms = []; anonTool.aiNote = ''; anonTool.flash = ''; anonTool.undo = null; hideAnonSelMenu(); rerender(); aiReviewSoon(); });
+    // Menú rápido: aparece al marcar texto con el ratón, el teclado o el dedo.
+    let lastPointer = { x: 0, y: 0 };
+    for (const id of ['anonToolInput', 'anonToolOutput']) {
+        const el = $id(id);
+        if (!el) continue;
+        const open = (x, y) => setTimeout(() => showAnonSelMenu(el, x, y), 0);
+        el.addEventListener('mouseup', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; open(e.clientX, e.clientY); });
+        el.addEventListener('touchend', (e) => { const t = e.changedTouches?.[0]; if (t) lastPointer = { x: t.clientX, y: t.clientY }; open(lastPointer.x, lastPointer.y); });
+        el.addEventListener('keyup', (e) => {
+            if (e.key === 'Escape') return;
+            const r = el.getBoundingClientRect();
+            open(lastPointer.x || r.left + 24, lastPointer.y || r.top + 24);
+        });
+        el.addEventListener('scroll', hideAnonSelMenu);
+        el.addEventListener('blur', () => setTimeout(() => {
+            // El clic en el propio menú no cuenta como perder la selección.
+            if (!document.getElementById('anonSelMenu')?.matches?.(':hover')) hideAnonSelMenu();
+        }, 150));
+    }
+    // mousedown no debe quitar la selección de la casilla antes del clic.
+    $id('anonSelMenu')?.addEventListener('mousedown', (e) => e.preventDefault());
+    $id('anonSelMenu')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-term-type]');
+        if (btn && !btn.disabled) applyAnonSelectionType(btn.dataset.termType);
+    });
+    $id('anonSelMenuClose')?.addEventListener('click', hideAnonSelMenu);
+    // Un clic fuera de las casillas y del menú lo cierra.
+    document.addEventListener('mousedown', (e) => {
+        if (!e.target.closest?.('#anonSelMenu, #anonToolInput, #anonToolOutput')) hideAnonSelMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideAnonSelMenu(); });
+    $id('anonToolClear')?.addEventListener('click', clearAnonToolBoxes);
     // El resultado también se puede editar: se conserva hasta que cambie el original.
     $id('anonToolOutput')?.addEventListener('input', () => {
         anonTool.outputDirty = true;

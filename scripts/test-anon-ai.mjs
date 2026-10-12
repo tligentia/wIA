@@ -203,6 +203,39 @@ console.log('\n7. Progreso en los botones\n');
         && (html.match(/data-anon-mode="internal"[^>]*>⚙️ JScript Interno/g) || []).length === 2);
 }
 
+// ── 8. Menú rápido al marcar texto y «Vaciar casillas» ─────────────────────
+console.log('\n8. Menú rápido al marcar texto\n');
+{
+    const { h } = harness();
+    await chatFor(h);   // reglas cargadas (diccionarios para sugerir el tipo)
+    h.run(`renderAnonTool = () => {}; hideAnonSelMenu = () => {};`);
+    const guess = (t) => h.run(`guessAnonTermType(${JSON.stringify(t)})`);
+    check('«Marta Rodríguez» → Persona', guess('Marta Rodríguez') === 'nombre', guess('Marta Rodríguez'));
+    check('«Proyecto Alfa SL» → Organización', guess('Proyecto Alfa SL') === 'empresa');
+    check('«Calle Luna 23» → Dirección', guess('Calle Luna 23') === 'direccion');
+    check('«ref-2041» → Otro dato', guess('ref-2041') === 'dato');
+    check('una palabra suelta en minúscula → Otro dato', guess('alfa') === 'dato');
+
+    h.run(`state.settings.customTerms = []; anonTool.sel = 'Proyecto Alfa';`);
+    const n = h.run(`applyAnonSelectionType('empresa')`);
+    const terms = JSON.parse(h.run('JSON.stringify(state.settings.customTerms)'));
+    check('elegir un tipo en el menú crea el término con ese tipo', n === 1 && terms.length === 1 && terms[0].text === 'Proyecto Alfa' && terms[0].type === 'empresa', JSON.stringify(terms));
+    check('y deja un aviso en la ventana', /Proyecto Alfa/.test(h.run('anonTool.flash')), h.run('anonTool.flash'));
+
+    h.run(`anonTool.sel = 'Ana López\\nBeatriz Núñez';`);
+    const m = h.run(`applyAnonSelectionType('nombre')`);
+    check('varias líneas marcadas crean un término por línea', m === 2 && JSON.parse(h.run('JSON.stringify(state.settings.customTerms)')).length === 3);
+
+    h.run(`anonTool.sel = '[Nombre_001]';`);
+    const k = h.run(`applyAnonSelectionType('nombre')`);
+    check('un marcador no se añade como término', k === 0 && JSON.parse(h.run('JSON.stringify(state.settings.customTerms)')).length === 3);
+
+    // Lo añadido se anonimiza de verdad en el siguiente análisis.
+    const anonymize = await chatFor(h);
+    const r = await anonymize('Mañana presentamos el Proyecto Alfa con Ana López.');
+    check('lo marcado se anonimiza después', !/Alfa/.test(r.text) && !/López/.test(r.text), r.text);
+}
+
 await settle();
 if (failures) { console.error(`\n✖ ${failures} comprobaciones fallidas.`); process.exit(1); }
 console.log('\n✔ Interno / IA local y términos propios correctos.');

@@ -81,9 +81,9 @@
     <script src="lib/highlight.min.js"></script>
     <script src="lib/pdf.min.js"></script>
     <!-- Motor de anonimización DLP local (AnonimAE, autónomo y sin dependencias) -->
-    <script src="lib/anonimae-engine.js?v=2610.AX"></script>
+    <script src="lib/anonimae-engine.js?v=2610.AY"></script>
 
-    <link rel="stylesheet" href="styles.css?v=2610.AX">
+    <link rel="stylesheet" href="styles.css?v=2610.AY">
 </head>
 
 <body>
@@ -1406,6 +1406,7 @@
                         <button type="button" class="filter-pill active" data-anon-mode="internal" aria-pressed="true" data-i18n="anon.mode.internal.short">⚙️ JScript Interno</button>
                         <button type="button" class="filter-pill" data-anon-mode="ai" aria-pressed="false" data-i18n="anon.mode.ai">🤖 IA local</button>
                     </div>
+                    <button type="button" class="btn-secondary btn-sm" id="anonToolClear" data-i18n="anon.tool.clear" data-i18n-title="anon.tool.clear.title" title="Vacía las dos casillas (el texto original y el anonimizado) para empezar con otro texto. Los marcadores de la sesión se conservan">🧹 Vaciar casillas</button>
                     <button type="button" class="btn-secondary btn-sm" id="anonToolLoadFile" data-i18n="anon.tool.file" data-i18n-title="anon.tool.file.title" title="Carga un archivo de texto (.md, .txt, .csv, .json, .html, .pdf…) para anonimizarlo; se procesa en este navegador">📂 Cargar archivo…</button>
                     <input type="file" id="anonToolFile" class="hidden" accept=".md,.markdown,.txt,.csv,.tsv,.json,.html,.htm,.xml,.log,.rtf,.pdf,application/pdf,text/*">
                 </div>
@@ -1454,6 +1455,22 @@
                 <button type="button" class="btn-secondary btn-sm" id="anonToolDownload" data-i18n="anon.tool.download" data-i18n-title="anon.tool.download.title" title="Descarga el resultado como fichero Markdown (.md)">⬇️ Descargar .md</button>
                 <button type="button" class="btn-primary btn-sm" id="anonToolCopy" data-i18n="anon.tool.copy">Copiar resultado</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Menú rápido del anonimizador: aparece al marcar texto en cualquiera de las
+         dos casillas y ofrece a qué tipo de dato se asocia (queda como término propio). -->
+    <div class="anon-sel-menu hidden" id="anonSelMenu" role="menu" aria-label="Anonimizar la selección como…">
+        <div class="anon-sel-menu-head">
+            <span class="anon-sel-menu-title" data-i18n="anon.sel.title">Anonimizar siempre como…</span>
+            <button type="button" class="anon-sel-menu-close" id="anonSelMenuClose" aria-label="Cerrar" title="Cerrar (Esc)">✕</button>
+        </div>
+        <div class="anon-sel-menu-text" id="anonSelMenuText"></div>
+        <div class="anon-sel-menu-types">
+            <button type="button" role="menuitem" data-term-type="nombre" data-i18n="anon.sel.type.nombre">🧑 Persona</button>
+            <button type="button" role="menuitem" data-term-type="empresa" data-i18n="anon.sel.type.empresa">🏢 Organización</button>
+            <button type="button" role="menuitem" data-term-type="direccion" data-i18n="anon.sel.type.direccion">📍 Dirección o lugar</button>
+            <button type="button" role="menuitem" data-term-type="dato" data-i18n="anon.sel.type.dato">🔖 Otro dato</button>
         </div>
     </div>
 
@@ -1509,17 +1526,17 @@
 
     <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script src="Plantilla/Version.js?v=2610.AX"></script>
+    <script src="Plantilla/Version.js?v=2610.AY"></script>
     <!-- Barra del portal Tligent: solo existe cuando wIA se despliega dentro del
          portal. portal-loader.js la carga si está; si no, no hay petición fallida. -->
-    <script src="portal-loader.js?v=2610.AX"></script>
-    <script src="secure-gate.js?v=2610.AX"></script>
+    <script src="portal-loader.js?v=2610.AY"></script>
+    <script src="secure-gate.js?v=2610.AY"></script>
     <!-- Lógica de la app: módulos ES reales (js/NN-*.js). Un único punto de entrada;
          los import/export de cada módulo los genera scripts/gen-modules.mjs.
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AX"></script>
+    <script type="module" src="js/main.js?v=2610.AY"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>

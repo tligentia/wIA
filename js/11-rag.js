@@ -1,21 +1,21 @@
 /* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
-import './10-docs.js?v=2610.AX';
+import './10-docs.js?v=2610.AY';
 import {
     estimateTokenCount, importTransformers, tr,
-} from './01-core.js?v=2610.AX';
+} from './01-core.js?v=2610.AY';
 import {
     dom, idbStore, saveState, secretVault, state,
-} from './02-state.js?v=2610.AX';
+} from './02-state.js?v=2610.AY';
 import {
     configureOnnxRuntime, webgpuState,
-} from './03-webgpu.js?v=2610.AX';
+} from './03-webgpu.js?v=2610.AY';
 import {
     getActiveProject,
-} from './05-workspace.js?v=2610.AX';
+} from './05-workspace.js?v=2610.AY';
 import {
     PROJECT_DOCS_BUDGET_RATIO, getPromptTokenBudget, hashString,
-} from './06-chat.js?v=2610.AX';
+} from './06-chat.js?v=2610.AY';
 /* <<< imports <<< */
 
 /* ============================================
