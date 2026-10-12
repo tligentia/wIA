@@ -5711,10 +5711,19 @@ body.mobile-device .webgpu-mobile-note {
 .anon-tool .modal-body { display: flex; flex-direction: column; gap: 12px; }
 .anon-tool-intro { margin: 0; }
 .anon-tool-modes { display: flex; gap: 8px; }
+/* Ventana grande: casi toda la pantalla, para trabajar con documentos enteros. */
+.modal.anon-tool {
+    width: 96vw;
+    max-width: 1320px;
+    height: 92vh;
+    max-height: 92vh;
+}
+.anon-tool .modal-body { flex: 1 1 auto; min-height: 0; }
+.anon-tool-modes { align-items: center; flex-wrap: wrap; }
 .anon-tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .anon-tool-pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .anon-tool-text {
-    min-height: 240px;
+    min-height: clamp(170px, 30vh, 520px);
     resize: vertical;
     font-family: var(--font-mono);
     font-size: 0.8rem;
@@ -5734,9 +5743,38 @@ body.mobile-device .webgpu-mobile-note {
     border: 1px solid var(--border-color, rgba(128, 128, 128, 0.25));
     color: var(--text-secondary);
 }
+.anon-tool-report { display: flex; flex-direction: column; gap: 6px; }
+.anon-tool-report.hidden, .anon-tool-report-more.hidden { display: none; }
+.anon-tool-report-title { margin: 0; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+.anon-tool-report-scroll {
+    max-height: clamp(120px, 22vh, 260px);
+    overflow: auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+}
+.anon-tool-report-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+.anon-tool-report-table th,
+.anon-tool-report-table td {
+    padding: 5px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+}
+.anon-tool-report-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.anon-tool-report-table .num { text-align: right; white-space: nowrap; }
+.anon-tool-report-table code { font-size: 0.72rem; color: var(--accent-primary); white-space: nowrap; }
+.anon-tool-report-table .val { overflow-wrap: anywhere; color: var(--text-primary); }
+.anon-tool-report-more { margin: 0; font-size: 0.72rem; color: var(--text-tertiary); }
 .anon-tool-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .anon-tool-spacer { flex: 1; }
 @media (max-width: 720px) {
+    .modal.anon-tool { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
     .anon-tool-grid { grid-template-columns: 1fr; }
     .anon-tool-text { min-height: 150px; }
 }

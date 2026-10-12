@@ -2,25 +2,25 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     checkProviderStatus,
-} from './04-providers.js?v=2610.AF';
+} from './04-providers.js?v=2610.AG';
 import {
     PROVIDERS, escapeHtml, loadLocalJson, notify, tr, trf,
-} from './01-core.js?v=2610.AF';
+} from './01-core.js?v=2610.AG';
 import {
     applySettingsToUI, dom, getCompactModelLabel, getOrderedProviderEntries,
     isConversationPersistenceDisabled, markProviderUsed, persistOrderQueue,
     saveCurrentProviderConfig, saveState, saveStateNow, showPersistenceAlert, state,
     syncProviderToState, updateStatusMeta,
-} from './02-state.js?v=2610.AF';
+} from './02-state.js?v=2610.AG';
 import {
     renderMessages, sendMessage, supportsWebGPUImageAssist,
-} from './06-chat.js?v=2610.AF';
+} from './06-chat.js?v=2610.AG';
 import {
     autoResizeTextarea, closeSidebar, formatDate, updateSendButton,
-} from './07-ui.js?v=2610.AF';
+} from './07-ui.js?v=2610.AG';
 import {
     loadAnonRules, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AF';
+} from './08-anon.js?v=2610.AG';
 /* <<< imports <<< */
 
 /* ============================================
@@ -1087,13 +1087,13 @@ async function runOrderQueue() {
 
 /* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 export {
-    handleProjectFiles, handleFiles, removeAttachment, renderAttachmentPreview,
-    renderProjectSelect, applyAgentEngine, switchProject, renderWelcomeStarters,
-    renderAgentsGallery, renderAgentCatalog, findInstalledCatalogAgent, duplicateProject,
-    getActiveProject, getEditingProject, openProjectEditor, createProject, exportAgentToFile,
-    installAgentDefinition, deleteProject, createChat, createChatFromUI, deleteChat,
-    switchChat, getActiveChat, generateTitle, showWelcome, showChat, renderChatList,
-    tryQueueOrder, renderOrderQueue, removeOrder, clearOrderQueue, runSingleOrder,
-    runOrderQueue,
+    extractTextFromPDF, handleProjectFiles, formatBytes, readFileAsText, handleFiles,
+    removeAttachment, renderAttachmentPreview, renderProjectSelect, applyAgentEngine,
+    switchProject, renderWelcomeStarters, renderAgentsGallery, renderAgentCatalog,
+    findInstalledCatalogAgent, duplicateProject, getActiveProject, getEditingProject,
+    openProjectEditor, createProject, exportAgentToFile, installAgentDefinition, deleteProject,
+    createChat, createChatFromUI, deleteChat, switchChat, getActiveChat, generateTitle,
+    showWelcome, showChat, renderChatList, tryQueueOrder, renderOrderQueue, removeOrder,
+    clearOrderQueue, runSingleOrder, runOrderQueue,
 };
 /* <<< exports <<< */

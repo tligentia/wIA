@@ -1,20 +1,20 @@
 /* >>> imports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
-    autoResizeTextarea, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AF';
+    autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
+} from './07-ui.js?v=2610.AG';
 import {
     debounce, escapeHtml, loadLocalJson, tr,
-} from './01-core.js?v=2610.AF';
+} from './01-core.js?v=2610.AG';
 import {
     dom, saveState, secretVault, state,
-} from './02-state.js?v=2610.AF';
+} from './02-state.js?v=2610.AG';
 import {
-    getActiveChat,
-} from './05-workspace.js?v=2610.AF';
+    extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
+} from './05-workspace.js?v=2610.AG';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AF';
+} from './06-chat.js?v=2610.AG';
 /* <<< imports <<< */
 
 /* ============================================
@@ -364,6 +364,7 @@ function bindAnonTypeControls() {
 const anonTool = {
     mode: 'anon',
     openedByLink: false,
+    fileName: '',      // archivo cargado en la ventana (para nombrar la descarga)
     session: { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} },
 };
 
@@ -390,6 +391,90 @@ function urlWithoutAnonLink(loc = window.location) {
 
 function resetAnonToolSession() {
     anonTool.session = { counters: {}, valueToPlaceholder: new Map(), placeholderToValue: {} };
+    anonTool.fileName = '';
+}
+
+// Tope de lo que se procesa de una vez: el motor analiza ~100 KB por segundo y
+// un fichero enorme dejaría la pestaña bloqueada.
+const ANON_FILE_MAX_BYTES = 2 * 1024 * 1024;
+const ANON_REPORT_MAX_ROWS = 300;
+
+/** «Informe 2026 (v2).docx» → «Informe_2026_v2»: seguro para nombrar un fichero. */
+function anonFileStem(name) {
+    return String(name || '')
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^\w.\-áéíóúñÁÉÍÓÚÑ ]+/g, '')
+        .trim()
+        .replace(/\s+/g, '_')
+        .slice(0, 60);
+}
+
+/**
+ * renderAnonReport — tabla de lo que se ha anonimizado: tipo, marcador, valor
+ * original y nº de veces. Solo se pinta en pantalla; el valor original es lo
+ * que el usuario acaba de pegar o cargar en esta misma ventana.
+ */
+function renderAnonReport(entities) {
+    const box = document.getElementById('anonToolReport');
+    const body = document.getElementById('anonToolReportBody');
+    const more = document.getElementById('anonToolReportMore');
+    if (!box || !body) return;
+    body.replaceChildren();
+    more?.classList.add('hidden');
+    const rows = new Map();
+    for (const e of entities) {
+        const ph = anonTool.session.valueToPlaceholder.get(LocalPlaceholderEngine.keyFor(e.placeholder || 'Entity', e.text));
+        if (!ph) continue;
+        const row = rows.get(ph) || { ph, id: e.id, name: e.name, value: e.text, n: 0 };
+        row.n++;
+        rows.set(ph, row);
+    }
+    box.classList.toggle('hidden', rows.size === 0);
+    let shown = 0;
+    for (const row of rows.values()) {
+        if (shown++ >= ANON_REPORT_MAX_ROWS) break;
+        const tr_ = document.createElement('tr');
+        const cell = (text, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = text; tr_.append(td); return td; };
+        cell(`${ANON_TYPE_ICONS[row.id] || '🔒'} ${row.name}`);
+        const ph = document.createElement('td');
+        const code = document.createElement('code');
+        code.textContent = row.ph;
+        ph.append(code);
+        tr_.append(ph);
+        cell(row.value, 'val');
+        cell(String(row.n), 'num');
+        body.append(tr_);
+    }
+    if (more && rows.size > ANON_REPORT_MAX_ROWS) {
+        more.textContent = tr('anon.tool.report.more', '… y {n} marcadores más (el resultado los incluye todos).').replace('{n}', rows.size - ANON_REPORT_MAX_ROWS);
+        more.classList.remove('hidden');
+    }
+}
+
+/**
+ * loadAnonToolFile — lee un archivo (texto o PDF) en el campo de entrada. Todo
+ * ocurre en el navegador. Devuelve un mensaje de error o '' si fue bien.
+ */
+async function loadAnonToolFile(file) {
+    if (!file) return '';
+    if (file.size > ANON_FILE_MAX_BYTES) {
+        return tr('anon.tool.file.tooBig', 'El archivo pesa {size}: el máximo es {max}.')
+            .replace('{size}', formatBytes(file.size)).replace('{max}', formatBytes(ANON_FILE_MAX_BYTES));
+    }
+    try {
+        const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+        const text = isPdf ? await extractTextFromPDF(file) : await readFileAsText(file);
+        // extractTextFromPDF devuelve el fallo como texto en vez de lanzarlo.
+        if (isPdf && /^(PDF\.js no está cargado|Error extrayendo texto del PDF)/.test(text)) {
+            return tr('anon.tool.file.error', 'No se pudo leer el archivo: {error}').replace('{error}', text);
+        }
+        if (!String(text).trim()) return tr('anon.tool.file.empty', 'El archivo no contiene texto que anonimizar.');
+        document.getElementById('anonToolInput').value = text;
+        anonTool.fileName = file.name;
+        return '';
+    } catch (e) {
+        return tr('anon.tool.file.error', 'No se pudo leer el archivo: {error}').replace('{error}', e?.message || String(e));
+    }
 }
 
 /**
@@ -421,7 +506,10 @@ function renderAnonTool() {
     document.getElementById('anonToolModeRestore')?.setAttribute('aria-selected', String(restoring));
     const inLabel = document.getElementById('anonToolInputLabel');
     const outLabel = document.getElementById('anonToolOutputLabel');
-    if (inLabel) inLabel.textContent = restoring ? tr('anon.tool.input.restore', 'Texto con marcadores') : tr('anon.tool.input', 'Texto original');
+    if (inLabel) {
+        const base = restoring ? tr('anon.tool.input.restore', 'Texto con marcadores') : tr('anon.tool.input', 'Texto original');
+        inLabel.textContent = anonTool.fileName ? `${base} — ${anonTool.fileName}` : base;
+    }
     if (outLabel) outLabel.textContent = restoring ? tr('anon.tool.output.restore', 'Texto restaurado') : tr('anon.tool.output', 'Texto anonimizado');
     input.placeholder = restoring
         ? tr('anon.tool.placeholder.restore', 'Pega aquí la respuesta que contiene marcadores como [Nombre_001]…')
@@ -431,6 +519,9 @@ function renderAnonTool() {
 
     const result = runAnonTool(input.value);
     output.value = result.text;
+    const dl = document.getElementById('anonToolDownload');
+    if (dl) dl.disabled = !result.text;
+    renderAnonReport(restoring ? [] : result.entities);
     if (!summary) return;
     summary.replaceChildren();
     const known = Object.keys(anonTool.session.placeholderToValue).length;
@@ -488,6 +579,27 @@ function bindAnonTool() {
         dom.settingsModal?.classList.add('hidden');
         openAnonTool();
     });
+    // Icono directo de la caja de mensaje.
+    $id('anonToolBtn')?.addEventListener('click', () => openAnonTool());
+    $id('anonToolLoadFile')?.addEventListener('click', () => $id('anonToolFile')?.click());
+    $id('anonToolFile')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';     // permite volver a cargar el mismo archivo
+        if (!file) return;
+        const summary = $id('anonToolSummary');
+        if (summary) summary.textContent = tr('anon.tool.loading', 'Cargando las reglas de detección…');
+        await loadAnonRules();
+        const error = await loadAnonToolFile(file);
+        renderAnonTool();
+        if (error && summary) summary.textContent = error;
+    });
+    $id('anonToolDownload')?.addEventListener('click', () => {
+        const text = $id('anonToolOutput').value;
+        if (!text) return;
+        const kind = anonTool.mode === 'restore' ? 'restaurado' : 'anonimizado';
+        const stem = anonFileStem(anonTool.fileName);
+        downloadTextFile(text, stem ? `${stem}_${kind}.md` : `texto_${kind}_${Date.now()}.md`, 'text/markdown');
+    });
     $id('anonToolClose')?.addEventListener('click', closeAnonTool);
     $id('anonToolModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeAnonTool(); });
     $id('anonToolModal')?.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAnonTool(); });
@@ -497,6 +609,7 @@ function bindAnonTool() {
         // Al cambiar de modo el campo se vacía: lo que había era la ENTRADA del
         // otro modo y no tiene sentido como entrada de este.
         $id('anonToolInput').value = '';
+        anonTool.fileName = '';
         renderAnonTool();
         $id('anonToolInput').focus();
     };

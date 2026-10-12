@@ -2,11 +2,11 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     improvePrompt, renderMessages, sendMessage, showMetricsModal, stopStreaming,
-} from './06-chat.js?v=2610.AF';
+} from './06-chat.js?v=2610.AG';
 import {
     PROVIDERS, WEBGPU_MODELS, applyProviderNames, debounce, escapeHtml, getDefaultProviderName,
     isCloneableProvider, isCustomProvider, notify, tr, trf,
-} from './01-core.js?v=2610.AF';
+} from './01-core.js?v=2610.AG';
 import {
     $, $$, applyImportedSettings, applyPostResetUI, applySettingsToUI, applyTheme,
     backupCrypto, chatStore, cloneProvider, deleteCustomProvider, describeDroppedKeys, dom,
@@ -16,16 +16,16 @@ import {
     saveCurrentProviderConfig, saveState, saveStateNow, secretVault, settingsWithoutSecrets,
     state, syncProviderToState, updateApiKeyFormatHint, updateModelContextIndicator,
     updateProviderUI, updateProviderUrlSuggestion, updateStatusMeta,
-} from './02-state.js?v=2610.AF';
+} from './02-state.js?v=2610.AG';
 import {
     loadWebGPUModel, releaseWebGPUMemory, renderVisionChain, renderWebGPUMonitor,
     scheduleWebGPUPriming, warmUpActiveWebGPUModel, webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AF';
+} from './03-webgpu.js?v=2610.AG';
 import {
     addManualWebGPUModel, checkProviderStatus, discoverWebGPUModels, getEngineCooldown,
     openModelManager, populateModels, prepareModelPanelForProvider, pullModel,
     setConnectionValidationFeedback, startProviderOAuth, updateVisionIndicator,
-} from './04-providers.js?v=2610.AF';
+} from './04-providers.js?v=2610.AG';
 import {
     applyAgentEngine, clearOrderQueue, createChatFromUI, createProject, deleteChat,
     deleteProject, duplicateProject, exportAgentToFile, findInstalledCatalogAgent,
@@ -33,13 +33,13 @@ import {
     openProjectEditor, removeAttachment, removeOrder, renderAgentCatalog, renderAgentsGallery,
     renderChatList, renderOrderQueue, renderProjectSelect, renderWelcomeStarters,
     runOrderQueue, runSingleOrder, switchChat, switchProject, tryQueueOrder,
-} from './05-workspace.js?v=2610.AF';
+} from './05-workspace.js?v=2610.AG';
 import {
     anonChatState, anonymizeHistoryText, renderAnonTypesPanel, restoreAnonText,
-} from './08-anon.js?v=2610.AF';
+} from './08-anon.js?v=2610.AG';
 import {
     setLanguage,
-} from './09-i18n.js?v=2610.AF';
+} from './09-i18n.js?v=2610.AG';
 /* <<< imports <<< */
 
 /* ============================================
@@ -2909,7 +2909,7 @@ function bindSlashCommandEvents() {
 /* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 export {
     openSettings, showConnectionValidationResult, bindEvents, closeSidebar, autoResizeTextarea,
-    updateSendButton, scrollToBottom, formatDate, autoTitleChat, loadPromptLibrary,
-    bindSlashCommandEvents,
+    updateSendButton, scrollToBottom, formatDate, downloadTextFile, autoTitleChat,
+    loadPromptLibrary, bindSlashCommandEvents,
 };
 /* <<< exports <<< */

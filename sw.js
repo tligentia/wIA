@@ -10,15 +10,15 @@
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v2610.AF';
+const CACHE = 'wia-shell-v2610.AG';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).
 const CORE = [
     './', './index.html', './styles.css',
-    './js/main.js?v=2610.AF', './js/01-core.js?v=2610.AF', './js/02-state.js?v=2610.AF', './js/03-webgpu.js?v=2610.AF', './js/04-providers.js?v=2610.AF',
-    './js/05-workspace.js?v=2610.AF', './js/06-chat.js?v=2610.AF', './js/07-ui.js?v=2610.AF', './js/08-anon.js?v=2610.AF',
-    './js/09-i18n.js?v=2610.AF', './js/10-docs.js?v=2610.AF', './js/11-rag.js?v=2610.AF', './js/12-pwa.js?v=2610.AF',
+    './js/main.js?v=2610.AG', './js/01-core.js?v=2610.AG', './js/02-state.js?v=2610.AG', './js/03-webgpu.js?v=2610.AG', './js/04-providers.js?v=2610.AG',
+    './js/05-workspace.js?v=2610.AG', './js/06-chat.js?v=2610.AG', './js/07-ui.js?v=2610.AG', './js/08-anon.js?v=2610.AG',
+    './js/09-i18n.js?v=2610.AG', './js/10-docs.js?v=2610.AG', './js/11-rag.js?v=2610.AG', './js/12-pwa.js?v=2610.AG',
     './lang/es.json', './lang/en.json',
     './lang/docs/es.json', './lang/docs/en.json',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
