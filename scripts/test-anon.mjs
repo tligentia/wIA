@@ -55,6 +55,14 @@ hides('tarjetas Visa, Mastercard y Amex', 'Visa 4111 1111 1111 1111, MC 5500-000
 hides('nombre del diccionario con apellidos', 'Hablé con Juan Pérez García ayer.', ['Juan', 'Pérez', 'García']);
 hides('nombre que no está en el diccionario, por su apellido', 'La paciente Marta Gutiérrez Soler firmó.', ['Gutiérrez', 'Soler']);
 hides('nombre introducido por un tratamiento', 'También Dña. Rocío Jurado y el Sr. Bermúdez Ochandiano.', ['Rocío', 'Jurado', 'Bermúdez', 'Ochandiano']);
+hides('nombre escrito sin tildes (Jesús → Jesus)', 'Procurador:\nJesus de Pablos', ['Jesus', 'Pablos']);
+hides('apellidos sin tildes (García → Garcia)', 'Habló con Maria Garcia Lopez.', ['Maria', 'Garcia', 'Lopez']);
+check('un nombre no se extiende por un salto de línea',
+    anon('Partes\nLaura Fernández López firmó.').anonymizedText.startsWith('Partes\n[Nombre_'),
+    anon('Partes\nLaura Fernández López firmó.').anonymizedText);
+check('ni arrastra la línea siguiente',
+    anon('Juan Pérez\nContrato indefinido').anonymizedText === '[Nombre_001]\nContrato indefinido',
+    anon('Juan Pérez\nContrato indefinido').anonymizedText);
 hides('nombre en mayúsculas', 'DON ANTONIO LÓPEZ MARTÍNEZ CON DNI 87654321X.', ['ANTONIO', 'LÓPEZ', 'MARTÍNEZ', '87654321X']);
 hides('dirección con piso y código postal', 'Vivo en Calle Mayor 12, 3º B, 28013 Madrid.', ['Mayor 12', '3º', '28013']);
 hides('expedientes y diligencias', 'Procedimiento Ordinario 123/2024 y Diligencias Previas nº 987/2022.', ['123/2024', '987/2022']);

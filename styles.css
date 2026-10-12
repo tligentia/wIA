@@ -5746,6 +5746,9 @@ body.mobile-device .webgpu-mobile-note {
     max-height: 92vh;
 }
 .anon-tool .modal-body { flex: 1 1 auto; min-height: 0; }
+/* Con la ventana baja, el cuerpo se desplaza; los elementos no se comprimen ni se pisan. */
+.anon-tool .modal-body > * { flex-shrink: 0; }
+.anon-tool-summary { align-items: center; }
 .anon-tool-modes { align-items: center; flex-wrap: wrap; }
 .anon-tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .anon-tool-pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
