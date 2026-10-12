@@ -6,34 +6,34 @@ import {
     getProviderAccess, getProviderBaseId, getProviderOAuth, isCloneableProvider,
     isCustomProvider, isHeavyForMobile, isMobileDevice, loadWebGPUCatalogFile,
     registerCustomProviders, tr,
-} from './01-core.js?v=2610.AB';
+} from './01-core.js?v=2610.AC';
 import {
     getCachedWebGPUModels, scheduleWebGPUPriming, startWebGPUMonitor, stopWebGPUMonitor,
     warmUpActiveWebGPUModel, webgpuState,
-} from './03-webgpu.js?v=2610.AB';
+} from './03-webgpu.js?v=2610.AC';
 import {
     checkProviderStatus, detectLocalProviderAvailability, finishProviderOAuth,
-} from './04-providers.js?v=2610.AB';
+} from './04-providers.js?v=2610.AC';
 import {
     renderAttachmentPreview, renderChatList, renderOrderQueue, renderProjectSelect,
     renderWelcomeStarters, showWelcome,
-} from './05-workspace.js?v=2610.AB';
+} from './05-workspace.js?v=2610.AC';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AB';
+} from './06-chat.js?v=2610.AC';
 import {
     autoResizeTextarea, bindEvents, bindSlashCommandEvents, loadPromptLibrary,
     showConnectionValidationResult, updateSendButton,
-} from './07-ui.js?v=2610.AB';
+} from './07-ui.js?v=2610.AC';
 import {
     updateAnonButtonUI,
-} from './08-anon.js?v=2610.AB';
+} from './08-anon.js?v=2610.AC';
 import {
     bindLangSwitch, loadTranslations, refreshLocalizedUI, t,
-} from './09-i18n.js?v=2610.AB';
+} from './09-i18n.js?v=2610.AC';
 import {
     renderRagIndexStatus,
-} from './11-rag.js?v=2610.AB';
+} from './11-rag.js?v=2610.AC';
 /* <<< imports <<< */
 
 /* ============================================
@@ -427,10 +427,9 @@ async function init() {
     });
     autoResizeTextarea();
 
-    // Render dynamic version
-    const versionEl = document.getElementById('versionTag');
-    if (versionEl && window.APP_VERSION) {
-        versionEl.textContent = `Vers: ${window.APP_VERSION}`;
+    // Versión junto al logo (barra lateral, cabecera flotante y móvil).
+    if (window.APP_VERSION) {
+        document.querySelectorAll('.app-version').forEach((el) => { el.textContent = window.APP_VERSION; });
     }
 
     // Precarga temprana del modelo WebGPU activo si YA está en caché del

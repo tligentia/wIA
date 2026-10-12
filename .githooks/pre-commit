@@ -1,0 +1,33 @@
+#!/bin/sh
+# Avanza la versión de wIA en cada commit (npm run version:bump) y añade al
+# commit los ficheros que el bump toca: Version.js, sw.js, index.html, los
+# imports de js/*.js y el título del README.
+#
+# - Si Plantilla/Version.js ya va en el commit (bump manual), no vuelve a subirla.
+# - Un commit que solo toca la versión no se re-bumpea.
+# - Se desactiva puntualmente con WIA_NO_BUMP=1 git commit …
+# Se activa una vez por clon con: npm run hooks:install
+
+[ -n "$WIA_NO_BUMP" ] && exit 0
+cd "$(git rev-parse --show-toplevel)" || exit 0
+[ -f scripts/bump-version.js ] || exit 0
+
+staged="$(git diff --cached --name-only)"
+[ -z "$staged" ] && exit 0
+printf '%s\n' "$staged" | grep -qx 'Plantilla/Version.js' && exit 0
+
+dirty_before="$(git diff --name-only)"
+if ! node scripts/bump-version.js >/dev/null 2>&1; then
+  echo "pre-commit: no se pudo avanzar la versión; ejecuta «npm run version:bump» y vuelve a commitear." >&2
+  exit 1
+fi
+
+for f in $(git diff --name-only); do
+  if printf '%s\n' "$dirty_before" | grep -Fxq -- "$f"; then
+    echo "pre-commit: aviso — $f tenía cambios sin añadir; la versión nueva queda sin commitear en él." >&2
+  else
+    git add -- "$f"
+  fi
+done
+echo "pre-commit: versión → $(sed -n "s/.*wia-shell-\(v[0-9.A-Z]*\).*/\1/p" sw.js | head -1)"
+exit 0

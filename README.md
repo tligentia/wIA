@@ -1,4 +1,4 @@
-# wIA — Multi-Engine AI Chat Interface (v2610.AB)
+# wIA — Multi-Engine AI Chat Interface (v2610.AC)
 
 > **Creado por [Jesús de Pablos](https://jesus.depablos.es)** · Proyecto gratuito y de código abierto · Licencia MIT
 
@@ -368,6 +368,7 @@ La aplicación está optimizada para tres rangos de pantalla:
 Si deseas sugerir mejoras o reportar errores, abre un issue o envía un pull request.
 
 ### Changelog (última revisión mayor)
+- 🏷️ **Versión junto al logo y que avanza sola (v2610.AC)**: la versión sale del pie y pasa a mostrarse **al lado del logo**, en la barra lateral, en la cabecera flotante cuando se pliega y en la cabecera móvil (por debajo de 430 px se ve en el menú lateral: no cabe sin empujar los ajustes fuera de pantalla), con el estilo de SiMuDeFi: texto fino de 10 px en gris, sin chapa. Además **se incrementa con cada commit**: un hook de `pre-commit` (`.githooks/pre-commit`) ejecuta `npm run version:bump` y añade al commit los ficheros que toca; si ya hiciste el bump a mano no lo repite, y `WIA_NO_BUMP=1` lo omite una vez. Se activa en cada clon con `npm run hooks:install`. El bump sincroniza también el título del README (`test:bump` lo comprueba).
 - 🕶️ **Qué se ha anonimizado, a la vista (v2610.AA)**: la insignia «N datos sensibles protegidos» de los mensajes con anonimización es ahora un **desplegable** (⌄): al pulsarla lista cada marcador con el valor real que ocultaba (`[DNI_001] → 12345678Z`), sin repetidos, y otro clic la vuelve a colapsar. Usa `<details>` nativo (accesible por teclado) y los valores salen del mapa cifrado del chat, solo en pantalla: lo que se envía a la IA no cambia. Mientras el mapa aún no está descifrado se ve la insignia simple de antes.
 - 🛠️ **Revisión general: fallos reales, privacidad y base de pruebas (v2610.AA)**. Salió de un análisis completo de la app; cada punto lleva su prueba.
   - **La búsqueda web ya termina.** Cuando el modelo pedía buscar en Internet, la continuación se lanzaba con la generación aún activa y `sendMessage` salía en su primera línea: la respuesta no llegaba nunca y el chat se quedaba «generando». Ahora la continuación es una re-entrada explícita con **tope de 3 vueltas** por turno, respeta «Detener» y, con OpenAI/Groq/OpenRouter…, la llamada lleva `id`/`type`/argumentos en texto JSON y su respuesta cita `tool_call_id` (antes esos motores la rechazaban con un 400). El recorte de contexto además **conserva entero el último turno** —pregunta, llamada y resultado—, no solo el último mensaje: la segunda petición salía con el resultado de la búsqueda pero sin la pregunta que lo originó.

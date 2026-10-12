@@ -2,19 +2,19 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AB';
+} from './07-ui.js?v=2610.AC';
 import {
     debounce, escapeHtml, loadLocalJson, tr,
-} from './01-core.js?v=2610.AB';
+} from './01-core.js?v=2610.AC';
 import {
     dom, saveState, secretVault, state,
-} from './02-state.js?v=2610.AB';
+} from './02-state.js?v=2610.AC';
 import {
     getActiveChat,
-} from './05-workspace.js?v=2610.AB';
+} from './05-workspace.js?v=2610.AC';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AB';
+} from './06-chat.js?v=2610.AC';
 /* <<< imports <<< */
 
 /* ============================================

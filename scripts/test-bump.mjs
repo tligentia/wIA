@@ -21,7 +21,7 @@ const check = (name, ok, extra = '') => {
 
 const tmp = mkdtempSync(join(tmpdir(), 'wia-bump-'));
 try {
-    for (const p of ['js', 'scripts', 'Plantilla', 'index.html', 'sw.js', 'package.json']) cpSync(p, join(tmp, p), { recursive: true });
+    for (const p of ['js', 'scripts', 'Plantilla', 'index.html', 'sw.js', 'package.json', 'README.md']) cpSync(p, join(tmp, p), { recursive: true });
     const run = (...args) => spawnSync(process.execPath, args, { cwd: tmp, encoding: 'utf8' });
 
     check('antes del bump el grafo está al día', run('--expose-internals', 'scripts/gen-modules.mjs', '--check').status === 0);
@@ -39,6 +39,7 @@ try {
     for (const m of readFileSync(join(tmp, 'sw.js'), 'utf8').matchAll(/\.js\?v=([^']+)'/g)) tokens.add(m[1]);
     check('todos los imports, index.html y el precache llevan la versión nueva', tokens.size === 1 && tokens.has(version), [...tokens].join(','));
     check('la caché del SW tiene la misma versión', readFileSync(join(tmp, 'sw.js'), 'utf8').includes(`wia-shell-v${version}`));
+    check('el título del README lleva la versión nueva', new RegExp(`^# wIA — .*\\(v${version.replace('.', '\\.')}\\)`, 'm').test(readFileSync(join(tmp, 'README.md'), 'utf8')));
     check('y el grafo queda al día (check:modules)', run('--expose-internals', 'scripts/gen-modules.mjs', '--check').status === 0);
 } finally {
     rmSync(tmp, { recursive: true, force: true });

@@ -64,6 +64,20 @@ try {
   console.warn(`Aviso: no se pudo actualizar la caché del service worker: ${e.message}`);
 }
 
+// El título del README anuncia la versión: se mantiene sincronizado para que un
+// bump (manual o por el hook de pre-commit) no deje el README desfasado.
+try {
+  const readmePath = resolve('README.md');
+  const readme = readFileSync(readmePath, 'utf8');
+  const titled = readme.replace(
+    /^(# wIA — [^\n]*?\()v\d{4}\.[A-Z]{2}(\))/m,
+    `$1${version}$2`
+  );
+  if (titled !== readme) writeFileSync(readmePath, titled);
+} catch (e) {
+  console.warn(`Aviso: no se pudo actualizar el título del README: ${e.message}`);
+}
+
 // Los imports de js/*.js, index.html y el precache del service worker llevan
 // «?v=<versión>» (sale de CACHE en sw.js, ya actualizado arriba): sin él, un
 // navegador con el SW anterior mezcla el HTML nuevo con JS viejos de su caché.

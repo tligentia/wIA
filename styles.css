@@ -2065,15 +2065,22 @@ select.setting-input {
     opacity: 0.8;
 }
 
-.version-tag {
-    font-size: 0.65rem;
-    font-weight: 500;
+/* Versión junto al logo, como en SiMuDeFi: texto fino y discreto, sin chapa. */
+.app-version {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: normal;
+    line-height: 1;
     color: var(--text-tertiary);
-    background: var(--bg-tertiary);
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-    margin-right: 4px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    user-select: text;
+}
+/* En la cabecera móvil no cabe por debajo de 430 px (empujaría los ajustes fuera
+   de la pantalla): ahí se ve en el menú lateral, que lleva el mismo logo. */
+.mobile-header-left .app-version { display: none; }
+@media (min-width: 430px) {
+    .mobile-header-left .app-version { display: inline; }
 }
 
 .copyright {
@@ -2988,7 +2995,6 @@ option {
     }
 
     .footer-left-link { gap: 6px; }
-    .version-tag { font-size: 0.6rem; padding: 1px 4px; }
     .copyright { font-size: 0.65rem; }
     .footer-contact-link { font-size: 0.65rem; padding: 2px 4px; }
     .footer-link { font-size: 0.65rem; }

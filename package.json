@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "version:bump": "node scripts/bump-version.js",
+    "hooks:install": "git config core.hooksPath .githooks",
     "check:syntax": "node scripts/check-syntax.mjs",
     "check:handlers": "node scripts/check-handlers.mjs",
     "check:csp": "node scripts/check-csp.mjs",
