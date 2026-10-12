@@ -2,25 +2,25 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     checkProviderStatus,
-} from './04-providers.js?v=2610.AW';
+} from './04-providers.js?v=2610.AX';
 import {
     PROVIDERS, escapeHtml, loadLocalJson, notify, tr, trf,
-} from './01-core.js?v=2610.AW';
+} from './01-core.js?v=2610.AX';
 import {
     applySettingsToUI, dom, getCompactModelLabel, getOrderedProviderEntries,
     isConversationPersistenceDisabled, markProviderUsed, persistOrderQueue,
     saveCurrentProviderConfig, saveState, saveStateNow, showPersistenceAlert, state,
     syncProviderToState, updateStatusMeta,
-} from './02-state.js?v=2610.AW';
+} from './02-state.js?v=2610.AX';
 import {
     renderMessages, sendMessage, supportsWebGPUImageAssist,
-} from './06-chat.js?v=2610.AW';
+} from './06-chat.js?v=2610.AX';
 import {
     autoResizeTextarea, closeSidebar, formatDate, updateSendButton,
-} from './07-ui.js?v=2610.AW';
+} from './07-ui.js?v=2610.AX';
 import {
     loadAnonRules, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AW';
+} from './08-anon.js?v=2610.AX';
 /* <<< imports <<< */
 
 /* ============================================
@@ -73,7 +73,9 @@ async function handleProjectFiles(files) {
     
     for (const file of files) {
         if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+            if (rejectOversize(file, 'doc')) continue;
             const textData = await extractTextFromPDF(file);
+            if (rejectOversize(file, 'doc', textData.length, true)) continue;
             await persistProjectDocument(proj, {
                 id: crypto.randomUUID(),
                 name: file.name,
@@ -81,10 +83,7 @@ async function handleProjectFiles(files) {
                 data: textData
             });
         } else {
-            if (file.size > MAX_PROJECT_DOC_BYTES) {
-                notify(trf('dlg.doc.tooBig', '«{p0}» ocupa {p1} y supera el límite de {p2} por documento. Divídelo en partes más pequeñas.', { p0: file.name, p1: formatBytes(file.size), p2: formatBytes(MAX_PROJECT_DOC_BYTES) }), 'error');
-                continue;
-            }
+            if (rejectOversize(file, 'doc')) continue;
             // await en serie: `reader.onload` sin esperar lanzaba varias
             // escrituras concurrentes a IndexedDB sobre el mismo proyecto, y la
             // última en resolver podía pisar a las anteriores.
@@ -129,13 +128,40 @@ window.removeProjectDoc = (id) => {
 // motores de pago. Se comprime en el navegador antes de guardarla.
 const IMAGE_MAX_DIMENSION = 1568;   // el lado largo tras redimensionar
 const IMAGE_TARGET_QUALITY = 0.85;  // calidad JPEG del reescalado
-const MAX_TEXT_ATTACHMENT_BYTES = 2 * 1024 * 1024;   // 2 MB de texto por archivo
-const MAX_PROJECT_DOC_BYTES = 4 * 1024 * 1024;       // 4 MB por documento del proyecto
+// Un único tope para todo lo que entra por archivo: adjuntos del chat, documentos
+// de proyecto, ventana del anonimizador y documentos de agentes importados.
+const MAX_FILE_BYTES = 10 * 1024 * 1024;             // 10 MB por archivo
+const MAX_TEXT_ATTACHMENT_BYTES = MAX_FILE_BYTES;    // adjunto del chat
+const MAX_PROJECT_DOC_BYTES = MAX_FILE_BYTES;        // documento del proyecto
 
 function formatBytes(bytes) {
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes >= 1024 * 1024) {
+        let mb = (bytes / (1024 * 1024)).toFixed(1);
+        // Un poco por encima del límite no puede mostrarse como «10.0 MB»: se redondea hacia arriba.
+        if (bytes > MAX_FILE_BYTES && parseFloat(mb) <= MAX_FILE_BYTES / (1024 * 1024)) mb = (Math.ceil(bytes / (1024 * 1024) * 10) / 10).toFixed(1);
+        return `${mb} MB`;
+    }
     if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
     return `${bytes} B`;
+}
+
+/**
+ * rejectOversize — avisa con claridad de que un archivo (o el texto sacado de él)
+ * supera el límite, y dice qué hacer. Devuelve true si se ha rechazado.
+ * `kind`: 'attach' (adjunto del chat) | 'doc' (documento de proyecto).
+ * `bytes` es el tamaño del archivo o el del texto extraído; `extracted` indica
+ * que es el texto de un PDF (el archivo en sí cabía).
+ */
+function rejectOversize(file, kind, bytes = file.size, extracted = false) {
+    if (!(bytes > MAX_FILE_BYTES)) return false;
+    const key = kind === 'doc' ? 'dlg.doc.tooBig' : 'dlg.attach.tooBig';
+    const fallback = kind === 'doc'
+        ? '⛔ «{p0}» ocupa {p1} y supera el límite de {p2} por documento. No se ha añadido. Divídelo en partes más pequeñas.'
+        : '⛔ «{p0}» ocupa {p1} y supera el límite de {p2} por archivo adjunto. No se ha adjuntado.\n\nPara textos grandes, añádelo como documento del proyecto: así se reparte y se recorta al contexto del modelo en vez de enviarse entero en cada mensaje.';
+    let msg = trf(key, fallback, { p0: file.name, p1: formatBytes(bytes), p2: formatBytes(MAX_FILE_BYTES) });
+    if (extracted) msg = trf('dlg.pdf.tooBigText', '⛔ El texto extraído de «{p0}» ocupa {p1} y supera el límite de {p2}. No se ha añadido.', { p0: file.name, p1: formatBytes(bytes), p2: formatBytes(MAX_FILE_BYTES) });
+    notify(msg, 'error');
+    return true;
 }
 
 /**
@@ -201,7 +227,9 @@ async function handleFiles(files) {
 
     for (const file of files) {
         if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+            if (rejectOversize(file, 'attach')) continue;
             const textData = await extractTextFromPDF(file);
+            if (rejectOversize(file, 'attach', textData.length, true)) continue;
             state.attachments.push({
                 id: crypto.randomUUID(),
                 name: file.name,
@@ -232,10 +260,7 @@ async function handleFiles(files) {
             continue;
         }
 
-        if (file.size > MAX_TEXT_ATTACHMENT_BYTES) {
-            notify(trf('dlg.attach.tooBig', '«{p0}» ocupa {p1} y supera el límite de {p2} por archivo adjunto.\n\nPara textos grandes, añádelo como documento del proyecto: así se reparte y se recorta al contexto del modelo en vez de enviarse entero en cada mensaje.', { p0: file.name, p1: formatBytes(file.size), p2: formatBytes(MAX_TEXT_ATTACHMENT_BYTES) }), 'error');
-            continue;
-        }
+        if (rejectOversize(file, 'attach')) continue;
 
         try {
             const data = await readFileAsText(file);
@@ -619,8 +644,8 @@ function createProject(name) {
 // ─── Compartir Agentes (export / import / catálogo) ──────────
 const AGENT_FILE_FORMAT = 'wia_agent';
 const AGENT_FILE_VERSION = 1;
-const AGENT_MAX_DOC_BYTES = 2_000_000;   // ~2 MB por documento importado
-const AGENT_MAX_TOTAL_DOC_BYTES = 8_000_000; // ~8 MB de conocimiento total
+const AGENT_MAX_DOC_BYTES = MAX_FILE_BYTES;      // 10 MB por documento importado
+const AGENT_MAX_TOTAL_DOC_BYTES = 3 * MAX_FILE_BYTES; // 30 MB de conocimiento total
 
 function _clampStr(value, max) {
     return typeof value === 'string' ? value.slice(0, max) : '';
@@ -700,8 +725,8 @@ function buildAgentFromDefinition(raw) {
     for (const d of (Array.isArray(def.documents) ? def.documents : [])) {
         const data = typeof d?.data === 'string' ? d.data : '';
         const bytes = data.length;
-        if (bytes > AGENT_MAX_DOC_BYTES) { warnings.push(`Documento «${d?.name || '?'}» omitido por tamaño.`); continue; }
-        if (totalBytes + bytes > AGENT_MAX_TOTAL_DOC_BYTES) { warnings.push('Se omitieron documentos por superar el límite total.'); break; }
+        if (bytes > AGENT_MAX_DOC_BYTES) { warnings.push(`⛔ Documento «${d?.name || '?'}» omitido: ocupa ${formatBytes(bytes)} y el límite es ${formatBytes(AGENT_MAX_DOC_BYTES)} por documento.`); continue; }
+        if (totalBytes + bytes > AGENT_MAX_TOTAL_DOC_BYTES) { warnings.push(`⛔ Se omitieron documentos: el conocimiento del agente supera el límite total de ${formatBytes(AGENT_MAX_TOTAL_DOC_BYTES)}.`); break; }
         totalBytes += bytes;
         documents.push({ id: crypto.randomUUID(), name: _clampStr(d.name || 'documento', 120), type: _clampStr(d.type || 'text/plain', 60), data });
     }
@@ -1087,13 +1112,14 @@ async function runOrderQueue() {
 
 /* >>> exports (generado por scripts/gen-modules.mjs: no editar a mano) >>> */
 export {
-    extractTextFromPDF, handleProjectFiles, formatBytes, readFileAsText, handleFiles,
-    removeAttachment, renderAttachmentPreview, renderProjectSelect, applyAgentEngine,
-    switchProject, renderWelcomeStarters, renderAgentsGallery, renderAgentCatalog,
-    findInstalledCatalogAgent, duplicateProject, getActiveProject, getEditingProject,
-    openProjectEditor, createProject, exportAgentToFile, installAgentDefinition, deleteProject,
-    createChat, createChatFromUI, deleteChat, switchChat, getActiveChat, generateTitle,
-    showWelcome, showChat, renderChatList, tryQueueOrder, renderOrderQueue, removeOrder,
-    clearOrderQueue, runSingleOrder, runOrderQueue,
+    extractTextFromPDF, handleProjectFiles, MAX_FILE_BYTES, formatBytes, readFileAsText,
+    handleFiles, removeAttachment, renderAttachmentPreview, renderProjectSelect,
+    applyAgentEngine, switchProject, renderWelcomeStarters, renderAgentsGallery,
+    renderAgentCatalog, findInstalledCatalogAgent, duplicateProject, getActiveProject,
+    getEditingProject, openProjectEditor, createProject, exportAgentToFile,
+    installAgentDefinition, deleteProject, createChat, createChatFromUI, deleteChat,
+    switchChat, getActiveChat, generateTitle, showWelcome, showChat, renderChatList,
+    tryQueueOrder, renderOrderQueue, removeOrder, clearOrderQueue, runSingleOrder,
+    runOrderQueue,
 };
 /* <<< exports <<< */

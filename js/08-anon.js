@@ -2,22 +2,22 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AW';
+} from './07-ui.js?v=2610.AX';
 import {
     WEBGPU_MODELS, debounce, escapeHtml, getWebGPUBrokenInfo, loadLocalJson, notify, tr,
-} from './01-core.js?v=2610.AW';
+} from './01-core.js?v=2610.AX';
 import {
     dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
-} from './02-state.js?v=2610.AW';
+} from './02-state.js?v=2610.AX';
 import {
     checkWebGPUSupport, completeWebGPU, webgpuState,
-} from './03-webgpu.js?v=2610.AW';
+} from './03-webgpu.js?v=2610.AX';
 import {
-    extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AW';
+    MAX_FILE_BYTES, extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
+} from './05-workspace.js?v=2610.AX';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AW';
+} from './06-chat.js?v=2610.AX';
 /* <<< imports <<< */
 
 /* ============================================
@@ -456,6 +456,9 @@ async function aiDetectTerms(text, onStep = null) {
     const found = new Map();
     const types = ANON_TERM_TYPES.map(t => t.id);
     const todo = chunks.slice(0, ANON_AI_MAX_CHUNKS);
+    // Cuánto del texto llega a revisar la IA (el resto lo cubre solo el JScript Interno).
+    const covered = todo.reduce((n, c) => n + c.length, 0);
+    const total = chunks.reduce((n, c) => n + c.length, 0);
     let done = 0;
     if (onStep) onStep(0, todo.length);
     for (const chunk of todo) {
@@ -469,7 +472,9 @@ async function aiDetectTerms(text, onStep = null) {
             if (!found.has(t.toLowerCase())) found.set(t.toLowerCase(), { text: t, type: types.includes(it?.type) ? it.type : 'dato' });
         }
     }
-    return [...found.values()];
+    const result = [...found.values()];
+    result.coverage = { covered, total };
+    return result;
 }
 
 /** Suma términos de la IA a una lista sin repetir; devuelve cuántos son nuevos. */
@@ -871,9 +876,10 @@ function resetAnonToolSession() {
     anonTool.aiTerms = [];
 }
 
-// Tope de lo que se procesa de una vez: el motor analiza ~100 KB por segundo y
-// un fichero enorme dejaría la pestaña bloqueada.
-const ANON_FILE_MAX_BYTES = 2 * 1024 * 1024;
+// Tope de lo que se procesa de una vez: el mismo que el resto de entradas por
+// archivo (MAX_FILE_BYTES, 10 MB). El motor es lineal: ~8 MB/s en pruebas, así
+// que 10 MB se analizan en un par de segundos.
+const ANON_FILE_MAX_BYTES = MAX_FILE_BYTES;
 const ANON_REPORT_MAX_ROWS = 300;
 
 /** «Informe 2026 (v2).docx» → «Informe_2026_v2»: seguro para nombrar un fichero. */
@@ -934,10 +940,9 @@ function renderAnonReport(entities) {
  */
 async function loadAnonToolFile(file) {
     if (!file) return '';
-    if (file.size > ANON_FILE_MAX_BYTES) {
-        return tr('anon.tool.file.tooBig', 'El archivo pesa {size}: el máximo es {max}.')
-            .replace('{size}', formatBytes(file.size)).replace('{max}', formatBytes(ANON_FILE_MAX_BYTES));
-    }
+    const tooBig = (bytes) => tr('anon.tool.file.tooBig', '⛔ «{name}» pesa {size} y supera el límite de {max}. No se ha cargado.')
+        .replace('{name}', file.name).replace('{size}', formatBytes(bytes)).replace('{max}', formatBytes(ANON_FILE_MAX_BYTES));
+    if (file.size > ANON_FILE_MAX_BYTES) return tooBig(file.size);
     try {
         const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
         const text = isPdf ? await extractTextFromPDF(file) : await readFileAsText(file);
@@ -945,6 +950,7 @@ async function loadAnonToolFile(file) {
         if (isPdf && /^(PDF\.js no está cargado|Error extrayendo texto del PDF)/.test(text)) {
             return tr('anon.tool.file.error', 'No se pudo leer el archivo: {error}').replace('{error}', text);
         }
+        if (String(text).length > ANON_FILE_MAX_BYTES) return tooBig(String(text).length);
         if (!String(text).trim()) return tr('anon.tool.file.empty', 'El archivo no contiene texto que anonimizar.');
         document.getElementById('anonToolInput').value = text;
         anonTool.fileName = file.name;
@@ -999,6 +1005,20 @@ function renderAnonTool() {
     const toChat = document.getElementById('anonToolToChat');
     if (toChat) toChat.hidden = restoring;
 
+    // Texto pegado o escrito por encima del límite: no se analiza (bloquearía la
+    // pestaña) y se dice claramente.
+    if (input.value.length > ANON_FILE_MAX_BYTES) {
+        if (!anonTool.outputDirty) output.value = '';
+        const dl0 = document.getElementById('anonToolDownload');
+        if (dl0) dl0.disabled = true;
+        renderAnonReport([]);
+        if (summary) {
+            summary.replaceChildren();
+            summary.textContent = tr('anon.tool.text.tooBig', '⛔ El texto ocupa {size} y supera el límite de {max}: no se analiza.')
+                .replace('{size}', formatBytes(input.value.length)).replace('{max}', formatBytes(ANON_FILE_MAX_BYTES));
+        }
+        return;
+    }
     const result = runAnonTool(input.value);
     if (!restoring && input.value.trim() && !result.notReady) {
         flashAnonBusy('internal', `${result.entities.length} ✓`);
@@ -1120,6 +1140,11 @@ async function reviewAnonToolWithAI() {
     if (input.value !== text) return;                 // el texto cambió mientras tanto
     const added = mergeAITerms(anonTool.aiTerms, found);
     anonTool.aiNote = tr('anon.ai.done', '🤖 IA local: {n} término(s) nuevo(s) añadidos.').replace('{n}', added);
+    const cov = found.coverage;
+    if (cov && cov.total > cov.covered) {
+        anonTool.aiNote += ' ' + tr('anon.ai.partial', '🤖 IA local: revisados los primeros {covered} de {total} caracteres; el resto solo con el JScript Interno.')
+            .replace('{covered}', cov.covered.toLocaleString('es-ES')).replace('{total}', cov.total.toLocaleString('es-ES'));
+    }
     if (added) {
         if (!anonTool.outputDirty) renderAnonTool();
         else reviewAnonOutput();
@@ -1201,6 +1226,7 @@ function bindAnonTool() {
         renderAnonTool();
         if (!error) reviewAnonToolWithAI();
         if (error && summary) summary.textContent = error;
+        if (error && typeof notify === 'function') notify(error, 'error');   // también como aviso, bien visible
     });
     $id('anonToolDownload')?.addEventListener('click', async () => {
         await reviewAnonToolWithAI();

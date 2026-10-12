@@ -81,9 +81,9 @@
     <script src="lib/highlight.min.js"></script>
     <script src="lib/pdf.min.js"></script>
     <!-- Motor de anonimización DLP local (AnonimAE, autónomo y sin dependencias) -->
-    <script src="lib/anonimae-engine.js?v=2610.AW"></script>
+    <script src="lib/anonimae-engine.js?v=2610.AX"></script>
 
-    <link rel="stylesheet" href="styles.css?v=2610.AW">
+    <link rel="stylesheet" href="styles.css?v=2610.AX">
 </head>
 
 <body>
@@ -1509,17 +1509,17 @@
 
     <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script src="Plantilla/Version.js?v=2610.AW"></script>
+    <script src="Plantilla/Version.js?v=2610.AX"></script>
     <!-- Barra del portal Tligent: solo existe cuando wIA se despliega dentro del
          portal. portal-loader.js la carga si está; si no, no hay petición fallida. -->
-    <script src="portal-loader.js?v=2610.AW"></script>
-    <script src="secure-gate.js?v=2610.AW"></script>
+    <script src="portal-loader.js?v=2610.AX"></script>
+    <script src="secure-gate.js?v=2610.AX"></script>
     <!-- Lógica de la app: módulos ES reales (js/NN-*.js). Un único punto de entrada;
          los import/export de cada módulo los genera scripts/gen-modules.mjs.
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AW"></script>
+    <script type="module" src="js/main.js?v=2610.AX"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>

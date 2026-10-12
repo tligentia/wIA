@@ -146,6 +146,17 @@ console.log('\n7. Rendimiento\n');
     const n = engine.detect(big).length;
     const ms = performance.now() - t0;
     check(`un documento de ${Math.round(big.length / 1024)} KB se analiza en menos de 3 s`, ms < 3000, `${Math.round(ms)} ms, ${n} entidades`);
+
+    // El límite de archivo es de 10 MB: el coste debe ser lineal (antes, cuadrático:
+    // 1 MB tardaba 40 s y la sustitución de 2 MB, 8 s más).
+    const para = 'Laura Fernández López, representación de TecnoSoluciones SL, y Marta Rodríguez Pérez, domicilio en Calle Luna 23, Madrid. DNI 12345678Z, teléfono 612 345 678, correo laura@empresa.es. Jornada completa conforme al calendario. ';
+    const huge = para.repeat(Math.ceil(5 * 1048576 / para.length));
+    const t1 = performance.now();
+    const ents = engine.detect(huge);
+    const out = LocalPlaceholderEngine.process(huge, ents, null).anonymizedText;
+    const ms2 = performance.now() - t1;
+    check(`5 MB con ${ents.length} entidades (análisis + sustitución) en menos de 8 s`, ms2 < 8000, `${Math.round(ms2)} ms`);
+    check('y no queda ningún dato en el resultado', !/12345678Z|612 345 678|laura@empresa\.es|Rodríguez/.test(out));
 }
 
 console.log(failures === 0 ? '\n✔ Anonimización correcta.' : `\n✖ ${failures} fallo(s).`);
