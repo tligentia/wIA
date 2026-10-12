@@ -26,6 +26,7 @@
     "test:import": "node scripts/test-import.mjs",
     "test:anon": "node scripts/test-anon.mjs",
     "test:anon-ai": "node scripts/test-anon-ai.mjs",
+    "test:loading": "node scripts/test-loading-items.mjs",
     "test:render": "node scripts/test-render.mjs",
     "test:rag": "node scripts/test-rag.mjs",
     "test:providers": "node scripts/test-providers.mjs",
@@ -40,7 +41,7 @@
     "test:bump": "node scripts/test-bump.mjs",
     "test:slash": "node scripts/test-slash.mjs",
     "test:failover": "node scripts/test-failover.mjs",
-    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:globals && npm run check:modules && npm run check:i18n && npm run check:data && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:anon-ai && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:tools && npm run test:anon-history && npm run test:backup && npm run test:chat-store && npm run test:protocols && npm run test:notify && npm run test:bump && npm run test:auto-bump && npm run test:slash && npm run test:failover && npm run test:server",
+    "test": "npm run check:syntax && npm run check:handlers && npm run check:csp && npm run check:globals && npm run check:modules && npm run check:i18n && npm run check:data && npm run test:boot && npm run test:context && npm run test:storage && npm run test:import && npm run test:anon && npm run test:anon-ai && npm run test:loading && npm run test:render && npm run test:rag && npm run test:providers && npm run test:webgpu && npm run test:tools && npm run test:anon-history && npm run test:backup && npm run test:chat-store && npm run test:protocols && npm run test:notify && npm run test:bump && npm run test:auto-bump && npm run test:slash && npm run test:failover && npm run test:server",
     "test:smoke": "node scripts/smoke-browser.mjs"
   }
 }

@@ -2,23 +2,23 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     dom, state, updateStatusMeta,
-} from './02-state.js?v=2610.AT';
+} from './02-state.js?v=2610.AU';
 import {
     WEBGPU_MODELS, _transformersSources, escapeHtml, getVisionAssistDef, importTransformers,
     isRetryableWebGPULoadError, notify, tr, trf, webgpuDtypeCandidates,
-} from './01-core.js?v=2610.AT';
+} from './01-core.js?v=2610.AU';
 import {
     populateModels,
-} from './04-providers.js?v=2610.AT';
+} from './04-providers.js?v=2610.AU';
 import {
     analyzeImagesForWebGPUInline, buildWebGPURepoUrl, clearMessageLoadingState,
     estimateInstallProgress, extractGeneratedText, formatErrorDetail, inferMimeTypeFromBase64,
     normalizeImageMeta, runWebGPUGenerationInline, shouldEmitWebGPUProgress, stopStreaming,
     updateStreamingMessage,
-} from './06-chat.js?v=2610.AT';
+} from './06-chat.js?v=2610.AU';
 import {
     t,
-} from './09-i18n.js?v=2610.AT';
+} from './09-i18n.js?v=2610.AU';
 /* <<< imports <<< */
 
 /* ============================================
@@ -558,9 +558,11 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
         let pipe = null;
         let lastError = null;
 
+        const inlineFiles = createLoadFilesTracker();
         for (let i = 0; i < dtypeCandidates.length; i++) {
             const dtype = dtypeCandidates[i];
             try {
+                inlineFiles.reset();
                 if (i > 0 && onProgress) {
                     onProgress(0, {
                         status: 'init',
@@ -576,12 +578,12 @@ async function loadWebGPUModelInline(modelId, onProgress, task = 'text-generatio
                     dtype,
                     progress_callback: (progress) => {
                         if (webgpuState.cancelRequested) return;
-                        const progressWithMeta = { ...progress, sourceUrl, dtype };
+                        const progressWithMeta = { ...progress, sourceUrl, dtype, items: inlineFiles.track(progress) };
                         if (progress.status === 'progress' && progress.total) {
                             clearTimeout(_shaderTimer);
                             clearInterval(_shaderInterval);
-                            const pct = Math.round((progress.loaded / progress.total) * 100);
-                            if (!shouldEmitWebGPUProgress(progressUiState, pct, progressWithMeta)) return;
+                            const pct = overallLoadPct(progressWithMeta.items, Math.round((progress.loaded / progress.total) * 100));
+                            if (!shouldEmitWebGPUProgress(progressUiState, pct, progressWithMeta.items.length > 1 ? { ...progressWithMeta, file: '' } : progressWithMeta)) return;
                             dom.statusText.textContent = `⬇ ${pct}%`;
                             if (onProgress) onProgress(pct, progressWithMeta);
                         } else if (progress.status === 'done') {
@@ -1197,15 +1199,63 @@ async function decideWebGPUExecutionMode() {
  * pipeline (descarga → instalación → compilación → inicialización) al callback
  * de UI, incluida la detección del hueco de compilación de shaders.
  */
+/**
+ * createLoadFilesTracker — lleva la cuenta de cada elemento (fichero) que se
+ * descarga durante la carga de un modelo, a partir de los eventos crudos de
+ * Transformers.js (initiate / download / progress / done). `track()` devuelve una
+ * copia del estado de todos: [{file, loaded, total, pct, state}] con state
+ * 'pending' | 'downloading' | 'done'. La tarjeta de carga lo usa para enseñar
+ * cada descarga por separado cuando hay varias a la vez.
+ */
+function createLoadFilesTracker() {
+    const files = new Map();
+    const snapshot = () => [...files.values()].map(f => ({ ...f }));
+    return {
+        reset() { files.clear(); },
+        snapshot,
+        track(p) {
+            const name = p && (p.file || p.name);
+            if (!name || !['initiate', 'download', 'progress', 'done'].includes(p.status)) return snapshot();
+            const f = files.get(name) || { file: name, loaded: 0, total: 0, pct: 0, state: 'pending' };
+            if (p.status === 'initiate' || p.status === 'download') {
+                if (f.state !== 'done') f.state = 'pending';
+            } else if (p.status === 'progress') {
+                if (Number.isFinite(p.total) && p.total > 0) f.total = p.total;
+                if (Number.isFinite(p.loaded)) f.loaded = p.loaded;
+                f.pct = f.total > 0 ? Math.min(100, Math.round((f.loaded / f.total) * 100)) : Math.round(p.progress || 0);
+                f.state = f.pct >= 100 ? 'done' : 'downloading';
+            } else if (p.status === 'done') {
+                f.pct = 100;
+                if (f.total > 0) f.loaded = f.total;
+                f.state = 'done';
+            }
+            files.set(name, f);
+            return snapshot();
+        },
+    };
+}
+
+// Porcentaje global de varias descargas a la vez (bytes cargados / bytes totales);
+// con una sola, el suyo propio.
+function overallLoadPct(items, ownPct) {
+    if (!Array.isArray(items) || items.length < 2) return ownPct;
+    const total = items.reduce((n, i) => n + (i.total || 0), 0);
+    const loaded = items.reduce((n, i) => n + (i.state === 'done' && i.total ? i.total : (i.loaded || 0)), 0);
+    return total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : ownPct;
+}
+
 function createWebGPULoadProgressRouter({ onProgress, sourceUrl }) {
     const progressUiState = { ts: 0, pct: -1, file: '', completedFiles: new Set() };
+    const filesTracker = createLoadFilesTracker();
     let shaderTimer = null;
     let shaderInterval = null;
     const clearTimers = () => { clearTimeout(shaderTimer); clearInterval(shaderInterval); };
 
     const handle = (progress) => {
         if (webgpuState.cancelRequested) return;
-        const progressWithMeta = { ...progress, sourceUrl };
+        if (progress.retryingWithDtype) filesTracker.reset();
+        const items = filesTracker.track(progress);
+        const progressWithMeta = { ...progress, sourceUrl, items };
 
         if (progress.retryingWithDtype) {
             clearTimers();
@@ -1221,8 +1271,9 @@ function createWebGPULoadProgressRouter({ onProgress, sourceUrl }) {
 
         if (progress.status === 'progress' && progress.total) {
             clearTimers();
-            const pct = Math.round((progress.loaded / progress.total) * 100);
-            if (!shouldEmitWebGPUProgress(progressUiState, pct, progressWithMeta)) return;
+            const pct = overallLoadPct(items, Math.round((progress.loaded / progress.total) * 100));
+            // Con varios ficheros intercalados, «cambió el fichero» no justifica repintar.
+            if (!shouldEmitWebGPUProgress(progressUiState, pct, items.length > 1 ? { ...progressWithMeta, file: '' } : progressWithMeta)) return;
             dom.statusText.textContent = `⬇ ${pct}%`;
             if (onProgress) onProgress(pct, progressWithMeta);
         } else if (progress.status === 'done') {

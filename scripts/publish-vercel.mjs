@@ -55,6 +55,26 @@ for (let i = 0; i < 36 && !url; i++) {
     } catch { /* aún no existe */ }
     if (!url) await sleep(5000);
 }
+// Respaldo: a veces la integración con GitHub no registra el despliegue (la API de
+// deployments no devuelve nada) aunque Vercel sí lo haya construido. Entonces se
+// busca en `vercel ls` un Preview listo que sirva justo esta versión.
+if (!url) {
+    console.log('GitHub no muestra el despliegue de este commit; busco en Vercel…');
+    try {
+        // Con la salida redirigida, `vercel ls` imprime solo las URLs, la más reciente primero.
+        const out = sh('vercel', ['ls', '--scope', SCOPE]);
+        const candidates = out.split('\n').map(l => l.trim()).filter(l => /^https:\/\/wia-[a-z0-9]+-tligents-projects\.vercel\.app$/.test(l)).slice(0, 4);
+        for (const c of candidates) {
+            try {
+                const body = await (await fetch(`${c}/Plantilla/Version.js?_=${Date.now()}`, { cache: 'no-store' })).text();
+                const q = /VERSION_SEQUENCE = '([A-Z]{2})'/.exec(body)?.[1];
+                const m = /VERSION_MONTH = (\d+)/.exec(body)?.[1];
+                const y = /VERSION_YEAR = (\d+)/.exec(body)?.[1];
+                if (`${y}${String(m).padStart(2, '0')}.${q}` === version) { url = c; break; }
+            } catch { /* siguiente */ }
+        }
+    } catch { /* sin vercel ls */ }
+}
 if (!url) fail('Vercel no ha terminado el despliegue de este commit (timeout de 3 min).');
 console.log(`Despliegue listo: ${url}`);
 

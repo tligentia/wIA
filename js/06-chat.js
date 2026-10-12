@@ -3,19 +3,19 @@
 import {
     createChat, generateTitle, getActiveChat, getActiveProject, renderAttachmentPreview,
     renderChatList, showChat,
-} from './05-workspace.js?v=2610.AT';
+} from './05-workspace.js?v=2610.AU';
 import {
     CHARS_PER_TOKEN, CONTEXT_SAFETY_MARGIN_TOKENS, MOBILE_SAFE_WEBGPU_MODEL, WEBGPU_MODELS,
     WEBGPU_PROGRESS_UI_MIN_DELTA_PCT, WEBGPU_PROGRESS_UI_MIN_INTERVAL_MS,
     WEBGPU_TEXT_FALLBACK_MODEL, announce, escapeHtml, estimateTokenCount, getProviderBaseId,
     getVisionAssistDef, importTransformers, isHeavyForMobile, isMobileDevice, notify,
     sanitizeRenderedHtml, tr, trf,
-} from './01-core.js?v=2610.AT';
+} from './01-core.js?v=2610.AU';
 import {
     applySettingsToUI, dom, formatTokens, getActiveProviderConfig, getAuthHeaders,
     getCompactModelLabel, getCompactProviderLabel, getProviderDef, saveCurrentProviderConfig,
     saveState, state, syncProviderToState, updateInputDisclaimer,
-} from './02-state.js?v=2610.AT';
+} from './02-state.js?v=2610.AU';
 import {
     WEBGPU_LOOP_STOP_NOTE, analyzeImagesForWebGPU, applyWebGPUStreamedText, checkWebGPUSupport,
     formatWoundResult, loadDinoMedicalVisionModel, loadFlorence2VisionModel,
@@ -23,26 +23,26 @@ import {
     maybeStopRepetitionLoop, runDinoMedicalEmbedding, runFlorence2Analysis, runVLMAnalysis,
     runWebGPUGeneration, runWoundClassify, splitWebGPUThinking, updateGenerationStatus,
     webgpuState, webgpuWorker,
-} from './03-webgpu.js?v=2610.AT';
+} from './03-webgpu.js?v=2610.AU';
 import {
     FAILOVER_MAX_HOPS, checkProviderStatus, classifyEngineFailure, describeChatFailure,
     getEngineCooldown, getFailoverCandidates, getWebGPUCustomModels, markEngineFailure,
     markEngineSuccess, parseRetryAfter, providerHttpError, recordWebGPUModelReport,
     withEngineOverride,
-} from './04-providers.js?v=2610.AT';
+} from './04-providers.js?v=2610.AU';
 import {
     autoResizeTextarea, autoTitleChat, scrollToBottom, updateSendButton,
-} from './07-ui.js?v=2610.AT';
+} from './07-ui.js?v=2610.AU';
 import {
     anonChatState, anonymizeHistoryText, anonymizeOutgoingText, anonymizeTextSync,
     deanonymizeForDisplay, ensureAnonReady, listAnonItems, persistAnonVault, restoreAnonText,
-} from './08-anon.js?v=2610.AT';
+} from './08-anon.js?v=2610.AU';
 import {
     t,
-} from './09-i18n.js?v=2610.AT';
+} from './09-i18n.js?v=2610.AU';
 import {
     formatRagContext, prepareRagContext,
-} from './11-rag.js?v=2610.AT';
+} from './11-rag.js?v=2610.AU';
 /* <<< imports <<< */
 
 /* ============================================
@@ -730,7 +730,9 @@ function renderLoadingState(loading) {
            </div>`
         : '';
     const percent = Number.isFinite(loading.progress) ? Math.max(0, Math.min(100, loading.progress)) : null;
-    const progressHtml = percent !== null
+    // Varios elementos a la vez: cada descarga y la instalación, por separado.
+    const itemsHtml = renderLoadingItems(loading);
+    const progressHtml = itemsHtml ? itemsHtml : percent !== null
         ? `<div class="loading-card-progress">
                 <div class="loading-card-progress-top">
                     <span>${loading.progressLabel ? escapeHtml(loading.progressLabel) : 'Progreso'}</span>
@@ -759,6 +761,59 @@ function renderLoadingState(loading) {
             ${progressHtml}
         </div>
     `;
+}
+
+function fmtLoadBytes(n) {
+    if (!Number.isFinite(n) || n <= 0) return '';
+    if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+    if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/**
+ * renderLoadingItems — cuando se descargan varios elementos a la vez, una fila
+ * por cada uno (nombre, barra, bytes) y, aparte, la fila de instalación. Con uno
+ * solo (o sin datos por fichero) devuelve '' y se usa la barra única de siempre.
+ */
+function renderLoadingItems(loading) {
+    const items = Array.isArray(loading?.items) ? loading.items : [];
+    if (items.length < 2) return '';
+    const doneCount = items.filter(i => i.state === 'done').length;
+    const rows = items.map((it) => {
+        const pct = Math.max(0, Math.min(100, Number.isFinite(it.pct) ? it.pct : 0));
+        const base = String(it.file).split('/').pop() || it.file;
+        const sizeTxt = it.total > 0
+            ? (it.state === 'done' ? fmtLoadBytes(it.total) : `${fmtLoadBytes(it.loaded) || '0 KB'} / ${fmtLoadBytes(it.total)}`)
+            : '';
+        const stateTxt = it.state === 'done' ? 'Descargado ✓' : it.state === 'downloading' ? 'Descargando' : 'En cola';
+        return `<div class="loading-card-item is-${it.state}">
+                <div class="loading-card-progress-top">
+                    <span class="loading-card-item-name" title="${escapeHtml(it.file)}">${escapeHtml(base)}</span>
+                    <strong>${pct}%</strong>
+                </div>
+                <div class="loading-card-bar"><div class="loading-card-bar-fill" style="width: ${pct}%;"></div></div>
+                <div class="loading-card-item-sub">${stateTxt}${sizeTxt ? ` · ${escapeHtml(sizeTxt)}` : ''}</div>
+            </div>`;
+    }).join('');
+
+    // Instalación: pendiente mientras se descarga; después, la fase en curso.
+    const stageLabels = { installing: 'Instalando', compiling: 'Compilando', initializing: 'Inicializando' };
+    const inStage = !!stageLabels[loading.phase];
+    const stagePct = inStage && Number.isFinite(loading.progress) ? Math.max(0, Math.min(100, loading.progress)) : 0;
+    const stageTxt = inStage ? stageLabels[loading.phase] : 'Pendiente: empieza cuando acaben las descargas';
+    return `<div class="loading-card-progress loading-card-items">
+            <div class="loading-card-group-title">Descarga · ${doneCount}/${items.length} elementos</div>
+            ${rows}
+            <div class="loading-card-group-title">Instalación</div>
+            <div class="loading-card-item is-stage ${inStage ? 'is-active' : 'is-pending'}">
+                <div class="loading-card-progress-top">
+                    <span class="loading-card-item-name">${escapeHtml(inStage ? stageLabels[loading.phase] : 'Instalación')}</span>
+                    <strong>${stagePct}%</strong>
+                </div>
+                <div class="loading-card-bar"><div class="loading-card-bar-fill" style="width: ${stagePct}%;"></div></div>
+                <div class="loading-card-item-sub">${escapeHtml(stageTxt)}</div>
+            </div>
+        </div>`;
 }
 
 function getLoadingPhaseLabel(phase) {
@@ -833,7 +888,16 @@ function patchStreamingLoadingCard(contentEl, loading) {
         existingCard.insertAdjacentHTML('beforeend', nextSourceHtml);
     }
 
-    const progressWrap = existingCard.querySelector('.loading-card-progress');
+    const progressWrap = existingCard.querySelector('.loading-card-progress:not(.loading-card-items)');
+    const itemsHtml = renderLoadingItems(loading);
+    if (itemsHtml) {
+        progressWrap?.remove();
+        const itemsEl = existingCard.querySelector('.loading-card-items');
+        if (itemsEl) itemsEl.outerHTML = itemsHtml;
+        else existingCard.insertAdjacentHTML('beforeend', itemsHtml);
+        return true;
+    }
+    existingCard.querySelector('.loading-card-items')?.remove();
     const percent = Number.isFinite(loading.progress) ? Math.max(0, Math.min(100, loading.progress)) : null;
     if (percent !== null) {
         if (!progressWrap) {
@@ -1646,6 +1710,7 @@ async function runWebGPUTurn(chat, assistantMsg, msgIdx) {
                 progress: pct,
                 progressLabel: stage.progressLabel,
                 file: progress.file || '',
+                items: progress.items || null,
                 note: webgpuState.cancelRequested
                     ? 'La cancelación se aplicará en cuanto termine el paso actual del runtime.'
                     : progress.retryingWithDtype
@@ -1817,6 +1882,7 @@ async function runWebGPUTurn(chat, assistantMsg, msgIdx) {
                         progress: pct,
                         progressLabel: stage.progressLabel,
                         file: progress.file || '',
+                        items: progress.items || null,
                         note: 'Fallback automatico tras fallo del modelo de vision.'
                     });
                     updateStreamingMessage(msgIdx, assistantMsg);

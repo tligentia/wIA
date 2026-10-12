@@ -1351,6 +1351,52 @@ body {
     transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.loading-card-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.loading-card-group-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.loading-card-group-title:not(:first-child) {
+    margin-top: 4px;
+}
+
+.loading-card-item .loading-card-progress-top {
+    margin-bottom: 5px;
+}
+
+.loading-card-item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+
+.loading-card-item-sub {
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+}
+
+.loading-card-item.is-done .loading-card-bar-fill {
+    background: var(--accent-secondary);
+    box-shadow: none;
+}
+
+.loading-card-item.is-pending .loading-card-item-name,
+.loading-card-item.is-stage.is-pending .loading-card-item-sub {
+    opacity: 0.7;
+}
+
 .loading-card-file {
     margin-top: 8px;
     font-size: 0.72rem;
