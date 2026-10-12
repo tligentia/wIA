@@ -2,22 +2,22 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AS';
+} from './07-ui.js?v=2610.AT';
 import {
     WEBGPU_MODELS, debounce, escapeHtml, getWebGPUBrokenInfo, loadLocalJson, notify, tr,
-} from './01-core.js?v=2610.AS';
+} from './01-core.js?v=2610.AT';
 import {
     dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
-} from './02-state.js?v=2610.AS';
+} from './02-state.js?v=2610.AT';
 import {
     checkWebGPUSupport, completeWebGPU, webgpuState,
-} from './03-webgpu.js?v=2610.AS';
+} from './03-webgpu.js?v=2610.AT';
 import {
     extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AS';
+} from './05-workspace.js?v=2610.AT';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AS';
+} from './06-chat.js?v=2610.AT';
 /* <<< imports <<< */
 
 /* ============================================

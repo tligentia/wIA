@@ -2,25 +2,25 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     renderAnonTypesPanel, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AS';
+} from './08-anon.js?v=2610.AT';
 import {
     loadLocalJson,
-} from './01-core.js?v=2610.AS';
+} from './01-core.js?v=2610.AT';
 import {
     saveState, state,
-} from './02-state.js?v=2610.AS';
+} from './02-state.js?v=2610.AT';
 import {
     renderWebGPUMonitor,
-} from './03-webgpu.js?v=2610.AS';
+} from './03-webgpu.js?v=2610.AT';
 import {
     renderChatList, renderWelcomeStarters,
-} from './05-workspace.js?v=2610.AS';
+} from './05-workspace.js?v=2610.AT';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AS';
+} from './06-chat.js?v=2610.AT';
 import {
     renderDocs, renderLegal,
-} from './10-docs.js?v=2610.AS';
+} from './10-docs.js?v=2610.AT';
 /* <<< imports <<< */
 
 /* ============================================

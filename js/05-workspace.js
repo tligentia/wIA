@@ -2,25 +2,25 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     checkProviderStatus,
-} from './04-providers.js?v=2610.AS';
+} from './04-providers.js?v=2610.AT';
 import {
     PROVIDERS, escapeHtml, loadLocalJson, notify, tr, trf,
-} from './01-core.js?v=2610.AS';
+} from './01-core.js?v=2610.AT';
 import {
     applySettingsToUI, dom, getCompactModelLabel, getOrderedProviderEntries,
     isConversationPersistenceDisabled, markProviderUsed, persistOrderQueue,
     saveCurrentProviderConfig, saveState, saveStateNow, showPersistenceAlert, state,
     syncProviderToState, updateStatusMeta,
-} from './02-state.js?v=2610.AS';
+} from './02-state.js?v=2610.AT';
 import {
     renderMessages, sendMessage, supportsWebGPUImageAssist,
-} from './06-chat.js?v=2610.AS';
+} from './06-chat.js?v=2610.AT';
 import {
     autoResizeTextarea, closeSidebar, formatDate, updateSendButton,
-} from './07-ui.js?v=2610.AS';
+} from './07-ui.js?v=2610.AT';
 import {
     loadAnonRules, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AS';
+} from './08-anon.js?v=2610.AT';
 /* <<< imports <<< */
 
 /* ============================================

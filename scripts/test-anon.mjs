@@ -57,6 +57,13 @@ hides('nombre que no está en el diccionario, por su apellido', 'La paciente Mar
 hides('nombre introducido por un tratamiento', 'También Dña. Rocío Jurado y el Sr. Bermúdez Ochandiano.', ['Rocío', 'Jurado', 'Bermúdez', 'Ochandiano']);
 hides('nombre escrito sin tildes (Jesús → Jesus)', 'Procurador:\nJesus de Pinares', ['Jesus', 'Pinares']);
 hides('apellidos sin tildes (García → Garcia)', 'Habló con Maria Garcia Lopez.', ['Maria', 'Garcia', 'Lopez']);
+hides('nombre completo escrito todo en minúsculas', 'Nombre: marta rodríguez pérez', ['marta', 'rodríguez', 'pérez']);
+hides('minúsculas y sin tildes', 'contacto marta rodriguez perez de la oficina', ['marta', 'rodriguez', 'perez']);
+hides('mayúscula solo en el nombre de pila', 'Habló con Marta rodríguez pérez ayer.', ['Marta', 'rodríguez', 'pérez']);
+hides('apellidos sin mayúscula tras un nombre bien escrito', 'Marta Rodríguez pérez firmó.', ['Marta', 'Rodríguez', 'pérez']);
+keeps('un nombre que también es palabra común no se toma en minúscula', 'la rosa blanca y el mar azul, con luz de sol');
+keeps('palabras sueltas de los diccionarios en minúscula no son nombres', 'victoria sierra campos flores romero molina vega');
+keeps('prosa en minúsculas queda intacta', 'escribe un correo para el cliente diciendo que la reunión es el martes por la tarde');
 check('un nombre no se extiende por un salto de línea',
     anon('Partes\nLaura Fernández López firmó.').anonymizedText.startsWith('Partes\n[Nombre_'),
     anon('Partes\nLaura Fernández López firmó.').anonymizedText);

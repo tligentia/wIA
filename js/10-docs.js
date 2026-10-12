@@ -2,10 +2,10 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     getLang,
-} from './09-i18n.js?v=2610.AS';
+} from './09-i18n.js?v=2610.AT';
 import {
     escapeHtml, loadLocalJson,
-} from './01-core.js?v=2610.AS';
+} from './01-core.js?v=2610.AT';
 /* <<< imports <<< */
 
 /* ============================================
