@@ -6,34 +6,34 @@ import {
     getProviderAccess, getProviderBaseId, getProviderOAuth, isCloneableProvider,
     isCustomProvider, isHeavyForMobile, isMobileDevice, loadWebGPUCatalogFile,
     registerCustomProviders, tr,
-} from './01-core.js?v=2610.AD';
+} from './01-core.js?v=2610.AE';
 import {
     getCachedWebGPUModels, scheduleWebGPUPriming, startWebGPUMonitor, stopWebGPUMonitor,
     warmUpActiveWebGPUModel, webgpuState,
-} from './03-webgpu.js?v=2610.AD';
+} from './03-webgpu.js?v=2610.AE';
 import {
     checkProviderStatus, detectLocalProviderAvailability, finishProviderOAuth,
-} from './04-providers.js?v=2610.AD';
+} from './04-providers.js?v=2610.AE';
 import {
     renderAttachmentPreview, renderChatList, renderOrderQueue, renderProjectSelect,
     renderWelcomeStarters, showWelcome,
-} from './05-workspace.js?v=2610.AD';
+} from './05-workspace.js?v=2610.AE';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AD';
+} from './06-chat.js?v=2610.AE';
 import {
     autoResizeTextarea, bindEvents, bindSlashCommandEvents, loadPromptLibrary,
     showConnectionValidationResult, updateSendButton,
-} from './07-ui.js?v=2610.AD';
+} from './07-ui.js?v=2610.AE';
 import {
     updateAnonButtonUI,
-} from './08-anon.js?v=2610.AD';
+} from './08-anon.js?v=2610.AE';
 import {
     bindLangSwitch, loadTranslations, refreshLocalizedUI, t,
-} from './09-i18n.js?v=2610.AD';
+} from './09-i18n.js?v=2610.AE';
 import {
     renderRagIndexStatus,
-} from './11-rag.js?v=2610.AD';
+} from './11-rag.js?v=2610.AE';
 /* <<< imports <<< */
 
 /* ============================================
@@ -429,7 +429,8 @@ async function init() {
 
     // Versión junto al logo (barra lateral, cabecera flotante y móvil).
     if (window.APP_VERSION) {
-        document.querySelectorAll('.app-version').forEach((el) => { el.textContent = window.APP_VERSION; });
+        const label = window.APP_VERSION_LABEL || window.APP_VERSION;
+        document.querySelectorAll('.app-version').forEach((el) => { el.textContent = label; });
     }
 
     // Precarga temprana del modelo WebGPU activo si YA está en caché del

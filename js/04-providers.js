@@ -4,25 +4,25 @@ import {
     checkWebGPUSupport, deleteWebGPUModelCache, getCachedWebGPUModels,
     invalidateWebGPUCacheScan, releaseWebGPUMemory, warmUpActiveWebGPUModel, webgpuState,
     webgpuWorker,
-} from './03-webgpu.js?v=2610.AD';
+} from './03-webgpu.js?v=2610.AE';
 import {
     MODEL_FILTER_ORDER, MODEL_FUNCTION_DEFS, PROVIDERS, TRANSFORMERS_VERSION,
     UNCENSORED_NAME_HINTS, WEBGPU_BROKEN_MODELS, WEBGPU_MODELS, createPkceChallenge,
     createPkceVerifier, describeWebGPULoadFailure, escapeHtml, getProviderBaseId,
     getProviderOAuth, getVisionAssistDef, getWebGPUBrokenInfo, notify, tr, trf,
-} from './01-core.js?v=2610.AD';
+} from './01-core.js?v=2610.AE';
 import {
     applySettingsToUI, dom, getActiveProviderConfig, getAuthHeaders, getProviderDef,
     getProviderLocality, isIncognitoMode, renderProviderOptions, saveState, state,
     syncProviderToState, updateInputDisclaimer, updateModelContextIndicator,
     updateSettingsActiveContext, updateStatusMeta,
-} from './02-state.js?v=2610.AD';
+} from './02-state.js?v=2610.AE';
 import {
     renderAttachmentPreview,
-} from './05-workspace.js?v=2610.AD';
+} from './05-workspace.js?v=2610.AE';
 import {
     supportsWebGPUImageAssist,
-} from './06-chat.js?v=2610.AD';
+} from './06-chat.js?v=2610.AE';
 /* <<< imports <<< */
 
 /* ============================================
