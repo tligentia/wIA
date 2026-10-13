@@ -10,20 +10,20 @@
    - Estáticos: stale-while-revalidate (instantáneo y se actualiza en 2º plano,
      así los nuevos despliegues se recogen en la siguiente carga).
    ============================================================ */
-const CACHE = 'wia-shell-v2610.AY';
+const CACHE = 'wia-shell-v2610.AZ';
 
 // Rutas relativas: la app puede servirse en la raíz o bajo un subpath (portal).
 // Todo el shell es del mismo origen (marked/highlight/pdf viven en lib/).
 const CORE = [
-    './', './index.html', './styles.css?v=2610.AY',
-    './js/main.js?v=2610.AY', './js/01-core.js?v=2610.AY', './js/02-state.js?v=2610.AY', './js/03-webgpu.js?v=2610.AY', './js/04-providers.js?v=2610.AY',
-    './js/05-workspace.js?v=2610.AY', './js/06-chat.js?v=2610.AY', './js/07-ui.js?v=2610.AY', './js/08-anon.js?v=2610.AY',
-    './js/09-i18n.js?v=2610.AY', './js/10-docs.js?v=2610.AY', './js/11-rag.js?v=2610.AY', './js/12-pwa.js?v=2610.AY',
+    './', './index.html', './styles.css?v=2610.AZ',
+    './js/main.js?v=2610.AZ', './js/01-core.js?v=2610.AZ', './js/02-state.js?v=2610.AZ', './js/03-webgpu.js?v=2610.AZ', './js/04-providers.js?v=2610.AZ',
+    './js/05-workspace.js?v=2610.AZ', './js/06-chat.js?v=2610.AZ', './js/07-ui.js?v=2610.AZ', './js/08-anon.js?v=2610.AZ',
+    './js/09-i18n.js?v=2610.AZ', './js/10-docs.js?v=2610.AZ', './js/11-rag.js?v=2610.AZ', './js/12-pwa.js?v=2610.AZ',
     './lang/es.json', './lang/en.json',
     './lang/docs/es.json', './lang/docs/en.json',
     './lang/legal/es.json', './lang/legal/en.json',
     './lib/marked.min.js', './lib/highlight.min.js', './lib/highlight-github-dark.min.css',
-    './lib/anonimae-engine.js?v=2610.AY', './lib/anonimae-rules.json',
+    './lib/anonimae-engine.js?v=2610.AZ', './lib/anonimae-rules.json',
     // transformers.min.js (868 KB) SÍ se precachea, y por una razón concreta: el
     // worker lo carga con import() y Chrome no pasa por el service worker el
     // módulo de entrada que importa un worker, así que el handler de fetch nunca
@@ -40,8 +40,8 @@ const CORE = [
     // adjunta uno— con 1 MB de descarga. El handler de fetch lo guarda en la
     // misma caché la primera vez que se usa, así que el offline con PDF sigue
     // funcionando a partir de entonces.
-    './lib/pdf.min.js', './Plantilla/Version.js?v=2610.AY',
-    './secure-gate.js?v=2610.AY', './portal-loader.js?v=2610.AY', './webgpu-worker.js', './agents.json', './webgpu-models.json',
+    './lib/pdf.min.js', './Plantilla/Version.js?v=2610.AZ',
+    './secure-gate.js?v=2610.AZ', './portal-loader.js?v=2610.AZ', './webgpu-worker.js', './agents.json', './webgpu-models.json',
     './lib/fonts/inter-latin.woff2', './lib/fonts/jetbrains-mono-latin.woff2',
     './manifest.webmanifest', './favicon.png', './icon-192.png', './icon-512.png',
 ];

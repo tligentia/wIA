@@ -81,9 +81,9 @@
     <script src="lib/highlight.min.js"></script>
     <script src="lib/pdf.min.js"></script>
     <!-- Motor de anonimización DLP local (AnonimAE, autónomo y sin dependencias) -->
-    <script src="lib/anonimae-engine.js?v=2610.AY"></script>
+    <script src="lib/anonimae-engine.js?v=2610.AZ"></script>
 
-    <link rel="stylesheet" href="styles.css?v=2610.AY">
+    <link rel="stylesheet" href="styles.css?v=2610.AZ">
 </head>
 
 <body>
@@ -243,7 +243,7 @@
                     <img src="favicon.png" alt="wIA Logo"
                         style="width: 64px; height: 64px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                     <h1 class="welcome-title">wIA</h1>
-                    <p class="welcome-subtitle">Tu hub de IA multimotor — <strong>Local y Cloud</strong></p>
+                    <p class="welcome-subtitle">Potencia de IA sin riesgo — <strong>Anonimización local, Cloud y cumplimiento normativo</strong></p>
 
                     <div class="welcome-cards">
                         <button class="welcome-card"
@@ -1526,17 +1526,17 @@
 
     <div id="srStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script src="Plantilla/Version.js?v=2610.AY"></script>
+    <script src="Plantilla/Version.js?v=2610.AZ"></script>
     <!-- Barra del portal Tligent: solo existe cuando wIA se despliega dentro del
          portal. portal-loader.js la carga si está; si no, no hay petición fallida. -->
-    <script src="portal-loader.js?v=2610.AY"></script>
-    <script src="secure-gate.js?v=2610.AY"></script>
+    <script src="portal-loader.js?v=2610.AZ"></script>
+    <script src="secure-gate.js?v=2610.AZ"></script>
     <!-- Lógica de la app: módulos ES reales (js/NN-*.js). Un único punto de entrada;
          los import/export de cada módulo los genera scripts/gen-modules.mjs.
          El «?v=» versiona las URLs: un navegador con el service worker anterior servía
          el index.html nuevo con los JS viejos de su caché. `npm run version:bump`
          lo mantiene sincronizado con sw.js. -->
-    <script type="module" src="js/main.js?v=2610.AY"></script>
+    <script type="module" src="js/main.js?v=2610.AZ"></script>
     <!-- PWA: registra el service worker (arranque offline) desde js/12-pwa.js, no
          aquí: la CSP prohíbe los scripts en línea. -->
 </body>

@@ -2,23 +2,23 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     dom, state, updateStatusMeta,
-} from './02-state.js?v=2610.AY';
+} from './02-state.js?v=2610.AZ';
 import {
     WEBGPU_MODELS, _transformersSources, escapeHtml, getVisionAssistDef, importTransformers,
     isRetryableWebGPULoadError, notify, tr, trf, webgpuDtypeCandidates,
-} from './01-core.js?v=2610.AY';
+} from './01-core.js?v=2610.AZ';
 import {
     populateModels,
-} from './04-providers.js?v=2610.AY';
+} from './04-providers.js?v=2610.AZ';
 import {
     analyzeImagesForWebGPUInline, buildWebGPURepoUrl, clearMessageLoadingState,
     estimateInstallProgress, extractGeneratedText, formatErrorDetail, inferMimeTypeFromBase64,
     normalizeImageMeta, runWebGPUGenerationInline, shouldEmitWebGPUProgress, stopStreaming,
     updateStreamingMessage,
-} from './06-chat.js?v=2610.AY';
+} from './06-chat.js?v=2610.AZ';
 import {
     t,
-} from './09-i18n.js?v=2610.AY';
+} from './09-i18n.js?v=2610.AZ';
 /* <<< imports <<< */
 
 /* ============================================
@@ -1703,7 +1703,8 @@ async function runWebGPUGeneration(pipe, promptInput, assistantMsg, msgIdx) {
  * cargado para el chat (o lo carga si hace falta), responde de forma
  * determinista (do_sample:false) y se encola con otras consultas iguales porque
  * el pipeline admite una sola generación a la vez. Devuelve solo la respuesta
- * (sin el razonamiento de modelos tipo R1).
+ * (sin el razonamiento de modelos tipo R1). `opts.shots` ([{user, assistant}])
+ * añade turnos de ejemplo entre el sistema y la consulta.
  */
 let _webgpuCompleteChain = Promise.resolve();
 
@@ -1713,7 +1714,7 @@ function completeWebGPU(system, user, opts = {}) {
     return run;
 }
 
-async function _completeWebGPUNow(system, user, { maxTokens = 400, onProgress = null, timeoutMs = 180000 } = {}) {
+async function _completeWebGPUNow(system, user, { maxTokens = 400, onProgress = null, timeoutMs = 180000, shots = [] } = {}) {
     const modelId = String(state.settings.model || '').trim();
     if (!modelId) throw new Error(tr('anon.ai.reason.model', 'Selecciona un modelo en el motor local.'));
     const def = WEBGPU_MODELS.find(m => m.id === modelId);
@@ -1724,7 +1725,10 @@ async function _completeWebGPUNow(system, user, { maxTokens = 400, onProgress = 
     if (!pipe) pipe = await loadWebGPUModel(modelId, onProgress, def?.task || 'text-generation');
     if (!pipe || pipe.__omnimodal) throw new Error(tr('anon.ai.reason.busy', 'El modelo del navegador está generando otra respuesta.'));
 
-    const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
+    // `shots`: turnos de ejemplo [{ user, assistant }] entre el sistema y la consulta.
+    const messages = [{ role: 'system', content: system }];
+    for (const s of shots) messages.push({ role: 'user', content: s.user }, { role: 'assistant', content: s.assistant });
+    messages.push({ role: 'user', content: user });
     webgpuState.generating = true;
     try {
         let raw;

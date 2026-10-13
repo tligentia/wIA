@@ -2,22 +2,22 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     autoResizeTextarea, downloadTextFile, openSettings, updateSendButton,
-} from './07-ui.js?v=2610.AY';
+} from './07-ui.js?v=2610.AZ';
 import {
     WEBGPU_MODELS, debounce, escapeHtml, getWebGPUBrokenInfo, loadLocalJson, notify, tr,
-} from './01-core.js?v=2610.AY';
+} from './01-core.js?v=2610.AZ';
 import {
     dom, getAILocality, getAuthHeaders, getProviderDef, saveState, secretVault, state,
-} from './02-state.js?v=2610.AY';
+} from './02-state.js?v=2610.AZ';
 import {
     checkWebGPUSupport, completeWebGPU, webgpuState,
-} from './03-webgpu.js?v=2610.AY';
+} from './03-webgpu.js?v=2610.AZ';
 import {
     MAX_FILE_BYTES, extractTextFromPDF, formatBytes, getActiveChat, readFileAsText,
-} from './05-workspace.js?v=2610.AY';
+} from './05-workspace.js?v=2610.AZ';
 import {
     renderMessages,
-} from './06-chat.js?v=2610.AY';
+} from './06-chat.js?v=2610.AZ';
 /* <<< imports <<< */
 
 /* ============================================
@@ -368,7 +368,8 @@ function anonAIActive() {
 }
 
 // Una consulta no-streaming al motor local; devuelve el texto de la respuesta.
-async function _localAIComplete(system, user) {
+// `plain`: reintento del modelo del navegador sin turnos de ejemplo (ver aiDetectTerms).
+async function _localAIComplete(system, user, { plain = false } = {}) {
     const st = localAIStatus();          // última barrera: nada sale si ya no es local
     if (!st.ok) throw new Error(st.reason);
     const prov = getProviderDef(state.settings.provider);
@@ -383,7 +384,9 @@ async function _localAIComplete(system, user) {
             setAnonBusy('ai', `⬇ ${Math.round(pct || 0)}%`);
         };
         try {
-            return await completeWebGPU(ANON_AI_SYSTEM_BROWSER, user, { maxTokens: 450, onProgress });
+            return await completeWebGPU(ANON_AI_SYSTEM_BROWSER, user, {
+                maxTokens: 450, onProgress, shots: plain ? [] : ANON_AI_SHOTS_BROWSER,
+            });
         } finally {
             if (shownLoading) { anonTool.aiNote = ''; setAnonAINote(); }
         }
@@ -419,22 +422,65 @@ const ANON_AI_SYSTEM = 'Eres un detector de datos personales para anonimizar tex
     + 'del texto, que identifican a personas (nombre y apellidos), organizaciones, direcciones o lugares concretos, o cualquier otro dato '
     + 'personal. No incluyas marcadores como [Nombre_001], ni palabras comunes, ni explicaciones. Si no hay ninguno, {"items":[]}.';
 
-// Variante para modelos pequeños del navegador: más corta, con un ejemplo de la
-// forma de la respuesta. Lo que devuelvan igualmente se valida contra el texto.
-const ANON_AI_SYSTEM_BROWSER = 'Detecta datos personales en el texto del usuario. Responde SOLO con JSON: '
-    + '{"items":[{"text":"…","type":"nombre|empresa|direccion|dato"}]}. '
-    + '"text" es el fragmento copiado EXACTAMENTE del texto: nombres de personas, empresas, direcciones, lugares concretos u otros datos personales. '
-    + 'Si no hay ninguno: {"items":[]}. Ejemplo de respuesta: {"items":[{"text":"Marta Soler","type":"nombre"},{"text":"Calle Olmo 4","type":"direccion"}]}.';
+// Variante para modelos pequeños del navegador: más corta y SIN ejemplos de datos
+// dentro del texto del sistema. Un ejemplo ahí (p. ej. «Marta Soler») lo copiaba
+// tal cual Llama-3.2-3B en vez de leer el texto, y la validación literal lo
+// descartaba todo. La forma de la respuesta se enseña con turnos de ejemplo
+// aparte (ANON_AI_SHOTS_BROWSER), que sí siguen bien. Lo que devuelvan se valida
+// igualmente contra el texto.
+const ANON_AI_SYSTEM_BROWSER = 'Detecta datos personales en el texto del usuario. Responde SOLO con un único objeto JSON con una única lista "items", '
+    + 'sin bloque de código ni notas antes o después, con esta forma: {"items":[{"text":"…","type":"nombre|empresa|direccion|dato"}]}. '
+    + '"text" es el fragmento copiado EXACTAMENTE del texto del usuario: nombres de personas, empresas, direcciones, lugares concretos u otros datos personales. '
+    + 'Usa SOLO fragmentos que aparezcan en ese texto. Si no hay ninguno: {"items":[]}.';
 
+const ANON_AI_SHOTS_BROWSER = [
+    {
+        user: 'El lunes llamó Beatriz Quintana, de Talleres Ferrer, para confirmar la entrega en Avenida del Mar 12, Cádiz.',
+        assistant: '{"items":[{"text":"Beatriz Quintana","type":"nombre"},{"text":"Talleres Ferrer","type":"empresa"},{"text":"Avenida del Mar 12, Cádiz","type":"direccion"}]}',
+    },
+    {
+        user: 'Hoy hace buen tiempo y el informe está listo para revisar.',
+        assistant: '{"items":[]}',
+    },
+];
+
+/**
+ * _parseAIItems — saca [{text,type}] de la respuesta cruda del modelo. Tolera lo
+ * que hacen los modelos pequeños: bloque ```json, nota posterior, la clave
+ * "items" repetida ({"items":[a],"items":[b]}: JSON.parse se queda solo con la
+ * última) o una respuesta cortada por el límite de tokens. Por eso, además del
+ * JSON completo, se recogen todos los objetos {"text":…} sueltos del texto.
+ */
 function _parseAIItems(raw) {
-    let data = null;
     const txt = String(raw || '');
-    try { data = JSON.parse(txt); } catch (_) {
-        const m = txt.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-        if (m) { try { data = JSON.parse(m[0]); } catch (_) { /* respuesta no JSON */ } }
+    let data = null;
+    try { data = JSON.parse(txt); } catch (_) { /* con bloque de código o notas: se rescata abajo */ }
+    const out = [];
+    const seen = new Set();
+    const add = (it) => {
+        const o = typeof it === 'string' ? { text: it } : it;
+        if (!o || typeof o.text !== 'string' || seen.has(o.text)) return;
+        seen.add(o.text);
+        out.push(o);
+    };
+    for (const m of txt.matchAll(/\{[^{}]*\}/g)) {
+        try { add(JSON.parse(m[0])); } catch (_) { /* objeto cortado */ }
     }
     const list = Array.isArray(data) ? data : (data?.items || data?.terms || data?.entities || []);
-    return Array.isArray(list) ? list : [];
+    if (Array.isArray(list)) list.forEach(add);
+    return out;
+}
+
+// Fragmentos de los turnos de ejemplo (en minúsculas): si el modelo devuelve solo
+// esos y no están en el texto, ha copiado el ejemplo en vez de leer el texto.
+const ANON_AI_EXAMPLE_TERMS = new Set(ANON_AI_SHOTS_BROWSER
+    .flatMap(s => _parseAIItems(s.assistant))
+    .map(it => String(it.text).trim().toLowerCase()));
+
+function _echoesAIExample(items, chunk) {
+    const flat = String(chunk || '').toLowerCase();
+    const texts = items.map(it => String(it?.text || '').trim().toLowerCase()).filter(Boolean);
+    return texts.length > 0 && texts.every(t => ANON_AI_EXAMPLE_TERMS.has(t) && !flat.includes(t));
 }
 
 /**
@@ -454,6 +500,8 @@ async function aiDetectTerms(text, onStep = null) {
     }
     if (cur.trim()) chunks.push(cur);
     const found = new Map();
+    const browser = getProviderDef(state.settings.provider).type === 'webgpu';
+    let echoed = 0;
     const types = ANON_TERM_TYPES.map(t => t.id);
     const todo = chunks.slice(0, ANON_AI_MAX_CHUNKS);
     // Cuánto del texto llega a revisar la IA (el resto lo cubre solo el JScript Interno).
@@ -462,7 +510,13 @@ async function aiDetectTerms(text, onStep = null) {
     let done = 0;
     if (onStep) onStep(0, todo.length);
     for (const chunk of todo) {
-        const items = _parseAIItems(await _localAIComplete(ANON_AI_SYSTEM, chunk));
+        let items = _parseAIItems(await _localAIComplete(ANON_AI_SYSTEM, chunk));
+        if (browser && _echoesAIExample(items, chunk)) {
+            // El modelo ha devuelto el ejemplo en vez de los datos del texto: se
+            // reintenta una vez sin turnos de ejemplo.
+            echoed++;
+            items = _parseAIItems(await _localAIComplete(ANON_AI_SYSTEM, chunk, { plain: true }));
+        }
         if (onStep) onStep(++done, todo.length);
         const flat = chunk.toLowerCase();
         for (const it of items) {
@@ -474,6 +528,7 @@ async function aiDetectTerms(text, onStep = null) {
     }
     const result = [...found.values()];
     result.coverage = { covered, total };
+    result.echoed = echoed;
     return result;
 }
 

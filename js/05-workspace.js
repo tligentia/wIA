@@ -2,25 +2,25 @@
 // El primer import es el del módulo anterior: así se evalúan en orden (ver scripts/gen-modules.mjs).
 import {
     checkProviderStatus,
-} from './04-providers.js?v=2610.AY';
+} from './04-providers.js?v=2610.AZ';
 import {
     PROVIDERS, escapeHtml, loadLocalJson, notify, tr, trf,
-} from './01-core.js?v=2610.AY';
+} from './01-core.js?v=2610.AZ';
 import {
     applySettingsToUI, dom, getCompactModelLabel, getOrderedProviderEntries,
     isConversationPersistenceDisabled, markProviderUsed, persistOrderQueue,
     saveCurrentProviderConfig, saveState, saveStateNow, showPersistenceAlert, state,
     syncProviderToState, updateStatusMeta,
-} from './02-state.js?v=2610.AY';
+} from './02-state.js?v=2610.AZ';
 import {
     renderMessages, sendMessage, supportsWebGPUImageAssist,
-} from './06-chat.js?v=2610.AY';
+} from './06-chat.js?v=2610.AZ';
 import {
     autoResizeTextarea, closeSidebar, formatDate, updateSendButton,
-} from './07-ui.js?v=2610.AY';
+} from './07-ui.js?v=2610.AZ';
 import {
     loadAnonRules, updateAnonButtonUI,
-} from './08-anon.js?v=2610.AY';
+} from './08-anon.js?v=2610.AZ';
 /* <<< imports <<< */
 
 /* ============================================
@@ -446,7 +446,7 @@ function renderWelcomeStarters() {
             ? escapeHtml(proj.description || 'Agente personalizado')
             // El subtítulo se reescribe desde JS en cada render, así que aquí no
             // basta con marcar el HTML: hay que resolver la traducción a mano.
-            : `${escapeHtml(tr('app.tagline', 'Tu hub de IA multimotor —'))} <strong>${escapeHtml(tr('app.tagline.accent', 'Local y Cloud'))}</strong>`;
+            : `${escapeHtml(tr('app.tagline', 'Potencia de IA sin riesgo —'))} <strong>${escapeHtml(tr('app.tagline.accent', 'Anonimización local, Cloud y cumplimiento normativo'))}</strong>`;
     }
 
     // Trunca por límite de palabra (no a media palabra) y añade … si sobra texto.

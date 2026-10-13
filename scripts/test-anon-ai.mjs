@@ -148,8 +148,12 @@ console.log('\n6. Modo IA con WebGPU (modelo del navegador)\n');
     const r = await anonymize('Trabajo en Galáctica Zeta con Juan Pérez.');
     const gens = JSON.parse(h.run('JSON.stringify(globalThis.__gen)'));
     check('se consulta al modelo del navegador (una vez, sin red)', gens.length === 1 && calls.length === 0, `gens=${gens.length} red=${calls.length}`);
-    check('consulta determinista (do_sample:false) con sistema + texto', gens[0]?.options?.do_sample === false
-        && gens[0].input.messages[0].role === 'system' && gens[0].input.messages[1].content.includes('Galáctica Zeta'), JSON.stringify(gens[0]?.options));
+    const msgs = gens[0]?.input?.messages || [];
+    check('consulta determinista (do_sample:false) con sistema + texto como último turno', gens[0]?.options?.do_sample === false
+        && msgs[0].role === 'system' && msgs[msgs.length - 1].role === 'user' && msgs[msgs.length - 1].content.includes('Galáctica Zeta'), JSON.stringify(gens[0]?.options));
+    const shotItems = msgs.slice(1, -1).filter((m) => m.role === 'assistant').flatMap((m) => JSON.parse(m.content).items.map((i) => i.text));
+    check('los ejemplos van en turnos aparte, no dentro del texto del sistema',
+        shotItems.length > 0 && msgs.length > 2 && shotItems.every((t) => !msgs[0].content.includes(t)) && !/Marta Soler|Calle Olmo/.test(msgs[0].content), shotItems.join(' | '));
     check('lo que señala el modelo se anonimiza y el interno sigue aplicando', !r.text.includes('Galáctica') && !r.text.includes('Pérez'), r.text);
     check('un término que no está en el texto se descarta', r.ai.used === true && r.ai.added === 1 && !r.text.includes('Inventado'), JSON.stringify(r.ai));
 }
@@ -182,6 +186,86 @@ console.log('\n6. Modo IA con WebGPU (modelo del navegador)\n');
            webgpuState.generating = true;`);
     const msg = await withTimeout(h.run(`completeWebGPU('s','u').then(() => 'ok', e => e.message)`));
     check('no lanza una segunda generación sobre el mismo pipeline', msg !== 'ok' && /generando/i.test(msg), msg);
+}
+
+// ── 6b. El modelo del navegador devuelve el ejemplo del prompt ──────────────
+console.log('\n6b. Modelo del navegador que copia el ejemplo\n');
+{
+    // Llama-3.2-3B devolvía literalmente los datos del ejemplo del prompt en vez de
+    // los del texto: la validación literal los descartaba y la IA aportaba 0 términos.
+    const setup = (h, behaviour) => h.run(`
+        globalThis.__gen = [];
+        state.settings.provider = 'webgpu';
+        state.settings.model = WEBGPU_MODELS.find(m => !m.omnimodal).id;
+        state.settings.anonMode = 'ai';
+        webgpuState.supported = 'webgpu';
+        webgpuState.pipeline = { __worker: true };
+        webgpuState.loadedModelId = state.settings.model;
+        webgpuWorker.call = async (msg) => {
+            const messages = msg.input.messages;
+            globalThis.__gen.push(messages.length);
+            const shots = messages.slice(1, -1).filter(m => m.role === 'assistant').map(m => JSON.parse(m.content));
+            const echo = shots[0] || { items: [{ text: 'Marta Soler', type: 'nombre' }] };
+            const real = { items: [{ text: 'Tomasz Kowalczyk', type: 'nombre' }, { text: 'Estudio Lumbreras', type: 'empresa' }] };
+            const body = (${behaviour})(messages.length > 2, echo, real);
+            return { type: 'done', tokenCount: 9, result: [{ generated_text: [...messages, { role: 'assistant', content: body }] }] };
+        };
+    `);
+    const texto = 'Reunión con Tomasz Kowalczyk, de Estudio Lumbreras, en la Urbanización Los Cerezos.';
+
+    // a) Con los turnos de ejemplo copia el ejemplo; sin ellos acierta → un reintento lo arregla.
+    {
+        const { h } = harness();
+        setup(h, `(withShots, echo, real) => JSON.stringify(withShots ? echo : real)`);
+        const anonymize = await chatFor(h);
+        const r = await anonymize(texto);
+        const gens = JSON.parse(h.run('JSON.stringify(globalThis.__gen)'));
+        check('si todo lo devuelto es el ejemplo, reintenta una vez sin turnos de ejemplo',
+            gens.length === 2 && gens[0] > 2 && gens[1] === 2, JSON.stringify(gens));
+        check('y tras el reintento anonimiza los datos del texto', r.ai.used === true && r.ai.added === 2
+            && !r.text.includes('Tomasz') && !r.text.includes('Lumbreras'), JSON.stringify(r.ai) + ' ' + r.text);
+    }
+    // b) Copia el ejemplo siempre → no se queda en bucle ni rompe: el interno sigue anonimizando.
+    {
+        const { h } = harness();
+        setup(h, `(withShots, echo) => JSON.stringify(echo)`);
+        const anonymize = await chatFor(h);
+        const r = await anonymize('Habló Juan Pérez en Estudio Lumbreras.');
+        const gens = JSON.parse(h.run('JSON.stringify(globalThis.__gen)'));
+        check('con el ejemplo copiado dos veces no hay más reintentos', gens.length === 2, JSON.stringify(gens));
+        check('el envío no se bloquea y el interno anonimiza', r.ok === true && r.ai.added === 0 && !r.text.includes('Pérez'), JSON.stringify(r.ai) + ' ' + r.text);
+    }
+    // c) Si el texto contiene de verdad esos nombres, no es un eco: no se reintenta.
+    {
+        const { h } = harness();
+        setup(h, `(withShots, echo) => JSON.stringify(echo)`);
+        const anonymize = await chatFor(h);
+        const r = await anonymize('Beatriz Quintana trabaja en Talleres Ferrer, en Avenida del Mar 12, Cádiz.');
+        const gens = JSON.parse(h.run('JSON.stringify(globalThis.__gen)'));
+        check('un ejemplo que sí está en el texto no se trata como eco (una sola consulta)', gens.length === 1 && r.ai.added >= 1, JSON.stringify(gens) + ' ' + JSON.stringify(r.ai));
+    }
+    // d) Un motor HTTP no tiene ejemplo en el prompt: nunca se reintenta.
+    {
+        const { h, calls } = harness({ aiItems: [{ text: 'Marta Soler', type: 'nombre' }] });
+        h.run(`state.settings.provider='ollama'; state.settings.model='m'; state.settings.ollamaUrl='http://localhost:11434'; state.settings.anonMode='ai';`);
+        const anonymize = await chatFor(h);
+        await anonymize('Habló Juan Pérez.');
+        check('con Ollama no hay reintento', calls.filter((c) => c.url.endsWith('/api/chat')).length === 1);
+    }
+    // e) Lectura tolerante de la respuesta de modelos pequeños.
+    {
+        const { h } = harness();
+        const parse = (raw) => JSON.parse(h.run(`JSON.stringify(_parseAIItems(${JSON.stringify(raw)}).map(i => i.text))`));
+        const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        check('bloque ```json con nota posterior',
+            eq(parse('```json\n{"items":[{"text":"Ana Ruiz","type":"nombre"}]}\n```\nNota: {no es un dato}'), ['Ana Ruiz']));
+        check('clave "items" repetida (JSON.parse solo conservaría la última)',
+            eq(parse('{"items":[{"text":"Ana Ruiz","type":"nombre"}],"items":[{"text":"Casa Verde","type":"empresa"}]}'), ['Ana Ruiz', 'Casa Verde']));
+        check('respuesta cortada por el límite de tokens: se aprovechan los objetos completos',
+            eq(parse('{"items":[{"text":"Ana Ruiz","type":"nombre"},{"text":"Casa Ver'), ['Ana Ruiz']));
+        check('lista de textos sueltos y arrays', eq(parse('["Ana Ruiz","Casa Verde"]'), ['Ana Ruiz', 'Casa Verde']));
+        check('sin datos / basura', eq(parse('{"items":[]}'), []) && eq(parse('no sé'), []));
+    }
 }
 
 // ── 7. Progreso parpadeando en el botón del sistema que trabaja ─────────────
